@@ -16,7 +16,7 @@ describe("StrategyRouter", function () {
   });
 
   it("Nothing to test yet", async function () {
-    expect.fail()
+    throw new Error("Need test");
   });
 
 });

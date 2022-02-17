@@ -4,19 +4,23 @@ specifiers:
   '@nomiclabs/hardhat-ethers': ^2.0.0
   '@nomiclabs/hardhat-waffle': ^2.0.0
   '@openzeppelin/contracts': ^4.5.0
+  '@uniswap/v2-periphery': ^1.1.0-beta.0
   chai: ^4.2.0
   ethereum-waffle: ^3.0.0
   ethers: ^5.0.0
   hardhat: ^2.8.4
+  typescript: ^4.5.5
 
 devDependencies:
   '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.8.4
   '@nomiclabs/hardhat-waffle': 2.0.2_eb8bb6c38536cc89421da688f2218264
   '@openzeppelin/contracts': 4.5.0
+  '@uniswap/v2-periphery': 1.1.0-beta.0
   chai: 4.3.6
-  ethereum-waffle: 3.4.0
+  ethereum-waffle: 3.4.0_typescript@4.5.5
   ethers: 5.5.4
   hardhat: 2.8.4
+  typescript: 4.5.5
 
 packages:
 
@@ -47,7 +51,7 @@ packages:
       - utf-8-validate
     dev: true
 
-  /@ethereum-waffle/compiler/3.4.0:
+  /@ethereum-waffle/compiler/3.4.0_typescript@4.5.5:
     resolution: {integrity: sha512-a2wxGOoB9F1QFRE+Om7Cz2wn+pxM/o7a0a6cbwhaS2lECJgFzeN9xEkVrKahRkF4gEfXGcuORg4msP0Asxezlw==}
     engines: {node: '>=10.0'}
     dependencies:
@@ -61,7 +65,7 @@ packages:
       node-fetch: 2.6.7
       solc: 0.6.12
       ts-generator: 0.1.1
-      typechain: 3.0.0
+      typechain: 3.0.0_typescript@4.5.5
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -532,7 +536,7 @@ packages:
       '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.8.4
       '@types/sinon-chai': 3.2.8
       '@types/web3': 1.0.19
-      ethereum-waffle: 3.4.0
+      ethereum-waffle: 3.4.0_typescript@4.5.5
       ethers: 5.5.4
       hardhat: 2.8.4
     dev: true
@@ -670,7 +674,7 @@ packages:
       typechain: ^3.0.0
     dependencies:
       ethers: 5.5.4
-      typechain: 3.0.0
+      typechain: 3.0.0_typescript@4.5.5
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -782,6 +786,24 @@ packages:
     dependencies:
       '@types/bn.js': 5.1.0
       '@types/underscore': 1.11.4
+    dev: true
+
+  /@uniswap/lib/1.1.1:
+    resolution: {integrity: sha512-2yK7sLpKIT91TiS5sewHtOa7YuM8IuBXVl4GZv2jZFys4D2sY7K5vZh6MqD25TPA95Od+0YzCVq6cTF2IKrOmg==}
+    engines: {node: '>=10'}
+    dev: true
+
+  /@uniswap/v2-core/1.0.0:
+    resolution: {integrity: sha512-BJiXrBGnN8mti7saW49MXwxDBRFiWemGetE58q8zgfnPPzQKq55ADltEILqOt6VFZ22kVeVKbF8gVd8aY3l7pA==}
+    engines: {node: '>=10'}
+    dev: true
+
+  /@uniswap/v2-periphery/1.1.0-beta.0:
+    resolution: {integrity: sha512-6dkwAMKza8nzqYiXEr2D86dgW3TTavUvCR0w2Tu33bAbM8Ah43LKAzH7oKKPRT5VJQaMi1jtkGs1E8JPor1n5g==}
+    engines: {node: '>=10'}
+    dependencies:
+      '@uniswap/lib': 1.1.1
+      '@uniswap/v2-core': 1.0.0
     dev: true
 
   /@yarnpkg/lockfile/1.1.0:
@@ -2747,13 +2769,13 @@ packages:
       setimmediate: 1.0.5
     dev: true
 
-  /ethereum-waffle/3.4.0:
+  /ethereum-waffle/3.4.0_typescript@4.5.5:
     resolution: {integrity: sha512-ADBqZCkoSA5Isk486ntKJVjFEawIiC+3HxNqpJqONvh3YXBTNiRfXvJtGuAFLXPG91QaqkGqILEHANAo7j/olQ==}
     engines: {node: '>=10.0'}
     hasBin: true
     dependencies:
       '@ethereum-waffle/chai': 3.4.3
-      '@ethereum-waffle/compiler': 3.4.0
+      '@ethereum-waffle/compiler': 3.4.0_typescript@4.5.5
       '@ethereum-waffle/mock-contract': 3.3.1
       '@ethereum-waffle/provider': 3.4.1
       ethers: 5.5.4
@@ -6633,10 +6655,12 @@ packages:
     resolution: {integrity: sha512-q3N1xS4vZpRouhYHDPwO0bDW3EZ6SK9CrrDHxi/D6BPReSjpVgWIOpLS2o0gSBZm+7q/wyKp6RVM1AeeW7uyfQ==}
     dev: true
 
-  /ts-essentials/6.0.7:
+  /ts-essentials/6.0.7_typescript@4.5.5:
     resolution: {integrity: sha512-2E4HIIj4tQJlIHuATRHayv0EfMGK3ris/GRk1E3CFnsZzeNV+hUmelbaTZHLtXaZppM5oLhHRtO04gINC4Jusw==}
     peerDependencies:
       typescript: '>=3.7.0'
+    dependencies:
+      typescript: 4.5.5
     dev: true
 
   /ts-generator/0.1.1:
@@ -6712,7 +6736,7 @@ packages:
     resolution: {integrity: sha512-eiDBDOmkih5pMbo9OqsqPRGMljLodLcwd5XD5JbtNB0o89xZAwynY9EdCDsJU7LtcVCClu9DvM7/0Ep1hYX3EQ==}
     dev: true
 
-  /typechain/3.0.0:
+  /typechain/3.0.0_typescript@4.5.5:
     resolution: {integrity: sha512-ft4KVmiN3zH4JUFu2WJBrwfHeDf772Tt2d8bssDTo/YcckKW2D+OwFrHXRC6hJvO3mHjFQTihoMV6fJOi0Hngg==}
     hasBin: true
     dependencies:
@@ -6721,7 +6745,7 @@ packages:
       fs-extra: 7.0.1
       js-sha3: 0.8.0
       lodash: 4.17.21
-      ts-essentials: 6.0.7
+      ts-essentials: 6.0.7_typescript@4.5.5
       ts-generator: 0.1.1
     transitivePeerDependencies:
       - supports-color
@@ -6736,6 +6760,12 @@ packages:
 
   /typedarray/0.0.6:
     resolution: {integrity: sha1-hnrHTjhkGHsdPUfZlqeOxciDB3c=}
+    dev: true
+
+  /typescript/4.5.5:
+    resolution: {integrity: sha512-TCTIul70LyWe6IJWT8QSYeA54WQe8EjQFU4wY52Fasj5UKx88LNYKCgBEHcOMOrFF1rKGbD8v/xcNWVUq9SymA==}
+    engines: {node: '>=4.2.0'}
+    hasBin: true
     dev: true
 
   /typewise-core/1.2.0:
