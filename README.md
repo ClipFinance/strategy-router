@@ -1,5 +1,7 @@
 ### DEV NOTES
 
+TODO: in withdraw function need to convert amountWithdraw which is USD price to strategy asset amount
+
 TODO: make sure that there is no problem with the fact that we have constant number of shares,
 otherwise need to fix if that's a problem (especially in withdraw function, receipt.amount / pps)
 
