@@ -1,6 +1,7 @@
 lockfileVersion: 5.3
 
 specifiers:
+  '@chainlink/contracts': ^0.4.0
   '@nomiclabs/hardhat-ethers': ^2.0.0
   '@nomiclabs/hardhat-waffle': ^2.0.0
   '@openzeppelin/contracts': ^4.5.0
@@ -14,6 +15,7 @@ specifiers:
   typescript: ^4.5.5
 
 devDependencies:
+  '@chainlink/contracts': 0.4.0
   '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.8.4
   '@nomiclabs/hardhat-waffle': 2.0.2_eb8bb6c38536cc89421da688f2218264
   '@openzeppelin/contracts': 4.5.0
@@ -27,6 +29,10 @@ devDependencies:
   typescript: 4.5.5
 
 packages:
+
+  /@chainlink/contracts/0.4.0:
+    resolution: {integrity: sha512-yZGeCBd7d+qxfw9r/JxtPzsW2kCc6MorPRZ/tDKnaJI98H99j5P2Fosfehmcwk6wVZlz+0Bp4kS1y480nw3Zow==}
+    dev: true
 
   /@ensdomains/ens/0.4.5:
     resolution: {integrity: sha512-JSvpj1iNMFjK6K+uVl4unqMoa9rf5jopb8cya5UGBWz23Nw8hSNT7efgUx4BTlAPAgpNlEioUfeTyQ6J9ZvTVw==}

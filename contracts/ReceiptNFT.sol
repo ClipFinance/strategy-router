@@ -18,14 +18,10 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
 
     mapping(uint256 => ReceiptData) public receipts;
 
-    constructor (
-        // IUniswapV2Router02 _dex
-    ) {
-        // dex = _dex;
-    }
+    constructor () { }
 
-    function viewReceipt(uint256 receiptId) external view returns (ReceiptData memory) {
-        return receipts[receiptId];
+    function viewReceipt(uint256 tokenId) external view returns (ReceiptData memory) {
+        return receipts[tokenId];
     }
 
     function mint(
@@ -44,4 +40,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         _tokenIdCounter++;
     }
 
+    function burn(uint256 tokenId) external onlyOwner {
+        _burn(tokenId);
+    } 
 }

@@ -6,13 +6,17 @@ require("hardhat-gas-reporter");
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  // hardhat: {
-  //   forking: {
-  //     url: process.env.MATIC_URL, 
-  //     blockNumber: 23715560, // remove this if provider's node is not archival
-  //     enabled: true
-  //   },
-  // },
+
+  networks: {
+
+    hardhat: {
+      forking: {
+        url: process.env.ETHEREUM_URL,
+        blockNumber: 14250342, // use this only with archival node
+        enabled: true
+      },
+    },
+  },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
   },

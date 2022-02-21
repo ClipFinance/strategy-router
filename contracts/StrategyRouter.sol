@@ -2,25 +2,26 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
+import "./Exchange.sol";
+import "./ChainlinkOracle.sol";
 
 import "hardhat/console.sol";
 
 contract StrategyRouter is Ownable {
 
     error AlreadyAddedStablecoin();
-    error InvalidStablecoin();
+    error UnsupportedStablecoin();
     error NotReceiptOwner();
 
     struct Strategy {
         address strategyAddress;
         address depositAssetAddress;
         uint256 weight;
-
-        uint256 balance;
     }
 
     struct Cycle {
@@ -29,8 +30,12 @@ contract StrategyRouter is Ownable {
         uint256 totalDeposited;
     }
 
-    uint256 public constant SECONDS_IN_DAY = 1 days;
-    uint256 public constant INITIAL_SHARES = 100;
+    uint256 public constant CYCLE_DURATION = 1 days;
+    // amount of decimals for price and net asset value
+    uint8 public constant UNIFORM_DECIMALS = 18;
+    // min withdrawable amount is `1e18 - SHARES` due to constant total shares
+    // if you deposit less, say goodbye to your dust
+    uint256 public constant SHARES = 1e8;
 
     uint256 public currentCycleId;
     uint256 public minTokenPerCycle;
@@ -39,56 +44,52 @@ contract StrategyRouter is Ownable {
     uint256 public debtToUsers;
     uint256 public totalWeight;
 
-    uint256 public netAssetValue;
-    uint256 public shares;
+    // uint256 public netAssetValue;
 
     ReceiptNFT public receiptContract;
-    IUniswapV2Router02 public dex;
+    Exchange public exchange;
+    ChainlinkOracle public oracle;
 
     Strategy[] public strategies;
-    mapping(address => bool) public stablecoins;
+    address[] public stablecoins;
     mapping(uint256 => Cycle) public cycles; 
 
     constructor (
-        // IUniswapV2Router02 _dex
+        // Exchange _exchange
     ) {
-        // dex = _dex;
+        exchange = new Exchange();
         receiptContract = new ReceiptNFT();
+        oracle = new ChainlinkOracle(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
 
         cycles[currentCycleId].startAt = block.timestamp;
     }
 
     // Universal Functions
 
-    // Takes money that is collected in the batching contract and deposits it into all strategies.
+    // Takes money that is collected in the batching and deposits it into all strategies.
     function depositToStrategies() external {
         // Has to trigger compound at all strategies.
         // Has to set price her share for the deposited NFT. In this deposit iteration.
         // Sends money to the strategy contract.
 
         // TODO: this is for simplicity, but later should improve cycle's logic
-        require(cycles[currentCycleId].startAt + SECONDS_IN_DAY < block.timestamp);
+        require(cycles[currentCycleId].startAt + CYCLE_DURATION < block.timestamp);
         require(cycles[currentCycleId].totalDeposited >= minTokenPerCycle);
 
-        uint256 accruedInterest;
         for (uint256 i; i < strategies.length; i++) {
-            // trigger compound on strategy and calculate total accrued interest
-            accruedInterest += IStrategy(strategies[i].strategyAddress).compound();
+            // trigger compound on strategy 
+            IStrategy(strategies[i].strategyAddress).compound();
             // deposit to strategy
-            IERC20(strategies[i].depositAssetAddress).approve(
+            IERC20 strategyAssetAddress = IERC20(strategies[i].depositAssetAddress);
+            uint256 depositAmount = strategyAssetAddress.balanceOf(address(this));
+            strategyAssetAddress.approve(
                 strategies[i].strategyAddress, 
-                strategies[i].balance
+                depositAmount
             );
-            IStrategy(strategies[i].strategyAddress).deposit(
-                strategies[i].balance
-            );
-            strategies[i].balance = 0;
+            IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
         }
-        
-        // TODO: maybe need different approach for NAV calculation
-        //       example: sum all strategies NAV and assign it as NAV here
-        netAssetValue += accruedInterest;
-        cycles[currentCycleId].pricePerShare = netAssetValue / shares;
+
+        cycles[currentCycleId].pricePerShare = netAssetValueAll() / SHARES;
 
         // start new cycle
         currentCycleId++;
@@ -102,16 +103,20 @@ contract StrategyRouter is Ownable {
     //     }
     // }
 
-    // function netAssetValueAll() 
-    //     public 
-    //     view 
-    //     returns (uint256 totalNetAssetValue) 
-    // {
-    //     for (uint256 i; i < strategies.length; i++) {
-    //         totalNetAssetValue += IStrategy(strategies[i].strategyAddress).netAssetValue();
-    //     }
-    //     return totalNetAssetValue;
-    // }
+    function netAssetValueAll() 
+        public 
+        view 
+        returns (uint256 totalNetAssetValue) 
+    {
+
+        for (uint256 i; i < strategies.length; i++) {
+            uint256 _nav = IStrategy(strategies[i].strategyAddress).netAssetValue();
+            uint8 strategyAssetDecimals = ERC20(strategies[i].depositAssetAddress).decimals();
+
+            totalNetAssetValue += changeDecimals(_nav, strategyAssetDecimals, UNIFORM_DECIMALS);
+        }
+        return totalNetAssetValue;
+    }
 
     function balanceAll() external {}
 
@@ -119,62 +124,81 @@ contract StrategyRouter is Ownable {
         if(receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
 
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
-
-        uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
-        shares -= userShares;
-
-        uint256 userAmount = userShares * cycles[currentCycleId].pricePerShare;
+        receiptContract.burn(receiptId);
 
         uint256 totalWithdraw;
-        for (uint256 i; i < strategies.length; i++) {
-            uint256 amountWithdraw = userAmount * strategyPercentWeight(i) / 10000;
-            address strategyAssetAddress = strategies[i].depositAssetAddress;
+        if(receipt.cycleId == currentCycleId) {
+            for (uint256 i; i < strategies.length; i++) {
 
-            if(strategyAssetAddress == receipt.token){
-                // withdraw from batching if user's cycle is current cycle
-                if(receipt.cycleId == currentCycleId) {
-                    strategies[i].balance -= amountWithdraw;
-                    totalWithdraw += amountWithdraw;
+                address strategyAssetAddress = strategies[i].depositAssetAddress;
+                uint256 amountWithdraw = receipt.amount * strategyPercentWeight(i) / 10000;
+                // userAmount has unified decimals, need to convert to asset decimals
+                amountWithdraw = changeDecimals(
+                    amountWithdraw,
+                    UNIFORM_DECIMALS,
+                    ERC20(strategyAssetAddress).decimals()
+                );
+
+                if(strategyAssetAddress == stablecoins[0]){
+                        totalWithdraw += amountWithdraw;
                 } else {
+                    console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
+
+                    IERC20(strategyAssetAddress).transfer(
+                        address(exchange), 
+                        amountWithdraw
+                    );
+
+
+                    uint256 received = exchange.swapExactTokensForTokens(
+                        amountWithdraw,
+                        IERC20(strategyAssetAddress), 
+                        IERC20(stablecoins[0])
+                    );
+
+                    totalWithdraw += received;
+                }
+            }
+            cycles[currentCycleId].totalDeposited -= totalWithdraw;
+        } else {
+
+            uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
+            uint256 currentPricePerShare = netAssetValueAll() / SHARES;
+            uint256 userAmount = userShares * currentPricePerShare;
+
+            for (uint256 i; i < strategies.length; i++) {
+
+                address strategyAssetAddress = strategies[i].depositAssetAddress;
+                uint256 amountWithdraw = userAmount * strategyPercentWeight(i) / 10000;
+                // userAmount has unified decimals, need to convert to asset decimals
+                amountWithdraw = changeDecimals(
+                    amountWithdraw,
+                    UNIFORM_DECIMALS,
+                    ERC20(strategyAssetAddress).decimals()
+                );
+
+                if(strategyAssetAddress == stablecoins[0]){
                     totalWithdraw += IStrategy(strategies[i].strategyAddress).withdraw(
                         amountWithdraw
                     );
-                }
-            } else {
-
-                if(receipt.cycleId == currentCycleId) {
-                    strategies[i].balance -= amountWithdraw;
-                    totalWithdraw += amountWithdraw;
                 } else {
-
                     uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(amountWithdraw);
-
-                    IERC20(strategyAssetAddress).approve(
-                        address(dex), 
+                    IERC20(strategyAssetAddress).transfer(
+                        address(exchange), 
                         withdrawn
                     );
-
-                    address[] memory path = new address[](3);
-                    path[0] = strategyAssetAddress;
-                    path[1] = dex.WETH();
-                    path[2] = receipt.token;
-
-                    uint256[] memory received = dex.swapExactTokensForTokens(
+                    uint256 received = exchange.swapExactTokensForTokens(
                         withdrawn,
-                        withdrawn * 9995 / 10000,
-                        path, 
-                        address(this), 
-                        block.timestamp + 1200
+                        IERC20(strategyAssetAddress), 
+                        IERC20(stablecoins[0])
                     );
-                    totalWithdraw += received[2];
+                    totalWithdraw += received;
                 }
             }
         }
 
-        netAssetValue -= totalWithdraw;
-        cycles[currentCycleId].totalDeposited -= totalWithdraw;
-        IERC20(receipt.token).transferFrom(
-            address(this), 
+        console.log(IERC20(stablecoins[0]).balanceOf(address(this)), totalWithdraw);
+        IERC20(stablecoins[0]).transfer(
             msg.sender, 
             totalWithdraw
         );
@@ -182,8 +206,8 @@ contract StrategyRouter is Ownable {
 
     // User Functions
 
-    function DepositToBatch(address _depositTokenAddress, uint256 _amount) external {
-        if(!supportsCoin(_depositTokenAddress)) revert InvalidStablecoin();
+    function depositToBatch(address _depositTokenAddress, uint256 _amount) external {
+        if(!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
 
         IERC20(_depositTokenAddress).transferFrom(
             msg.sender, 
@@ -191,76 +215,76 @@ contract StrategyRouter is Ownable {
             _amount
         );
 
-        uint256 totalDeposited;
+        uint256 totalDepositedValue;
         for (uint256 i; i < strategies.length; i++) {
 
             uint256 depositAmount = _amount * strategyPercentWeight(i) / 10000;
             address strategyAssetAddress = strategies[i].depositAssetAddress;
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(strategyAssetAddress);
 
-            if(strategyAssetAddress == _depositTokenAddress){
-                strategies[i].balance += depositAmount;
-                netAssetValue += depositAmount;
-                totalDeposited += depositAmount;
-            } else {
-                address[] memory path = new address[](3);
+            if(strategyAssetAddress != _depositTokenAddress){
 
-                path[0] = _depositTokenAddress;
-                path[1] = dex.WETH();
-                path[2] = strategyAssetAddress;
-                
-                IERC20(_depositTokenAddress).approve(
-                    address(dex), 
+                IERC20(_depositTokenAddress).transfer(
+                    address(exchange), 
                     depositAmount
                 );
 
-                uint256[] memory received = dex.swapExactTokensForTokens(
-                    depositAmount, 
-                    depositAmount * 9995 / 10000, 
-                    path, 
-                    address(this), 
-                    block.timestamp + 1200
+                depositAmount = exchange.swapExactTokensForTokens(
+                    depositAmount,
+                    IERC20(_depositTokenAddress),
+                    IERC20(strategyAssetAddress) 
                 );
-
-                strategies[i].balance += received[2];
-                netAssetValue += received[2];
-                totalDeposited += received[2];
             }
 
+            totalDepositedValue += depositAmount * 
+                changeDecimals(price, priceDecimals, UNIFORM_DECIMALS) / 
+                    10**ERC20(strategyAssetAddress).decimals();
         }
+        // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
+        // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());
+        // console.log(totalDepositedValue);
+        cycles[currentCycleId].totalDeposited += totalDepositedValue;
 
-        if(shares == 0) shares = INITIAL_SHARES;
-        else shares += totalDeposited / cycles[currentCycleId].pricePerShare;
-
-        cycles[currentCycleId].totalDeposited += totalDeposited;
-        cycles[currentCycleId].pricePerShare = netAssetValue / shares;
-
-        receiptContract.mint(currentCycleId, totalDeposited, _depositTokenAddress, msg.sender);
+        receiptContract.mint(
+            currentCycleId, 
+            totalDepositedValue, 
+            _depositTokenAddress, 
+            msg.sender
+        );
     }
 
     // Admin functions
+
+
+    function setExchange(Exchange newExchange) external onlyOwner {
+        exchange = newExchange;
+    }
 
     function addStrategy(
         address _strategyAddress,
         address _depositAssetAddress,
         uint256 _weight
     ) external onlyOwner {
+        if(!supportsCoin(_depositAssetAddress)) revert UnsupportedStablecoin();
         strategies.push(
             Strategy({
                 strategyAddress: _strategyAddress,
                 depositAssetAddress: _depositAssetAddress,
-                weight: _weight,
-                balance: 0
+                weight: _weight
             })
         );
     }
 
-    function removeStrategy(uint256 _strategyID) external onlyOwner {}
+    // function removeStrategy(uint256 _strategyID) external onlyOwner {}
 
     function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
 
-    function addSupportedStablecoin(address _address) external onlyOwner {
-        if(stablecoins[_address]) revert AlreadyAddedStablecoin();
-        stablecoins[_address] = true;
+    function addSupportedStablecoin(address stablecoinAddress) 
+        external 
+        onlyOwner 
+    {
+        if(supportsCoin(stablecoinAddress)) revert AlreadyAddedStablecoin();
+        stablecoins.push(stablecoinAddress);
     }
 
     // Internals
@@ -281,27 +305,47 @@ contract StrategyRouter is Ownable {
         return strategyPercentAllocation;
     }
 
-    function updateCycle() private {
-        if (
-            // cycle should finish if it is 1 day old
-            cycles[currentCycleId].startAt + SECONDS_IN_DAY <
-            block.timestamp ||
-                // or enough usd deposited
-                cycles[currentCycleId].totalDeposited >= minTokenPerCycle
-        ) {
-            // start new cycle
-            currentCycleId++;
-            cycles[currentCycleId].startAt = block.timestamp;
-
+    function changeDecimals(uint256 value, uint8 valueDecimals, uint8 newDecimals)
+        private
+        pure
+        returns (uint256)
+    {
+        if (valueDecimals < newDecimals) {
+            return value * (10 ** (newDecimals - valueDecimals));
+        } else if (valueDecimals > newDecimals) {
+            return value / (10 ** (valueDecimals - newDecimals));
         }
+        return value;
     }
+
+    // function updateCycle() private {
+    //     if (
+    //         // cycle should finish if it is 1 day old
+    //         cycles[currentCycleId].startAt + CYCLE_DURATION <
+    //         block.timestamp ||
+    //             // or enough usd deposited
+    //             cycles[currentCycleId].totalDeposited >= minTokenPerCycle
+    //     ) {
+    //         // start new cycle
+    //         currentCycleId++;
+    //         cycles[currentCycleId].startAt = block.timestamp;
+
+    //     }
+    // }
 
     /*
      * @title Whether provided stablecoin is supported.
      * @param Address to lookup.
      */
-
-    function supportsCoin(address _address) internal view returns (bool) {
-        return stablecoins[_address];
-    }
+     function supportsCoin(address stablecoinAddress) 
+        private 
+        view 
+        returns (bool isSupported) 
+    {
+        uint256 len = stablecoins.length;
+        for (uint256 i = 0; i < len; i++) {
+            if(stablecoins[i] == stablecoinAddress) return true;
+        }
+        return false;
+     }
 }
