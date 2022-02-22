@@ -110,10 +110,22 @@ contract StrategyRouter is Ownable {
     {
 
         for (uint256 i; i < strategies.length; i++) {
+            // now has strategy asset's decimals
             uint256 _nav = IStrategy(strategies[i].strategyAddress).netAssetValue();
-            uint8 strategyAssetDecimals = ERC20(strategies[i].depositAssetAddress).decimals();
+            // price has its own decimals
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                strategies[i].depositAssetAddress
+            );
+            // get value in USD, decimals will be adjusted down below
+            uint256 usdValue = _nav * price;
 
-            totalNetAssetValue += changeDecimals(_nav, strategyAssetDecimals, UNIFORM_DECIMALS);
+            uint8 strategyAssetDecimals = ERC20(strategies[i].depositAssetAddress).decimals();
+            // use usd value for nav and unify decimals
+            totalNetAssetValue += changeDecimals(
+                usdValue, 
+                strategyAssetDecimals + priceDecimals, 
+                UNIFORM_DECIMALS
+            );
         }
         return totalNetAssetValue;
     }
@@ -132,23 +144,25 @@ contract StrategyRouter is Ownable {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
                 uint256 amountWithdraw = receipt.amount * strategyPercentWeight(i) / 10000;
-                // userAmount has unified decimals, need to convert to asset decimals
+                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(strategyAssetAddress);
+
+                console.log("balance: %s, amountWithdraw: %s", ERC20(strategyAssetAddress).decimals(), amountWithdraw);
+                amountWithdraw = amountWithdraw / price;
                 amountWithdraw = changeDecimals(
                     amountWithdraw,
-                    UNIFORM_DECIMALS,
+                    UNIFORM_DECIMALS-priceDecimals,
                     ERC20(strategyAssetAddress).decimals()
                 );
 
+                console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
                 if(strategyAssetAddress == stablecoins[0]){
                         totalWithdraw += amountWithdraw;
                 } else {
-                    console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
 
                     IERC20(strategyAssetAddress).transfer(
                         address(exchange), 
                         amountWithdraw
                     );
-
 
                     uint256 received = exchange.swapExactTokensForTokens(
                         amountWithdraw,
@@ -170,6 +184,8 @@ contract StrategyRouter is Ownable {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
                 uint256 amountWithdraw = userAmount * strategyPercentWeight(i) / 10000;
+
+                // TODO: should have price calculations similar to what is above
                 // userAmount has unified decimals, need to convert to asset decimals
                 amountWithdraw = changeDecimals(
                     amountWithdraw,
@@ -197,6 +213,7 @@ contract StrategyRouter is Ownable {
             }
         }
 
+        // TODO: for some reason withdraw amount is higher than balance
         console.log(IERC20(stablecoins[0]).balanceOf(address(this)), totalWithdraw);
         IERC20(stablecoins[0]).transfer(
             msg.sender, 
@@ -236,13 +253,16 @@ contract StrategyRouter is Ownable {
                 );
             }
 
-            totalDepositedValue += depositAmount * 
-                changeDecimals(price, priceDecimals, UNIFORM_DECIMALS) / 
-                    10**ERC20(strategyAssetAddress).decimals();
+            uint8 assetDecimals = ERC20(strategyAssetAddress).decimals();
+            totalDepositedValue += changeDecimals(
+                depositAmount * price, 
+                assetDecimals + priceDecimals, 
+                UNIFORM_DECIMALS
+            );
         }
         // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
         // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());
-        // console.log(totalDepositedValue);
+        console.log(totalDepositedValue);
         cycles[currentCycleId].totalDeposited += totalDepositedValue;
 
         receiptContract.mint(
