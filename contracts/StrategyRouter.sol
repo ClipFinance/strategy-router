@@ -146,7 +146,6 @@ contract StrategyRouter is Ownable {
                 uint256 amountWithdraw = receipt.amount * strategyPercentWeight(i) / 10000;
                 (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(strategyAssetAddress);
 
-                console.log("balance: %s, amountWithdraw: %s", ERC20(strategyAssetAddress).decimals(), amountWithdraw);
                 amountWithdraw = amountWithdraw / price;
                 amountWithdraw = changeDecimals(
                     amountWithdraw,
@@ -154,7 +153,7 @@ contract StrategyRouter is Ownable {
                     ERC20(strategyAssetAddress).decimals()
                 );
 
-                console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
+                console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw, price);
                 if(strategyAssetAddress == stablecoins[0]){
                         totalWithdraw += amountWithdraw;
                 } else {
@@ -259,6 +258,12 @@ contract StrategyRouter is Ownable {
                 assetDecimals + priceDecimals, 
                 UNIFORM_DECIMALS
             );
+
+            console.log("deposit price: %s, value: %s, token: %s", price, changeDecimals(
+                depositAmount * price, 
+                assetDecimals + priceDecimals, 
+                UNIFORM_DECIMALS
+            ), ERC20(strategyAssetAddress).name());
         }
         // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
         // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());

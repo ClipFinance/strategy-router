@@ -45,7 +45,7 @@ contract Exchange is Ownable {
             amountA
         );
 
-        console.log(pool, address(tokenA), address(tokenB), amountA);
+        // console.log(pool, address(tokenA), address(tokenB), amountA);
 
         uint256 received = curveExchangeRegistry.exchange(
             pool, 

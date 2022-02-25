@@ -6,9 +6,7 @@ require("hardhat-gas-reporter");
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-
   networks: {
-
     hardhat: {
       forking: {
         url: process.env.ETHEREUM_URL,
@@ -19,6 +17,9 @@ module.exports = {
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
+  },
+  mocha: {
+    bail: true
   },
   solidity: {
     compilers: [
