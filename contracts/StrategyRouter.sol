@@ -231,6 +231,7 @@ contract StrategyRouter is Ownable {
             _amount
         );
 
+
         uint256 totalDepositedValue;
         for (uint256 i; i < strategies.length; i++) {
 
