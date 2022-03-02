@@ -1,9 +1,16 @@
+
 ### DEV NOTES
+
+new formula test:
+https://docs.google.com/spreadsheets/d/1_SfQxHBZetGWpm07IjadMsne8XaK725EBlV9keVwR1w/edit#gid=107616882
+concept is:
+save each user's deposit pps in that time, and on withdraw convert his shares using current PPS to total value that belongs to him currently.
+then use proportion (userWithdrawValue * farm NAV / total NAV)
+and only then convert this received part from $ value to farm's token amount and withdraw
+
 
 TODO: in withdraw function need to convert amountWithdraw which is USD price to strategy asset amount
 
-TODO: make sure that there is no problem with the fact that we have constant number of shares,
-otherwise need to fix if that's a problem (especially in withdraw function, receipt.amount / pps)
 
 TODO: make sure decimals not screwed up
 

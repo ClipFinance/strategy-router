@@ -130,6 +130,28 @@ contract StrategyRouter is Ownable {
         return totalNetAssetValue;
     }
 
+    function batchNetAssetValue() 
+        public 
+        view 
+        returns (uint256 totalNetAssetValue) 
+    {
+
+        for (uint256 i; i < strategies.length; i++) {
+            uint256 balance = ERC20(strategies[i].depositAssetAddress).balanceOf(address(this));
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                strategies[i].depositAssetAddress
+            );
+            uint256 usdValue = balance * price;
+            uint8 strategyAssetDecimals = ERC20(strategies[i].depositAssetAddress).decimals();
+            totalNetAssetValue += changeDecimals(
+                usdValue, 
+                strategyAssetDecimals + priceDecimals, 
+                UNIFORM_DECIMALS
+            );
+        }
+        return totalNetAssetValue;
+    }
+
     function balanceAll() external {}
 
     function withdrawDebtToUsers(uint256 receiptId) external {
