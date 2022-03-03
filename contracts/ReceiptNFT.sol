@@ -42,5 +42,6 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
 
     function burn(uint256 tokenId) external onlyOwner {
         _burn(tokenId);
+        delete receipts[tokenId];
     } 
 }

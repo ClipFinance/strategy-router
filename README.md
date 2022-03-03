@@ -1,7 +1,7 @@
 
 ### DEV NOTES
 
-TODO: create mock stretegies, shouldn't be hard
+TODO: probably should calculate shares in different way in depositToStrategies function, reference https://miro.com/app/board/uXjVOXGtYEw=/
 
 TODO: need to save deposited total balance in strategy structure, in case if there is strats with the same token.
 

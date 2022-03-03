@@ -101,9 +101,6 @@ describe("StrategyRouter", function () {
     await usdc.approve(router.address, parseUsdc("1000000"));
     await router.depositToBatch(ust.address, parseUst("100"));
 
-    // await printStruct(await router.cycles(0));
-    // await printStruct(await receiptContract.viewReceipt(0));
-
     // expect(await router.shares()).to.be.equal(await router.INITIAL_SHARES());
   });
 
@@ -138,11 +135,16 @@ describe("StrategyRouter", function () {
   });
 
   it("Send funds to farm to simulate balance growth", async function () {
-    await usdc.transfer(farm.address, parseUsdc("50"));
+    await usdc.transfer(farm.address, parseUsdc("100"));
   });
 
   it("Withdraw from strategies", async function () {
     await router.withdrawDebtToUsers(1);
+  });
+
+  it("Withdraw from strategies", async function () {
+    await printStruct(await receiptContract.viewReceipt(2));
+    await router.withdrawDebtToUsers(2);
   });
 
 });

@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IStrategy.sol";
 
-/// farm that decreases balance on each compound by 20%
+/// farm that don't give profit on compound
 contract FarmUnprofitable {
 
   address private asset;
@@ -30,7 +30,6 @@ contract FarmUnprofitable {
   }
 
   function compound() external {
-      balance = balance * 8 / 10;
   }
 
   function netAssetValue() external view returns (uint256) { }
