@@ -86,7 +86,8 @@ contract StrategyRouter is Ownable {
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
         }
 
-        cycles[currentCycleId].pricePerShare = netAssetValueAll() / SHARES;
+        (uint256 nav, ) = netAssetValueAll();
+        cycles[currentCycleId].pricePerShare = nav / SHARES;
 
         // start new cycle
         currentCycleId++;
@@ -103,18 +104,18 @@ contract StrategyRouter is Ownable {
     function netAssetValueAll() 
         public 
         view 
-        returns (uint256 totalNetAssetValue) 
+        returns (uint256 totalNetAssetValue, uint256[] memory balanceNAVs) 
     {
-
+        balanceNAVs = new uint256[](strategies.length);
         for (uint256 i; i < strategies.length; i++) {
             // this amount is denoted in strategy asset tokens
             uint256 total = IStrategy(strategies[i].strategyAddress).totalTokens();
             // get value in USD with unified decimals
             uint256 usdValue = toUsdValue(strategies[i].depositAssetAddress, total);
+            balanceNAVs[i] = usdValue;
             // calculate total value
             totalNetAssetValue += usdValue;
         }
-        return totalNetAssetValue;
     }
 
     /// @dev Returns value of all strategies assets on this contract, in USD.
@@ -144,7 +145,7 @@ contract StrategyRouter is Ownable {
         uint256 amountWithdrawTokens;
         // denoted in usd value
         if(receipt.cycleId == currentCycleId) {
-            (uint256 batchNAV, uint256[] memory balanceNAVs)  = batchNetAssetValue();
+            (uint256 batchNAV, uint256[] memory balanceNAVs) = batchNetAssetValue();
             console.log("batchNav", batchNAV);
             for (uint256 i; i < strategies.length; i++) {
 
@@ -176,17 +177,14 @@ contract StrategyRouter is Ownable {
 
             uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
             // TODO: netAssetValueAll should return the same as batchNAV function
-            uint256 currentPricePerShare = netAssetValueAll() / SHARES;
+            (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
+            uint256 currentPricePerShare = strategiesNAV / SHARES;
             uint256 userAmount = userShares * currentPricePerShare;
-            uint256 strategiesNAV = netAssetValueAll();
 
             for (uint256 i; i < strategies.length; i++) {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
-                uint256 balanceValue = 
-                    IStrategy(strategies[i].strategyAddress).totalTokens();
-                balanceValue = toUsdValue(strategyAssetAddress, balanceValue);
-                uint256 amountWithdraw = userAmount * balanceValue / strategiesNAV;
+                uint256 amountWithdraw = userAmount * balanceNAVs[i] / strategiesNAV;
                 // convert usd value to token amount
                 amountWithdraw = toTokenAmount(
                     strategyAssetAddress, 
