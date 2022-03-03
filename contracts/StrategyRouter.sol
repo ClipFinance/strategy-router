@@ -181,6 +181,8 @@ contract StrategyRouter is Ownable {
             uint256 currentPricePerShare = strategiesNAV / SHARES;
             uint256 userAmount = userShares * currentPricePerShare;
 
+            console.log("withdraw", userShares, currentPricePerShare, userAmount);
+
             for (uint256 i; i < strategies.length; i++) {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
@@ -191,7 +193,10 @@ contract StrategyRouter is Ownable {
                     amountWithdraw
                 );
 
+
                 uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(amountWithdraw);
+                console.log("strategy", ERC20(strategyAssetAddress).name(), amountWithdraw, withdrawn);
+                console.log("strategy", ERC20(strategyAssetAddress).decimals());
                 if(strategyAssetAddress != stablecoins[0]){
                     IERC20(strategyAssetAddress).transfer(
                         address(exchange), 
@@ -268,6 +273,10 @@ contract StrategyRouter is Ownable {
 
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
+    }
+
+    function setOracle(address newOracle) external onlyOwner {
+        oracle = ChainlinkOracle(newOracle);
     }
 
     function addStrategy(

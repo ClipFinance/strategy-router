@@ -2,12 +2,11 @@ const { expect, should, use } = require("chai");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 
-// UNISWAP_ROUTER = "0xA102072A4C07F06EC3B4900FDC4C7B80b6c57429";
-UNISWAP_ROUTER = "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff";
-
 provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 8);
+parseUsdc = (args) => parseUnits(args, 6);
 parseUst = (args) => parseUnits(args, 18);
+priceDecimals = 8;
+parsePrice = (args) => parseUnits(args, priceDecimals);
 
 describe("StrategyRouter", function () {
 
@@ -15,11 +14,13 @@ describe("StrategyRouter", function () {
 
     [owner, joe, bob] = await ethers.getSigners();
 
-    // ~~~~~~~~~~~ DEPLOY MOCK STRATEGIES ~~~~~~~~~~~ 
+    // ~~~~~~~~~~~ DEPLOY MOCKS ~~~~~~~~~~~ 
 
     const IStrategy = await hre.artifacts.readArtifact("IStrategy");
     mockStrategy = await waffle.deployMockContract(owner, IStrategy.abi);
     mockStrategy2 = await waffle.deployMockContract(owner, IStrategy.abi);
+    const ChainLinkOracle = await hre.artifacts.readArtifact("ChainlinkOracle");
+    mockOracle = await waffle.deployMockContract(owner, ChainLinkOracle.abi);
 
     // ~~~~~~~~~~~ GET UST TOKENS ~~~~~~~~~~~ 
 
@@ -56,14 +57,21 @@ describe("StrategyRouter", function () {
 
   it("Deploy StrategyRouter", async function () {
 
+    // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
     const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
     router = await StrategyRouter.deploy();
     await router.deployed();
+
+    // ~~~~~~~~~~~ GET MORE GLOBALS ~~~~~~~~~~~ 
     receiptContract = await ethers.getContractAt(
-      "ReceiptNFT", 
+      "ReceiptNFT",
       await router.receiptContract()
     );
     CYCLE_DURATION = Number(await router.CYCLE_DURATION());
+  });
+
+  it("Mock oracle", async function () {
+    await router.setOracle(mockOracle.address);
   });
 
   it("Add strategies and stablecoins", async function () {
@@ -75,14 +83,18 @@ describe("StrategyRouter", function () {
     await router.addStrategy(mockStrategy2.address, usdc.address, 9000);
   });
 
+  it("Mock oracle prices", async function () {
+    await setOraclePriceUSDC("1.0006");
+    await setOraclePriceUST("0.9986");
+  });
+
   it("User deposit", async function () {
     await ust.approve(router.address, parseUst("1000000"));
     await usdc.approve(router.address, parseUsdc("1000000"));
     await router.depositToBatch(ust.address, parseUst("100"));
 
-
-    await printStruct(await router.cycles(0));
-    await printStruct(await receiptContract.viewReceipt(0));
+    // await printStruct(await router.cycles(0));
+    // await printStruct(await receiptContract.viewReceipt(0));
 
     // expect(await router.shares()).to.be.equal(await router.INITIAL_SHARES());
   });
@@ -90,8 +102,8 @@ describe("StrategyRouter", function () {
   it("User withdraw from current cycle", async function () {
     await router.withdrawDebtToUsers(0);
 
-    await printStruct(await router.cycles(0));
-    await printStruct(await receiptContract.viewReceipt(0));
+    // await printStruct(await router.cycles(0));
+    // await printStruct(await receiptContract.viewReceipt(0));
   });
 
   it("User deposit", async function () {
@@ -99,33 +111,69 @@ describe("StrategyRouter", function () {
     // await usdc.approve(router.address, parseUsdc("1000000"));
     await router.depositToBatch(ust.address, parseUst("100"));
 
-    await printStruct(await router.cycles(0));
-    await printStruct(await receiptContract.viewReceipt(0));
+    // await printStruct(await router.cycles(0));
+    // await printStruct(await receiptContract.viewReceipt(0));
 
     // expect(await router.shares()).to.be.equal(await router.INITIAL_SHARES());
+  });
+
+  it("Mock strategy functions", async function () {
+    await mockStrategy.mock.compound.returns();
+    await mockStrategy2.mock.compound.returns();
+    await mockStrategy.mock.deposit.returns();
+    await mockStrategy2.mock.deposit.returns();
+
+    await mockStrategy.mock.totalTokens.returns(
+      await ust.balanceOf(router.address)
+    );
+    await mockStrategy2.mock.totalTokens.returns(
+      await usdc.balanceOf(router.address)
+    );
+
+    await mockStrategy.mock.withdraw.returns(
+      parseUst("10")
+    );
+    await mockStrategy2.mock.withdraw.returns(
+      parseUsdc("90.285960")
+    );
   });
 
   it("Deposit to strategies", async function () {
     await provider.send("evm_increaseTime", [CYCLE_DURATION]);
     await provider.send("evm_mine");
 
+
     await router.depositToStrategies();
 
-    await printStruct(await router.cycles(0));
+    // await printStruct(await router.cycles(0));
+    // console.log(await receiptContract.viewReceipt(0));
+  });
 
-    console.log(await receiptContract.viewReceipt(0));
-
+  it("Withdraw from strategies", async function () {
+    await router.withdrawDebtToUsers(1);
   });
 
 });
 
+async function setOraclePriceUSDC(price) {
+  await mockOracle.mock.getAssetUsdPrice
+    .withArgs(usdc.address)
+    .returns(parsePrice(price), priceDecimals);
+}
+
+async function setOraclePriceUST(price) {
+  await mockOracle.mock.getAssetUsdPrice
+    .withArgs(ust.address)
+    .returns(parsePrice(price), priceDecimals);
+}
+
 function printStruct(struct) {
-    let obj = struct;
-    let out = {};
-    for (let key in obj) {
-      if(!Number.isInteger(Number(key))) {
-        out[key] = obj[key];
-      } 
+  let obj = struct;
+  let out = {};
+  for (let key in obj) {
+    if (!Number.isInteger(Number(key))) {
+      out[key] = obj[key];
     }
-    console.log(out);
+  }
+  console.log(out);
 }

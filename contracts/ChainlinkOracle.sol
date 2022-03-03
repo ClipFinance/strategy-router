@@ -4,6 +4,8 @@ pragma solidity ^0.8.4;
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import "@chainlink/contracts/src/v0.8/Denominations.sol";
 
+// import "hardhat/console.sol";
+
 contract ChainlinkOracle {
 
     error StaleChainlinkPrice();
@@ -45,6 +47,8 @@ contract ChainlinkOracle {
             uint updatedAt,
             /* uint80 answeredInRound */
         ) = registry.latestRoundData(base, Denominations.USD);
+
+        // console.log("getAssetUsdPrice updatedAt %s, current block: %s", updatedAt, block.timestamp);
 
         if(updatedAt <= block.timestamp - 24 hours) revert StaleChainlinkPrice();
         if(price < 0) revert NegativePrice();
