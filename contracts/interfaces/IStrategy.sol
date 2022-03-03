@@ -7,4 +7,5 @@ interface IStrategy {
     function compound() external;
 
     function netAssetValue() external view returns (uint256);
+    function totalTokens() external view returns (uint256);
 }

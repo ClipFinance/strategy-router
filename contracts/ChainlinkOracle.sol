@@ -51,22 +51,4 @@ contract ChainlinkOracle {
         
         return (uint(_price), registry.decimals(base, Denominations.USD));
     }
-
-    /**
-     * Returns the latest usd / asset price and its decimals
-     */
-    function getUsdAssetPrice(address base) public view returns (uint price, uint8 decimals) {
-        (
-            /* uint80 roundID */, 
-            int _price,
-            /* uint startedAt */,
-            uint updatedAt,
-            /* uint80 answeredInRound */
-        ) = registry.latestRoundData(base, Denominations.USD);
-
-        if(updatedAt <= block.timestamp - 24 hours) revert StaleChainlinkPrice();
-        if(price < 0) revert NegativePrice();
-        
-        return (uint(_price), registry.decimals(Denominations.USD, base));
-    }
 }

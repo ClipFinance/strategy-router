@@ -1,6 +1,8 @@
 
 ### DEV NOTES
 
+TODO: need to save deposited total balance in strategy structure, in case if there is strats with the same token.
+
 new formula test:
 https://docs.google.com/spreadsheets/d/1_SfQxHBZetGWpm07IjadMsne8XaK725EBlV9keVwR1w/edit#gid=107616882
 concept is:
