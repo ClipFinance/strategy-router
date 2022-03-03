@@ -16,9 +16,6 @@ describe("StrategyRouter", function () {
 
     // ~~~~~~~~~~~ DEPLOY MOCKS ~~~~~~~~~~~ 
 
-    const IStrategy = await hre.artifacts.readArtifact("IStrategy");
-    mockStrategy = await waffle.deployMockContract(owner, IStrategy.abi);
-    mockStrategy2 = await waffle.deployMockContract(owner, IStrategy.abi);
     const ChainLinkOracle = await hre.artifacts.readArtifact("ChainlinkOracle");
     mockOracle = await waffle.deployMockContract(owner, ChainLinkOracle.abi);
 
@@ -61,6 +58,7 @@ describe("StrategyRouter", function () {
     const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
     router = await StrategyRouter.deploy();
     await router.deployed();
+    await router.setMinUsdPerCycle(parsePrice("1.0"));
 
     // ~~~~~~~~~~~ GET MORE GLOBALS ~~~~~~~~~~~ 
     receiptContract = await ethers.getContractAt(
@@ -68,6 +66,16 @@ describe("StrategyRouter", function () {
       await router.receiptContract()
     );
     CYCLE_DURATION = Number(await router.CYCLE_DURATION());
+  });
+
+  it("Deploy fake farms", async function () {
+    const FarmUnprofitable = await ethers.getContractFactory("FarmUnprofitable");
+    farmUnprofitable = await FarmUnprofitable.deploy(ust.address);
+    await farmUnprofitable.deployed();
+
+    const Farm = await ethers.getContractFactory("Farm");
+    farm = await Farm.deploy(usdc.address);
+    await farm.deployed();
   });
 
   it("Mock oracle", async function () {
@@ -79,8 +87,8 @@ describe("StrategyRouter", function () {
     await router.addSupportedStablecoin(ust.address);
     await expect(router.addSupportedStablecoin(ust.address)).to.be.reverted;
 
-    await router.addStrategy(mockStrategy.address, ust.address, 1000);
-    await router.addStrategy(mockStrategy2.address, usdc.address, 9000);
+    await router.addStrategy(farmUnprofitable.address, ust.address, 1000);
+    await router.addStrategy(farm.address, usdc.address, 9000);
   });
 
   it("Mock oracle prices", async function () {
@@ -101,41 +109,21 @@ describe("StrategyRouter", function () {
 
   it("User withdraw from current cycle", async function () {
     await router.withdrawDebtToUsers(0);
-
-    // await printStruct(await router.cycles(0));
-    // await printStruct(await receiptContract.viewReceipt(0));
   });
 
   it("User deposit", async function () {
-    // await ust.approve(router.address, parseUst("1000000"));
-    // await usdc.approve(router.address, parseUsdc("1000000"));
     await router.depositToBatch(ust.address, parseUst("100"));
-
-    // await printStruct(await router.cycles(0));
-    // await printStruct(await receiptContract.viewReceipt(0));
-
-    // expect(await router.shares()).to.be.equal(await router.INITIAL_SHARES());
   });
 
-  it("Mock strategy functions", async function () {
-    await mockStrategy.mock.compound.returns();
-    await mockStrategy2.mock.compound.returns();
-    await mockStrategy.mock.deposit.returns();
-    await mockStrategy2.mock.deposit.returns();
+  it("Deposit to strategies", async function () {
+    await provider.send("evm_increaseTime", [CYCLE_DURATION]);
+    await provider.send("evm_mine");
 
-    await mockStrategy.mock.totalTokens.returns(
-      await ust.balanceOf(router.address)
-    );
-    await mockStrategy2.mock.totalTokens.returns(
-      await usdc.balanceOf(router.address)
-    );
+    await router.depositToStrategies();
+  });
 
-    await mockStrategy.mock.withdraw.returns(
-      parseUst("10")
-    );
-    await mockStrategy2.mock.withdraw.returns(
-      parseUsdc("90.285960")
-    );
+  it("User deposit", async function () {
+    await router.depositToBatch(ust.address, parseUst("100"));
   });
 
   it("Deposit to strategies", async function () {
@@ -147,6 +135,10 @@ describe("StrategyRouter", function () {
 
     // await printStruct(await router.cycles(0));
     // console.log(await receiptContract.viewReceipt(0));
+  });
+
+  it("Send funds to farm to simulate balance growth", async function () {
+    await usdc.transfer(farm.address, parseUsdc("50"));
   });
 
   it("Withdraw from strategies", async function () {

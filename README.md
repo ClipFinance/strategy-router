@@ -1,6 +1,8 @@
 
 ### DEV NOTES
 
+TODO: create mock stretegies, shouldn't be hard
+
 TODO: need to save deposited total balance in strategy structure, in case if there is strats with the same token.
 
 new formula test:

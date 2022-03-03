@@ -40,10 +40,6 @@ contract StrategyRouter is Ownable {
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
 
-    // TODO: what these two for?
-    uint256 public debtToUsers;
-    uint256 public totalWeight;
-
     // uint256 public netAssetValue;
 
     ReceiptNFT public receiptContract;
@@ -84,10 +80,12 @@ contract StrategyRouter is Ownable {
                 depositAmount
             );
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
+            console.log("deposit to strategies", depositAmount);
         }
 
         (uint256 nav, ) = netAssetValueAll();
         cycles[currentCycleId].pricePerShare = nav / SHARES;
+        console.log("total to strategies", cycles[currentCycleId].pricePerShare, nav);
 
         // start new cycle
         currentCycleId++;
@@ -176,7 +174,6 @@ contract StrategyRouter is Ownable {
         } else {
 
             uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
-            // TODO: netAssetValueAll should return the same as batchNAV function
             (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
             uint256 currentPricePerShare = strategiesNAV / SHARES;
             uint256 userAmount = userShares * currentPricePerShare;
@@ -212,8 +209,7 @@ contract StrategyRouter is Ownable {
             }
         }
 
-        // TODO: for some reason withdraw amount is higher than balance
-        console.log(IERC20(stablecoins[0]).balanceOf(address(this)), amountWithdrawTokens);
+        console.log("total withdraw", IERC20(stablecoins[0]).balanceOf(address(this)), amountWithdrawTokens);
         IERC20(stablecoins[0]).transfer(
             msg.sender, 
            amountWithdrawTokens 
@@ -277,6 +273,10 @@ contract StrategyRouter is Ownable {
 
     function setOracle(address newOracle) external onlyOwner {
         oracle = ChainlinkOracle(newOracle);
+    }    
+    
+    function setMinUsdPerCycle(uint256 usdValue) external onlyOwner {
+        minUsdPerCycle = usdValue;
     }
 
     function addStrategy(
