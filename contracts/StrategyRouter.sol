@@ -33,10 +33,9 @@ contract StrategyRouter is Ownable {
     uint256 public constant CYCLE_DURATION = 1 days;
     // amount of decimals for price and net asset value
     uint8 public constant UNIFORM_DECIMALS = 18;
-    // min withdrawable amount is `1e18 - SHARES` due to constant total shares
-    // if you deposit less, say goodbye to your dust
-    uint256 public constant SHARES = 1e8;
+    uint256 public constant SHARES = 1e6;
 
+    uint256 public shares;
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
 
@@ -67,11 +66,23 @@ contract StrategyRouter is Ownable {
 
         // TODO: this is for simplicity, but later should improve cycle's logic
         require(cycles[currentCycleId].startAt + CYCLE_DURATION < block.timestamp);
+        // TODO: might remove depositedValue and instead get this value by looking at token balances on this contract
         require(cycles[currentCycleId].depositedValue >= minUsdPerCycle);
 
         for (uint256 i; i < strategies.length; i++) {
             // trigger compound on strategy 
             IStrategy(strategies[i].strategyAddress).compound();
+        }
+        
+        // get nav after compound
+        (uint256 navAfterCompound, ) = netAssetValueAll();
+
+        if(shares == 0) shares = SHARES;
+        else if (navAfterCompound > 0) cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
+
+        console.log("navAfterCompound %s, pps %s", navAfterCompound, cycles[currentCycleId].pricePerShare);
+
+        for (uint256 i; i < strategies.length; i++) {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositAssetAddress);
             uint256 depositAmount = strategyAssetAddress.balanceOf(address(this));
@@ -83,8 +94,17 @@ contract StrategyRouter is Ownable {
             console.log("deposit to strategies", depositAmount);
         }
 
+        // get nav after deposit
         (uint256 nav, ) = netAssetValueAll();
-        cycles[currentCycleId].pricePerShare = nav / SHARES;
+
+        console.log("nav after deposit", nav);
+
+        if(navAfterCompound == 0) {
+            cycles[currentCycleId].pricePerShare = nav / shares;
+        } else {
+            shares = nav / cycles[currentCycleId].pricePerShare;
+        }
+
         console.log("total to strategies", cycles[currentCycleId].pricePerShare, nav);
 
         // start new cycle
@@ -175,10 +195,11 @@ contract StrategyRouter is Ownable {
 
             uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
             (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
-            uint256 currentPricePerShare = strategiesNAV / SHARES;
+            uint256 currentPricePerShare = strategiesNAV / shares;
             uint256 userAmount = userShares * currentPricePerShare;
 
             console.log("withdraw", userShares, currentPricePerShare, userAmount);
+            console.log("withdraw more info, total shares: %s", shares);
 
             for (uint256 i; i < strategies.length; i++) {
 
@@ -207,6 +228,11 @@ contract StrategyRouter is Ownable {
                 }
                 amountWithdrawTokens += withdrawn;
             }
+
+            (strategiesNAV, ) = netAssetValueAll();
+            shares -= userShares;
+            if(shares == 0) cycles[currentCycleId].pricePerShare = 0;
+            else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
         }
 
         console.log("total withdraw", IERC20(stablecoins[0]).balanceOf(address(this)), amountWithdrawTokens);
