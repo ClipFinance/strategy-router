@@ -69,7 +69,8 @@ contract StrategyRouter is Ownable {
         // TODO: might remove depositedValue and instead get this value by looking at token balances on this contract
         require(cycles[currentCycleId].depositedValue >= minUsdPerCycle);
 
-        for (uint256 i; i < strategies.length; i++) {
+        uint256 len = strategies.length;
+        for (uint256 i; i < len; i++) {
             // trigger compound on strategy 
             IStrategy(strategies[i].strategyAddress).compound();
         }
@@ -82,7 +83,7 @@ contract StrategyRouter is Ownable {
 
         console.log("navAfterCompound %s, pps %s", navAfterCompound, cycles[currentCycleId].pricePerShare);
 
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < len; i++) {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositAssetAddress);
             uint256 depositAmount = strategyAssetAddress.balanceOf(address(this));
@@ -99,11 +100,8 @@ contract StrategyRouter is Ownable {
 
         console.log("nav after deposit", nav);
 
-        if(navAfterCompound == 0) {
-            cycles[currentCycleId].pricePerShare = nav / shares;
-        } else {
-            shares = nav / cycles[currentCycleId].pricePerShare;
-        }
+        if(navAfterCompound == 0) cycles[currentCycleId].pricePerShare = nav / shares;
+        else shares = nav / cycles[currentCycleId].pricePerShare;
 
         console.log("total to strategies", cycles[currentCycleId].pricePerShare, nav);
 
@@ -125,7 +123,7 @@ contract StrategyRouter is Ownable {
         returns (uint256 totalNetAssetValue, uint256[] memory balanceNAVs) 
     {
         balanceNAVs = new uint256[](strategies.length);
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < balanceNAVs.length; i++) {
             // this amount is denoted in strategy asset tokens
             uint256 total = IStrategy(strategies[i].strategyAddress).totalTokens();
             // get value in USD with unified decimals
@@ -143,7 +141,7 @@ contract StrategyRouter is Ownable {
         returns (uint256 totalNetAssetValue, uint256[] memory balanceNAVs) 
     {
         balanceNAVs = new uint256[](strategies.length);
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < balanceNAVs.length; i++) {
             uint256 balance = ERC20(strategies[i].depositAssetAddress).balanceOf(address(this));
             uint256 usdValue = toUsdValue(strategies[i].depositAssetAddress, balance);
             balanceNAVs[i] = usdValue;
@@ -159,13 +157,12 @@ contract StrategyRouter is Ownable {
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
         receiptContract.burn(receiptId);
 
-        // amount of stablecoin[0]
+        uint256 len = strategies.length;
         uint256 amountWithdrawTokens;
-        // denoted in usd value
         if(receipt.cycleId == currentCycleId) {
             (uint256 batchNAV, uint256[] memory balanceNAVs) = batchNetAssetValue();
             console.log("batchNav", batchNAV);
-            for (uint256 i; i < strategies.length; i++) {
+            for (uint256 i; i < len; i++) {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
                 // calculate proportions using usd values
@@ -201,7 +198,7 @@ contract StrategyRouter is Ownable {
             console.log("withdraw", userShares, currentPricePerShare, userAmount);
             console.log("withdraw more info, total shares: %s", shares);
 
-            for (uint256 i; i < strategies.length; i++) {
+            for (uint256 i; i < len; i++) {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
                 uint256 amountWithdraw = userAmount * balanceNAVs[i] / strategiesNAV;
@@ -253,8 +250,9 @@ contract StrategyRouter is Ownable {
             _amount
         );
 
+        uint256 len = strategies.length;
         uint256 userDepositedValue;
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < len; i++) {
 
             uint256 depositAmount = _amount * strategyPercentWeight(i) / 10000;
             address strategyAssetAddress = strategies[i].depositAssetAddress;
@@ -340,8 +338,8 @@ contract StrategyRouter is Ownable {
         returns (uint256 strategyPercentAllocation)
     {
         uint256 totalStrategyWeight;
-
-        for (uint256 i; i < strategies.length; i++) {
+        uint256 len = strategies.length;
+        for (uint256 i; i < len; i++) {
             totalStrategyWeight += strategies[i].weight;
         }
         strategyPercentAllocation =
