@@ -24,6 +24,10 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         return receipts[tokenId];
     }
 
+    function setAmount(uint256 tokenId, uint256 amount) external onlyOwner {
+        receipts[tokenId].amount = amount;
+    } 
+
     function mint(
         uint256 cycleId, 
         uint256 amount, 
