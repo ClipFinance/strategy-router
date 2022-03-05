@@ -27,7 +27,7 @@ contract StrategyRouter is Ownable {
     struct Cycle {
         uint256 startAt;
         uint256 pricePerShare;
-        uint256 depositedValue;
+        uint256 depositedAmount;
     }
 
     uint256 public constant CYCLE_DURATION = 1 days;
@@ -43,18 +43,15 @@ contract StrategyRouter is Ownable {
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
-    ChainlinkOracle public oracle;
 
     Strategy[] public strategies;
     address[] public stablecoins;
     mapping(uint256 => Cycle) public cycles; 
 
     constructor (
-        // Exchange _exchange
     ) {
         exchange = new Exchange();
         receiptContract = new ReceiptNFT();
-        oracle = new ChainlinkOracle(0x47Fb2585D2C56Fe188D0E6ec628a38b74fCeeeDf);
 
         cycles[currentCycleId].startAt = block.timestamp;
     }
@@ -66,8 +63,8 @@ contract StrategyRouter is Ownable {
 
         // TODO: this is for simplicity, but later should improve cycle's logic
         require(cycles[currentCycleId].startAt + CYCLE_DURATION < block.timestamp);
-        // TODO: might remove depositedValue and instead get this value by looking at token balances on this contract
-        require(cycles[currentCycleId].depositedValue >= minUsdPerCycle);
+        // TODO: might remove depositedAmount and instead get this value by looking at token balances on this contract
+        require(cycles[currentCycleId].depositedAmount >= minUsdPerCycle);
 
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
@@ -92,7 +89,7 @@ contract StrategyRouter is Ownable {
                 depositAmount
             );
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
-            console.log("deposit to strategies", depositAmount);
+            console.log("deposit to strategies", depositAmount, strategyAssetAddress.balanceOf(strategies[i].strategyAddress));
         }
 
         // get nav after deposit
@@ -124,13 +121,11 @@ contract StrategyRouter is Ownable {
     {
         balanceNAVs = new uint256[](strategies.length);
         for (uint256 i; i < balanceNAVs.length; i++) {
-            // this amount is denoted in strategy asset tokens
-            uint256 total = IStrategy(strategies[i].strategyAddress).totalTokens();
-            // get value in USD with unified decimals
-            uint256 usdValue = toUsdValue(strategies[i].depositAssetAddress, total);
-            balanceNAVs[i] = usdValue;
-            // calculate total value
-            totalNetAssetValue += usdValue;
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+            uint256 balance = IStrategy(strategies[i].strategyAddress).totalTokens();
+            balance = toUniform(balance, strategyAssetAddress);
+            balanceNAVs[i] = balance;
+            totalNetAssetValue += balance;
         }
     }
 
@@ -142,10 +137,11 @@ contract StrategyRouter is Ownable {
     {
         balanceNAVs = new uint256[](strategies.length);
         for (uint256 i; i < balanceNAVs.length; i++) {
-            uint256 balance = ERC20(strategies[i].depositAssetAddress).balanceOf(address(this));
-            uint256 usdValue = toUsdValue(strategies[i].depositAssetAddress, balance);
-            balanceNAVs[i] = usdValue;
-            totalNetAssetValue += usdValue; 
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+            uint256 balance = ERC20(strategyAssetAddress).balanceOf(address(this));
+            balance = toUniform(balance, strategyAssetAddress);
+            balanceNAVs[i] = balance;
+            totalNetAssetValue += balance; 
         }
     }
 
@@ -168,10 +164,7 @@ contract StrategyRouter is Ownable {
                 // calculate proportions using usd values
                 uint256 amountWithdraw = receipt.amount * balanceNAVs[i] / batchNAV;
                 // convert usd value to token amount
-                amountWithdraw = toTokenAmount(
-                    strategyAssetAddress, 
-                    amountWithdraw
-                );
+                amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
                 console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
                 if(strategyAssetAddress != stablecoins[0]){
@@ -187,7 +180,7 @@ contract StrategyRouter is Ownable {
                 }
                 amountWithdrawTokens += amountWithdraw;
             }
-            cycles[currentCycleId].depositedValue -= receipt.amount;
+            cycles[currentCycleId].depositedAmount -= receipt.amount;
         } else {
 
             uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
@@ -202,12 +195,8 @@ contract StrategyRouter is Ownable {
 
                 address strategyAssetAddress = strategies[i].depositAssetAddress;
                 uint256 amountWithdraw = userAmount * balanceNAVs[i] / strategiesNAV;
-                // convert usd value to token amount
-                amountWithdraw = toTokenAmount(
-                    strategyAssetAddress, 
-                    amountWithdraw
-                );
-
+        
+                amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
                 uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(amountWithdraw);
                 console.log("strategy", ERC20(strategyAssetAddress).name(), amountWithdraw, withdrawn);
@@ -251,11 +240,12 @@ contract StrategyRouter is Ownable {
         );
 
         uint256 len = strategies.length;
-        uint256 userDepositedValue;
+        uint256 totalDepositAmount;
         for (uint256 i; i < len; i++) {
 
             uint256 depositAmount = _amount * strategyPercentWeight(i) / 10000;
             address strategyAssetAddress = strategies[i].depositAssetAddress;
+            uint8 strategyAssetDecimals = ERC20(strategyAssetAddress).decimals();
 
             if(strategyAssetAddress != _depositTokenAddress){
 
@@ -271,18 +261,22 @@ contract StrategyRouter is Ownable {
                 );
             }
 
-            userDepositedValue += toUsdValue(strategyAssetAddress, depositAmount);
+            totalDepositAmount += changeDecimals(
+                depositAmount, 
+                strategyAssetDecimals, 
+                UNIFORM_DECIMALS
+            );
 
-            console.log("deposit price: %s, value: %s, token: %s", userDepositedValue, depositAmount, ERC20(strategyAssetAddress).name());
+            console.log("deposit price: %s, value: %s, token: %s", totalDepositAmount, depositAmount, ERC20(strategyAssetAddress).name());
         }
         // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
         // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());
-        console.log(userDepositedValue);
-        cycles[currentCycleId].depositedValue += userDepositedValue;
+        console.log(totalDepositAmount);
+        cycles[currentCycleId].depositedAmount += totalDepositAmount;
 
         receiptContract.mint(
             currentCycleId, 
-            userDepositedValue, 
+            totalDepositAmount, 
             _depositTokenAddress, 
             msg.sender
         );
@@ -294,10 +288,6 @@ contract StrategyRouter is Ownable {
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
     }
-
-    function setOracle(address newOracle) external onlyOwner {
-        oracle = ChainlinkOracle(newOracle);
-    }    
     
     function setMinUsdPerCycle(uint256 usdValue) external onlyOwner {
         minUsdPerCycle = usdValue;
@@ -361,43 +351,28 @@ contract StrategyRouter is Ownable {
         return value;
     }
 
-    /// @dev Get value of tokens in USD, and set decimals to `UNIFORM_DECIMALS`. 
-    function toUsdValue(address token, uint256 amount)
+    function toUniform(uint256 amount, address token)
         private
         view
         returns (uint256)
     {
-        (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(token);
-        // get value in USD, now it has token + price decimals 
-        uint256 usdValue = amount * price;
-
-        uint8 tokenDecimals = ERC20(token).decimals();
-        // use usd value for nav and unify decimals
-        usdValue = changeDecimals(
-            usdValue, 
-            tokenDecimals + priceDecimals, 
+        return changeDecimals(
+            amount, 
+            ERC20(token).decimals(),
             UNIFORM_DECIMALS
         );
-        return usdValue;
     }
 
-    /// @dev Get amount of tokens from USD value.
-    ///      USD value should have `UNIFORM_DECIMALS` decimals.
-    function toTokenAmount(address token, uint256 usdValue)
+    function fromUniform(uint256 amount, address token)
         private
         view
         returns (uint256)
     {
-        (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(token);
-        // decimals now are UNIFORM_DECIMALS - priceDecimals
-        uint256 amount = usdValue / price;
-        uint8 tokenDecimals = ERC20(token).decimals();
-        usdValue = changeDecimals(
+        return changeDecimals(
             amount, 
-            UNIFORM_DECIMALS - priceDecimals, 
-            tokenDecimals
+            UNIFORM_DECIMALS,
+            ERC20(token).decimals()
         );
-        return usdValue;
     }
 
     // function updateCycle() private {
@@ -406,7 +381,7 @@ contract StrategyRouter is Ownable {
     //         cycles[currentCycleId].startAt + CYCLE_DURATION <
     //         block.timestamp ||
     //             // or enough usd deposited
-    //             cycles[currentCycleId].depositedValue >= minUsdPerCycle
+    //             cycles[currentCycleId].depositedAmount >= minUsdPerCycle
     //     ) {
     //         // start new cycle
     //         currentCycleId++;

@@ -16,9 +16,6 @@ describe("StrategyRouter", function () {
 
     // ~~~~~~~~~~~ DEPLOY MOCKS ~~~~~~~~~~~ 
 
-    const ChainLinkOracle = await hre.artifacts.readArtifact("ChainlinkOracle");
-    mockOracle = await waffle.deployMockContract(owner, ChainLinkOracle.abi);
-
     // ~~~~~~~~~~~ GET UST TOKENS ~~~~~~~~~~~ 
 
     UST = "0xa47c8bf37f92aBed4A126BDA807A7b7498661acD";
@@ -78,10 +75,6 @@ describe("StrategyRouter", function () {
     await farm.deployed();
   });
 
-  it("Mock oracle", async function () {
-    await router.setOracle(mockOracle.address);
-  });
-
   it("Add strategies and stablecoins", async function () {
     await router.addSupportedStablecoin(usdc.address);
     await router.addSupportedStablecoin(ust.address);
@@ -89,11 +82,6 @@ describe("StrategyRouter", function () {
 
     await router.addStrategy(farmUnprofitable.address, ust.address, 1000);
     await router.addStrategy(farm.address, usdc.address, 9000);
-  });
-
-  it("Mock oracle prices", async function () {
-    await setOraclePriceUSDC("1.0006");
-    await setOraclePriceUST("0.9986");
   });
 
   it("User deposit", async function () {
@@ -148,18 +136,6 @@ describe("StrategyRouter", function () {
   });
 
 });
-
-async function setOraclePriceUSDC(price) {
-  await mockOracle.mock.getAssetUsdPrice
-    .withArgs(usdc.address)
-    .returns(parsePrice(price), priceDecimals);
-}
-
-async function setOraclePriceUST(price) {
-  await mockOracle.mock.getAssetUsdPrice
-    .withArgs(ust.address)
-    .returns(parsePrice(price), priceDecimals);
-}
 
 function printStruct(struct) {
   let obj = struct;
