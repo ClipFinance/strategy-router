@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
+
+    error NonexistenToken();
     
     struct ReceiptData {
         uint256 cycleId;
@@ -20,11 +22,35 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
 
     constructor () { }
 
-    function viewReceipt(uint256 tokenId) external view returns (ReceiptData memory) {
+
+    function viewReceipt(uint256 tokenId) 
+        external 
+        view 
+        returns (ReceiptData memory) 
+    {
         return receipts[tokenId];
+    }
+    
+    /// @notice Get all tokens owned by user, to be used off-chain.
+    function walletOfOwner(address ownerAddr) 
+        public 
+        view 
+        returns (uint256[] memory tokens) 
+    {
+        uint256 balance = balanceOf(ownerAddr);
+        tokens = new uint256[](balance);
+        uint256 tokenId;
+
+        while(balance > 0) {
+            if(_exists(tokenId) && ownerOf(tokenId) == ownerAddr) {
+                tokens[--balance] = tokenId; 
+            }
+            tokenId++;
+        }
     }
 
     function setAmount(uint256 tokenId, uint256 amount) external onlyOwner {
+        if(_exists(tokenId) == false) revert NonexistenToken();
         receipts[tokenId].amount = amount;
     } 
 
@@ -48,4 +74,5 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         _burn(tokenId);
         delete receipts[tokenId];
     } 
+
 }

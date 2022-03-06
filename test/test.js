@@ -1,4 +1,5 @@
 const { expect, should, use } = require("chai");
+const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 
@@ -171,7 +172,42 @@ describe("StrategyRouter", function () {
     expect(await usdc.balanceOf(router.address)).to.equal(0);
   });
 
+  describe("walletOfOwner", function () {
+    it("Snapshot evm", async function () {
+      snapshotId = await provider.send("evm_snapshot");
+    });
+    it("Deploy ReceiptNFT", async function () {
+      receiptContract = await ethers.getContractFactory("ReceiptNFT");
+      receiptContract = await receiptContract.deploy();
+      arrayToNubmer = arr => arr.map(n => n.toNumber());
+    });
+    it("Wallet with 0 tokens", async function () {
+      expect(await receiptContract.walletOfOwner(owner.address)).to.be.empty;
+    });
+    it("Wallet with 1 token", async function () {
+      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
+      expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
+      expect(await receiptContract.walletOfOwner(joe.address)).to.be.empty;
+    });
+    it("Two wallets with 1 token", async function () {
+      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
+      expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
+      expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([1]);
+    });
+    it("Two wallets with more tokens", async function () {
+      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
+      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
+      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
+      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
+      expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([4,2,0]);
+      expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([5,3,1]);
+    });
+    it("Revert evm", async function () {
+      await provider.send("evm_revert", [snapshotId]);
+    });
+  });
 });
+
 
 function printStruct(struct) {
   let obj = struct;

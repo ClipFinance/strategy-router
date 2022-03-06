@@ -327,7 +327,6 @@ contract StrategyRouter is Ownable {
 
             uint256 depositAmount = _amount * strategyPercentWeight(i) / 10000;
             address strategyAssetAddress = strategies[i].depositAssetAddress;
-            uint8 strategyAssetDecimals = ERC20(strategyAssetAddress).decimals();
 
             if(strategyAssetAddress != _depositTokenAddress){
 
@@ -345,7 +344,7 @@ contract StrategyRouter is Ownable {
 
             totalDepositAmount += changeDecimals(
                 depositAmount, 
-                strategyAssetDecimals, 
+                ERC20(strategyAssetAddress).decimals(), 
                 UNIFORM_DECIMALS
             );
 
