@@ -33,15 +33,12 @@ contract StrategyRouter is Ownable {
     }
 
     uint256 public constant CYCLE_DURATION = 1 days;
-    // amount of decimals for price and net assetamount 
     uint8 public constant UNIFORM_DECIMALS = 18;
     uint256 public constant INITIAL_SHARES = 1e6;
 
     uint256 public shares;
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
-
-    // uint256 public netAssetValue;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -62,7 +59,7 @@ contract StrategyRouter is Ownable {
 
     // Universal Functions
 
-    // Takes money that is collected in the batching and deposits it into all strategies.
+    /// @notice Deposit money collected in the batching into strategies.
     function depositToStrategies() external {
 
         // TODO: this is for simplicity, but later should improve cycle's logic
@@ -112,12 +109,10 @@ contract StrategyRouter is Ownable {
 
     }
 
-    // function compoundAll() external {
-    //     for (uint256 i; i < strategies.length; i++) {
-    //         IStrategy(strategies[i].strategyAddress).compound();
-    //     }
-    // }
-
+    /// @notice Returns amount of usd in strategies.
+    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimal places.
+    /// @return totalNetAssetValue Total amount of usd in strategies.
+    /// @return balanceNAVs Array of usd amount in each strategy.
     function netAssetValueAll() 
         public 
         view 
@@ -133,7 +128,10 @@ contract StrategyRouter is Ownable {
         }
     }
 
-    /// @dev Returns amount of all strategies assets on this contract, in USD.
+    /// @notice Returns amount of usd to be deposited into strategies.
+    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimal places.
+    /// @return totalNetAssetValue Total amount of usd to be deposited into strategies.
+    /// @return balanceNAVs Array of usd amount to be deposited into each strategy.
     function batchNetAssetValue() 
         public 
         view 
@@ -153,6 +151,8 @@ contract StrategyRouter is Ownable {
 
     // User Functions
 
+    /// @notice Convert receipt NFT into shares tokens.
+    ///         Cycle noted in receipt should be closed.
     function unlockSharesFromNFT(uint256 receiptId) 
         public 
         returns (uint256 mintedShares)
@@ -169,12 +169,12 @@ contract StrategyRouter is Ownable {
         return userShares;
     }
 
-    /// @notice Withdraw user's usd, will receive stablecoins[0].
-    /// @notice When withdrawing partly and cycle is closed then also receives tokens representing shares.
-    /// @notice Receipt is burned when withdrawing whole amount or cycle is closed.
+    /// @notice User withdraw usd from batching or strategies, will receive stablecoins[0].
+    /// @notice On partial withdraw from closed cycle user will receive tokens representing leftover shares.
+    /// @notice Receipt is burned when withdrawing whole amount or from closed cycle.
     /// @param receiptId Receipt NFT id.
     /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
-    function withdrawDebtToUsers(uint256 receiptId, uint256 amount) external {
+    function withdrawByReceipt(uint256 receiptId, uint256 amount) external {
         if(receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
 
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
@@ -261,6 +261,9 @@ contract StrategyRouter is Ownable {
         );
     }
 
+    /// @notice User withdraw usd from strategies.
+    /// @notice Use withdrawByReceipt function to withdraw using receipt NFT.
+    /// @param withdrawShares Amount of shares to withdraw.
     function withdrawShares(uint256 withdrawShares) external {
         if(sharesToken.balanceOf(msg.sender) < withdrawShares) revert InsufficientShares();
 
@@ -312,6 +315,11 @@ contract StrategyRouter is Ownable {
         );
     }
 
+    /// @notice Deposit stablecoin into batching.
+    /// @notice Tokens not sended to strategies immediately,
+    ///         but swapped to strategies stables according to weights.
+    /// @param _depositTokenAddress Supported stablecoin to deposit.
+    /// @param _amount Amount to deposit.
     function depositToBatch(address _depositTokenAddress, uint256 _amount) external {
         if(!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
 
@@ -366,14 +374,25 @@ contract StrategyRouter is Ownable {
     // Admin functions
 
 
+    /// @notice Set address of exchange for any stablecoin swaps.
+    /// @dev Exchange contract must be custom, we don't use uniswap or curver directly.
+    /// @dev Admin function.
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
     }
-    
+
+    /// @notice Minimum usd needed to be able to close the cycle.
+    /// @param amount Amount of usd must have `UNIFORM_DECIMALS` decimal places.
+    /// @dev Admin function.
     function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
     }
 
+    /// @notice Add strategy.
+    /// @param _strategyAddress Address of the strategy.
+    /// @param _depositAssetAddress Asset to be deposited into strategy.
+    /// @param _weight Weight of the strategy used to split each deposit between strategies.
+    /// @dev Admin function.
     function addStrategy(
         address _strategyAddress,
         address _depositAssetAddress,
@@ -391,8 +410,10 @@ contract StrategyRouter is Ownable {
 
     // function removeStrategy(uint256 _strategyID) external onlyOwner {}
 
-    function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
+    // function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
 
+    /// @notice Add supported stablecoind for deposits.
+    /// @dev Admin function.
     function addSupportedStablecoin(address stablecoinAddress) 
         external 
         onlyOwner 
@@ -403,13 +424,7 @@ contract StrategyRouter is Ownable {
 
     // Internals
 
-    function _withdrawFromCurrentCycle(uint256 sharesAmount)
-        internal
-        view
-        returns (uint256 strategyPercentAllocation)
-    {
-    }
-
+    /// @dev Returns strategy weight as percent of weight of all strategies.
     function strategyPercentWeight(uint256 _strategyID)
         internal
         view
@@ -426,6 +441,7 @@ contract StrategyRouter is Ownable {
         return strategyPercentAllocation;
     }
 
+    /// @dev Change decimal places from `oldDecimals` to `newDecimals`.
     function changeDecimals(uint256 amount, uint8 oldDecimals, uint8 newDecimals)
         private
         pure
@@ -439,6 +455,7 @@ contract StrategyRouter is Ownable {
         return amount;
     }
 
+    /// @dev Change decimal places to `UNIFORM_DECIMALS`.
     function toUniform(uint256 amount, address token)
         private
         view
@@ -451,6 +468,7 @@ contract StrategyRouter is Ownable {
         );
     }
 
+    /// @dev Convert decimal places from `UNIFORM_DECIMALS` to token decimals.
     function fromUniform(uint256 amount, address token)
         private
         view
@@ -478,11 +496,9 @@ contract StrategyRouter is Ownable {
     //     }
     // }
 
-    /*
-     * @title Whether provided stablecoin is supported.
-     * @param Address to lookup.
-     */
-     function supportsCoin(address stablecoinAddress) 
+    /// @notice Returns whether provided stablecoin is supported.
+    /// @param stablecoinAddress Address to lookup.
+    function supportsCoin(address stablecoinAddress) 
         private 
         view 
         returns (bool isSupported) 

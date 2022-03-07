@@ -108,11 +108,11 @@ describe("StrategyRouter", function () {
 
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.viewReceipt(0);
-    await router.withdrawDebtToUsers(0, receipt.amount.div(2));
+    await router.withdrawByReceipt(0, receipt.amount.div(2));
   });
 
   it("User withdraw other half from current cycle", async function () {
-    await router.withdrawDebtToUsers(0, await sharesToken.balanceOf(owner.address));
+    await router.withdrawByReceipt(0, await sharesToken.balanceOf(owner.address));
   });
 
   it("User deposit", async function () {
@@ -153,7 +153,7 @@ describe("StrategyRouter", function () {
 
   it("Withdraw half from strategies", async function () {
     let receipt = await receiptContract.viewReceipt(1);
-    await router.withdrawDebtToUsers(1, receipt.amount.div(2));
+    await router.withdrawByReceipt(1, receipt.amount.div(2));
   });
 
   it("Withdraw other half from strategies", async function () {
@@ -164,7 +164,7 @@ describe("StrategyRouter", function () {
 
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(2));
-    await router.withdrawDebtToUsers(2, 0);
+    await router.withdrawByReceipt(2, 0);
 
     expect(await ust.balanceOf(farm.address)).to.equal(0);
     expect(await usdc.balanceOf(farm.address)).to.within(0, 10);
