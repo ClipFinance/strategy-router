@@ -13,7 +13,6 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     struct ReceiptData {
         uint256 cycleId;
         uint256 amount;
-        address token;
     }
 
     uint256 private _tokenIdCounter;
@@ -28,6 +27,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         view 
         returns (ReceiptData memory) 
     {
+        if(_exists(tokenId) == false) revert NonexistenToken();
         return receipts[tokenId];
     }
     
@@ -42,7 +42,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         uint256 tokenId;
 
         while(balance > 0) {
-            if(_exists(tokenId) && ownerOf(tokenId) == ownerAddr) {
+            if (_exists(tokenId) && ownerOf(tokenId) == ownerAddr) {
                 tokens[--balance] = tokenId; 
             }
             tokenId++;
@@ -50,21 +50,19 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     }
 
     function setAmount(uint256 tokenId, uint256 amount) external onlyOwner {
-        if(_exists(tokenId) == false) revert NonexistenToken();
+        if (_exists(tokenId) == false) revert NonexistenToken();
         receipts[tokenId].amount = amount;
     } 
 
     function mint(
         uint256 cycleId, 
         uint256 amount, 
-        address token, 
         address wallet
     ) external onlyOwner {
         uint256 _tokenId = _tokenIdCounter;
         receipts[_tokenId] = ReceiptData({
             cycleId: cycleId,
-            amount: amount,
-            token: token
+            amount: amount
         });
         _mint(wallet, _tokenId);
         _tokenIdCounter++;

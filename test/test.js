@@ -82,9 +82,8 @@ describe("StrategyRouter", function () {
   });
 
   it("Add strategies and stablecoins", async function () {
-    await router.addSupportedStablecoin(usdc.address);
-    await router.addSupportedStablecoin(ust.address);
-    await expect(router.addSupportedStablecoin(ust.address)).to.be.reverted;
+    await router.setSupportedStablecoin(usdc.address, true);
+    await router.setSupportedStablecoin(ust.address, true);
 
     await router.addStrategy(farmUnprofitable.address, ust.address, 1000);
     await router.addStrategy(farm.address, usdc.address, 9000);
@@ -108,11 +107,11 @@ describe("StrategyRouter", function () {
 
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.viewReceipt(0);
-    await router.withdrawByReceipt(0, receipt.amount.div(2));
+    await router.withdrawFromBatching(0, usdc.address, receipt.amount.div(2));
   });
 
   it("User withdraw other half from current cycle", async function () {
-    await router.withdrawByReceipt(0, await sharesToken.balanceOf(owner.address));
+    await router.withdrawFromBatching(0, usdc.address, 0);
   });
 
   it("User deposit", async function () {
@@ -153,23 +152,30 @@ describe("StrategyRouter", function () {
 
   it("Withdraw half from strategies", async function () {
     let receipt = await receiptContract.viewReceipt(1);
-    await router.withdrawByReceipt(1, receipt.amount.div(2));
+    await router.withdrawByReceipt(1, usdc.address, receipt.amount.div(2));
   });
 
   it("Withdraw other half from strategies", async function () {
-    let receipt = await receiptContract.viewReceipt(1);
+    let shares = await sharesToken.balanceOf(owner.address);
     // withdraw whatever leftover, should also burn nft
-    await router.withdrawShares(await sharesToken.balanceOf(owner.address));
+    await router.withdrawShares(shares, usdc.address);
   });
 
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(2));
-    await router.withdrawByReceipt(2, 0);
+    await router.withdrawByReceipt(2, usdc.address, 0);
 
     expect(await ust.balanceOf(farm.address)).to.equal(0);
-    expect(await usdc.balanceOf(farm.address)).to.within(0, 10);
+    expect(await usdc.balanceOf(farmUnprofitable.address)).to.be.equal(0);
     expect(await ust.balanceOf(router.address)).to.equal(0);
     expect(await usdc.balanceOf(router.address)).to.equal(0);
+
+    expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+
+    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.within(0, 5e4)
+    // TODO: fix, 138$ not withdrawn for some reason
+    expect(await usdc.balanceOf(farm.address)).to.be.within(0, 10)
   });
 
   describe("walletOfOwner", function () {
@@ -185,20 +191,20 @@ describe("StrategyRouter", function () {
       expect(await receiptContract.walletOfOwner(owner.address)).to.be.empty;
     });
     it("Wallet with 1 token", async function () {
-      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
+      await receiptContract.mint(0, 0, owner.address);
       expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
       expect(await receiptContract.walletOfOwner(joe.address)).to.be.empty;
     });
     it("Two wallets with 1 token", async function () {
-      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
+      await receiptContract.mint(0, 0, joe.address);
       expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
       expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([1]);
     });
     it("Two wallets with more tokens", async function () {
-      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
-      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
-      await receiptContract.mint(0, 0, receiptContract.address, owner.address);
-      await receiptContract.mint(0, 0, receiptContract.address, joe.address);
+      await receiptContract.mint(0, 0, owner.address);
+      await receiptContract.mint(0, 0, joe.address);
+      await receiptContract.mint(0, 0, owner.address);
+      await receiptContract.mint(0, 0, joe.address);
       expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([4,2,0]);
       expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([5,3,1]);
     });

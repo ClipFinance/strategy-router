@@ -50,8 +50,8 @@ contract ChainlinkOracle {
 
         // console.log("getAssetUsdPrice updatedAt %s, current block: %s", updatedAt, block.timestamp);
 
-        if(updatedAt <= block.timestamp - 24 hours) revert StaleChainlinkPrice();
-        if(price < 0) revert NegativePrice();
+        if (updatedAt <= block.timestamp - 24 hours) revert StaleChainlinkPrice();
+        if (price < 0) revert NegativePrice();
         
         return (uint(_price), registry.decimals(base, Denominations.USD));
     }

@@ -18,6 +18,7 @@ contract StrategyRouter is Ownable {
     error UnsupportedStablecoin();
     error NotReceiptOwner();
     error CycleNotClosed();
+    error CycleClosed();
     error InsufficientShares();
 
     struct Strategy {
@@ -43,9 +44,10 @@ contract StrategyRouter is Ownable {
     ReceiptNFT public receiptContract;
     Exchange public exchange;
     SharesToken public sharesToken;
+    // address public withdrawToken;
 
     Strategy[] public strategies;
-    address[] public stablecoins;
+    mapping(address => bool) public stablecoins;
     mapping(uint256 => Cycle) public cycles; 
 
     constructor (
@@ -76,11 +78,6 @@ contract StrategyRouter is Ownable {
         // get nav after compound
         (uint256 navAfterCompound, ) = netAssetValueAll();
 
-        if(shares == 0) shares = INITIAL_SHARES;
-        else if (navAfterCompound > 0) cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
-
-        console.log("navAfterCompound %s, pps %s", navAfterCompound, cycles[currentCycleId].pricePerShare);
-
         for (uint256 i; i < len; i++) {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositAssetAddress);
@@ -98,10 +95,20 @@ contract StrategyRouter is Ownable {
 
         console.log("nav after deposit", nav);
 
-        if(navAfterCompound == 0) cycles[currentCycleId].pricePerShare = nav / shares;
-        else shares = nav / cycles[currentCycleId].pricePerShare;
+        if (shares == 0) shares = INITIAL_SHARES;
 
-        console.log("total to strategies", cycles[currentCycleId].pricePerShare, nav);
+        console.log("pps before calculations %s", cycles[currentCycleId].pricePerShare);
+
+        if(navAfterCompound == 0) {
+            cycles[currentCycleId].pricePerShare = nav / shares;
+        } else {
+            cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
+            shares = nav / cycles[currentCycleId].pricePerShare;
+        }
+
+        console.log("navAfterCompound %s", navAfterCompound);
+        
+        console.log("final pps %s, nav %s", cycles[currentCycleId].pricePerShare, nav);
 
         // start new cycle
         currentCycleId++;
@@ -109,8 +116,24 @@ contract StrategyRouter is Ownable {
 
     }
 
+    // TODO: verify this is correct implementation
+    function compoundAll() external {
+        uint256 len = strategies.length;
+        for (uint256 i; i < len; i++) {
+            IStrategy(strategies[i].strategyAddress).compound();
+        }
+                
+        // get nav after compound
+        (uint256 navAfterCompound, ) = netAssetValueAll();
+
+        if (shares == 0) shares = INITIAL_SHARES;
+        if (navAfterCompound > 0) {
+            cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
+        }
+    }
+
     /// @notice Returns amount of usd in strategies.
-    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimal places.
+    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimals.
     /// @return totalNetAssetValue Total amount of usd in strategies.
     /// @return balanceNAVs Array of usd amount in each strategy.
     function netAssetValueAll() 
@@ -129,7 +152,7 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Returns amount of usd to be deposited into strategies.
-    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimal places.
+    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimals.
     /// @return totalNetAssetValue Total amount of usd to be deposited into strategies.
     /// @return balanceNAVs Array of usd amount to be deposited into each strategy.
     function batchNetAssetValue() 
@@ -157,10 +180,10 @@ contract StrategyRouter is Ownable {
         public 
         returns (uint256 mintedShares)
     {
-        if(receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
+        if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
 
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
-        if(receipt.cycleId == currentCycleId) revert CycleNotClosed();
+        if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
 
         receiptContract.burn(receiptId);
 
@@ -169,127 +192,165 @@ contract StrategyRouter is Ownable {
         return userShares;
     }
 
-    /// @notice User withdraw usd from batching or strategies, will receive stablecoins[0].
-    /// @notice On partial withdraw from closed cycle user will receive tokens representing leftover shares.
-    /// @notice Receipt is burned when withdrawing whole amount or from closed cycle.
+    /// @notice User withdraw usd from strategies via receipt NFT.
+    /// @notice On partial withdraw user will receive leftover amount of shares.
+    /// @notice Receipt is burned.
     /// @param receiptId Receipt NFT id.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
     /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
-    function withdrawByReceipt(uint256 receiptId, uint256 amount) external {
-        if(receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
+    /// @dev Cycle noted in receipt must be closed.
+    function withdrawByReceipt(uint256 receiptId, address withdrawToken, uint256 amount) external {
+        if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
+        if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
 
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
-        if(amount == 0 || receipt.amount < amount) 
+        if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
+
+        if (amount == 0 || receipt.amount < amount) 
             amount = receipt.amount;
-        if(receipt.cycleId != currentCycleId || amount == receipt.amount)
-            receiptContract.burn(receiptId);
 
-        uint256 len = strategies.length;
-        uint256 amountWithdrawTokens;
-        if(receipt.cycleId == currentCycleId) {
-            (uint256 batchNAV, uint256[] memory balanceNAVs) = batchNetAssetValue();
-            console.log("batchNav", batchNAV);
-            for (uint256 i; i < len; i++) {
-
-                address strategyAssetAddress = strategies[i].depositAssetAddress;
-                uint256 amountWithdraw = amount * balanceNAVs[i] / batchNAV;
-                amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
-
-                console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
-                if(strategyAssetAddress != stablecoins[0]){
-                    IERC20(strategyAssetAddress).transfer(
-                        address(exchange), 
-                        amountWithdraw
-                    );
-                    amountWithdraw = exchange.swapExactTokensForTokens(
-                        amountWithdraw,
-                        IERC20(strategyAssetAddress), 
-                        IERC20(stablecoins[0])
-                    );
-                }
-                amountWithdrawTokens += amountWithdraw;
-            }
-            cycles[currentCycleId].depositedAmount -= amount;
-            if(amount > 0 && amount < receipt.amount)
-                receiptContract.setAmount(receiptId, receipt.amount - amount);
-        } else {
-
-            uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
-            uint256 withdrawShares = userShares * amount / receipt.amount;
-            sharesToken.mint(msg.sender, userShares - withdrawShares);
-
-            (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
-            uint256 currentPricePerShare = strategiesNAV / shares;
-            uint256 withdrawAmount = withdrawShares * currentPricePerShare;
-
-            console.log("withdraw", withdrawShares, currentPricePerShare, withdrawAmount);
-            console.log("withdraw more info, total shares: %s", shares);
-
-            for (uint256 i; i < len; i++) {
-
-                address strategyAssetAddress = strategies[i].depositAssetAddress;
-                uint256 amountWithdraw = withdrawAmount * balanceNAVs[i] / strategiesNAV;
+        receiptContract.burn(receiptId);
         
-                amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
-
-                uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(amountWithdraw);
-                console.log("strategy", ERC20(strategyAssetAddress).name(), amountWithdraw, withdrawn);
-                console.log("strategy", ERC20(strategyAssetAddress).decimals());
-                if(strategyAssetAddress != stablecoins[0]){
-                    IERC20(strategyAssetAddress).transfer(
-                        address(exchange), 
-                        withdrawn
-                    );
-                    withdrawn = exchange.swapExactTokensForTokens(
-                        withdrawn,
-                        IERC20(strategyAssetAddress), 
-                        IERC20(stablecoins[0])
-                    );
-                }
-                amountWithdrawTokens += withdrawn;
-            }
-
-            (strategiesNAV, ) = netAssetValueAll();
-            shares -= withdrawShares;
-            if(shares == 0) cycles[currentCycleId].pricePerShare = 0;
-            else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
+        uint256 amountWithdrawShares;
+        {
+            uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
+            amountWithdrawShares = userShares * amount / receipt.amount;
+            sharesToken.mint(msg.sender, userShares - amountWithdrawShares);
         }
 
-        console.log("total withdraw", IERC20(stablecoins[0]).balanceOf(address(this)), amountWithdrawTokens);
-        IERC20(stablecoins[0]).transfer(
-            msg.sender, 
-           amountWithdrawTokens 
-        );
-    }
-
-    /// @notice User withdraw usd from strategies.
-    /// @notice Use withdrawByReceipt function to withdraw using receipt NFT.
-    /// @param withdrawShares Amount of shares to withdraw.
-    function withdrawShares(uint256 withdrawShares) external {
-        if(sharesToken.balanceOf(msg.sender) < withdrawShares) revert InsufficientShares();
-
-        uint256 len = strategies.length;
-        uint256 amountWithdrawTokens;
-
-        sharesToken.burn(msg.sender, withdrawShares);
-
         (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
-        uint256 currentPricePerShare = strategiesNAV / shares;
-        uint256 withdrawAmount = withdrawShares * currentPricePerShare;
+        uint256 withdrawAmountTotal;
+        {
+            uint256 currentPricePerShare = strategiesNAV / shares;
+            withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
+        }
 
-        console.log("withdraw", withdrawShares, currentPricePerShare, withdrawAmount);
-        console.log("withdraw more info, total shares: %s", shares);
+        console.log("withdraw", amountWithdrawShares, withdrawAmountTotal);
+        console.log("withdraw more info, total shares: %s, strategiesNAV %s", shares, strategiesNAV);
 
+        uint256 amountToTransfer;
+        uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
 
             address strategyAssetAddress = strategies[i].depositAssetAddress;
-            uint256 amountWithdraw = withdrawAmount * balanceNAVs[i] / strategiesNAV;
+            uint256 withdrawAmount = withdrawAmountTotal * balanceNAVs[i] / strategiesNAV;
+            withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
+            withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(withdrawAmount);
+
+            console.log("strategy", ERC20(strategyAssetAddress).name(), withdrawAmount, withdrawAmount);
+            console.log("strategy", ERC20(strategyAssetAddress).decimals());
+            if (strategyAssetAddress != withdrawToken){
+                IERC20(strategyAssetAddress).transfer(
+                    address(exchange), 
+                    withdrawAmount
+                );
+                withdrawAmount = exchange.swapExactTokensForTokens(
+                    withdrawAmount,
+                    IERC20(strategyAssetAddress), 
+                    IERC20(withdrawToken)
+                );
+            }
+            amountToTransfer += withdrawAmount;
+        }
+
+        (strategiesNAV, ) = netAssetValueAll();
+        shares -= amountWithdrawShares;
+        if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
+        else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
+    
+
+        console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
+        IERC20(withdrawToken).transfer(
+            msg.sender, 
+           amountToTransfer 
+        );
+    }
+
+    /// @notice User withdraw usd from batching.
+    /// @notice On partial withdraw user amount noted in receipt is updated.
+    /// @notice Receipt is burned when withdrawing whole amount.
+    /// @param receiptId Receipt NFT id.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
+    /// @dev Cycle noted in receipt must match current cycle.
+    function withdrawFromBatching(uint256 receiptId, address withdrawToken, uint256 amount) external {
+        if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
+        if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
+
+        ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
+        if (receipt.cycleId != currentCycleId) revert CycleClosed();
+
+        if (amount == 0 || receipt.amount < amount) 
+            amount = receipt.amount;
+
+        if (amount == receipt.amount) receiptContract.burn(receiptId);
+        else receiptContract.setAmount(receiptId, receipt.amount - amount);
+
+        (uint256 batchNAV, uint256[] memory balanceNAVs) = batchNetAssetValue();
+        console.log("batchNav", batchNAV);
+
+        uint256 amountToTransfer;
+        uint256 len = strategies.length;
+        for (uint256 i; i < len; i++) {
+
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+            uint256 amountWithdraw = amount * balanceNAVs[i] / batchNAV;
+            amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
+
+            console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
+            if (strategyAssetAddress != withdrawToken){
+                IERC20(strategyAssetAddress).transfer(
+                    address(exchange), 
+                    amountWithdraw
+                );
+                amountWithdraw = exchange.swapExactTokensForTokens(
+                    amountWithdraw,
+                    IERC20(strategyAssetAddress), 
+                    IERC20(withdrawToken)
+                );
+            }
+            amountToTransfer += amountWithdraw;
+        }
+        cycles[currentCycleId].depositedAmount -= amount;
+        
+
+        console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
+        IERC20(withdrawToken).transfer(
+            msg.sender, 
+           amountToTransfer 
+        );
+    }
+
+    /// @notice User withdraw usd from strategies using his shares.
+    /// @notice Use withdrawByReceipt function to withdraw using receipt NFT.
+    /// @param amountWithdrawShares Amount of shares to withdraw.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    function withdrawShares(uint256 amountWithdrawShares, address withdrawToken) external {
+        if (sharesToken.balanceOf(msg.sender) < amountWithdrawShares) revert InsufficientShares();
+        if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
+
+        sharesToken.burn(msg.sender, amountWithdrawShares);
+
+        (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
+        uint256 currentPricePerShare = strategiesNAV / shares;
+        uint256 withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
+
+        console.log("withdraw", amountWithdrawShares, currentPricePerShare, withdrawAmountTotal);
+        console.log("withdraw more info, total shares: %s", shares);
+
+        uint256 len = strategies.length;
+        uint256 amountToTransfer;
+        for (uint256 i; i < len; i++) {
+
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+            uint256 amountWithdraw = withdrawAmountTotal * balanceNAVs[i] / strategiesNAV;
     
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
             uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(amountWithdraw);
             console.log("strategy", ERC20(strategyAssetAddress).name(), amountWithdraw, withdrawn);
             console.log("strategy", ERC20(strategyAssetAddress).decimals());
-            if(strategyAssetAddress != stablecoins[0]){
+            if (strategyAssetAddress != withdrawToken){
                 IERC20(strategyAssetAddress).transfer(
                     address(exchange), 
                     withdrawn
@@ -297,21 +358,21 @@ contract StrategyRouter is Ownable {
                 withdrawn = exchange.swapExactTokensForTokens(
                     withdrawn,
                     IERC20(strategyAssetAddress), 
-                    IERC20(stablecoins[0])
+                    IERC20(withdrawToken)
                 );
             }
-            amountWithdrawTokens += withdrawn;
+            amountToTransfer += withdrawn;
         }
 
         (strategiesNAV, ) = netAssetValueAll();
-        shares -= withdrawShares;
-        if(shares == 0) cycles[currentCycleId].pricePerShare = 0;
+        shares -= amountWithdrawShares;
+        if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
         else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
 
-        console.log("total withdraw", IERC20(stablecoins[0]).balanceOf(address(this)), amountWithdrawTokens);
-        IERC20(stablecoins[0]).transfer(
+        console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
+        IERC20(withdrawToken).transfer(
             msg.sender, 
-           amountWithdrawTokens 
+           amountToTransfer 
         );
     }
 
@@ -321,7 +382,7 @@ contract StrategyRouter is Ownable {
     /// @param _depositTokenAddress Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.
     function depositToBatch(address _depositTokenAddress, uint256 _amount) external {
-        if(!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
+        if (!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
 
         IERC20(_depositTokenAddress).transferFrom(
             msg.sender, 
@@ -336,7 +397,7 @@ contract StrategyRouter is Ownable {
             uint256 depositAmount = _amount * strategyPercentWeight(i) / 10000;
             address strategyAssetAddress = strategies[i].depositAssetAddress;
 
-            if(strategyAssetAddress != _depositTokenAddress){
+            if (strategyAssetAddress != _depositTokenAddress){
 
                 IERC20(_depositTokenAddress).transfer(
                     address(exchange), 
@@ -366,7 +427,6 @@ contract StrategyRouter is Ownable {
         receiptContract.mint(
             currentCycleId, 
             totalDepositAmount, 
-            _depositTokenAddress, 
             msg.sender
         );
     }
@@ -382,7 +442,7 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Minimum usd needed to be able to close the cycle.
-    /// @param amount Amount of usd must have `UNIFORM_DECIMALS` decimal places.
+    /// @param amount Amount of usd must have `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
     function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
@@ -398,7 +458,7 @@ contract StrategyRouter is Ownable {
         address _depositAssetAddress,
         uint256 _weight
     ) external onlyOwner {
-        if(!supportsCoin(_depositAssetAddress)) revert UnsupportedStablecoin();
+        if (!supportsCoin(_depositAssetAddress)) revert UnsupportedStablecoin();
         strategies.push(
             Strategy({
                 strategyAddress: _strategyAddress,
@@ -414,13 +474,21 @@ contract StrategyRouter is Ownable {
 
     /// @notice Add supported stablecoind for deposits.
     /// @dev Admin function.
-    function addSupportedStablecoin(address stablecoinAddress) 
+    function setSupportedStablecoin(address stablecoinAddress, bool supported) 
         external 
         onlyOwner 
     {
-        if(supportsCoin(stablecoinAddress)) revert AlreadyAddedStablecoin();
-        stablecoins.push(stablecoinAddress);
+        stablecoins[stablecoinAddress] = supported;
     }
+
+    /// @notice Set token to use as secondary withdraw option.
+    /// @dev Admin function.
+    // function setWithdrawToken(address tokenAddr) 
+    //     external 
+    //     onlyOwner 
+    // {
+    //     withdrawToken = tokenAddr;
+    // }
 
     // Internals
 
@@ -503,10 +571,6 @@ contract StrategyRouter is Ownable {
         view 
         returns (bool isSupported) 
     {
-        uint256 len = stablecoins.length;
-        for (uint256 i = 0; i < len; i++) {
-            if(stablecoins[i] == stablecoinAddress) return true;
-        }
-        return false;
+        return stablecoins[stablecoinAddress];
      }
 }
