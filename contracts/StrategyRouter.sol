@@ -20,6 +20,7 @@ contract StrategyRouter is Ownable {
     error CycleNotClosed();
     error CycleClosed();
     error InsufficientShares();
+    error DuplicateStrategy();
 
     struct Strategy {
         address strategyAddress;
@@ -63,9 +64,7 @@ contract StrategyRouter is Ownable {
     /// @notice Deposit money collected in the batching to strategies.
     function depositToStrategies() external {
 
-        // TODO: this is for simplicity, but later should improve cycle's logic
         require(cycles[currentCycleId].startAt + CYCLE_DURATION < block.timestamp);
-        // TODO: might remove depositedAmount and instead get this amount by looking at token balances on this contract
         require(cycles[currentCycleId].depositedAmount >= minUsdPerCycle);
 
         uint256 len = strategies.length;
@@ -94,13 +93,13 @@ contract StrategyRouter is Ownable {
 
         console.log("balance after deposit", balanceAfterDeposit);
 
-        if (sharesToken.totalSupply() == 0) sharesToken.mint(address(this), INITIAL_SHARES);
 
         console.log("pps before calculations %s", cycles[currentCycleId].pricePerShare);
 
         uint256 totalShares = sharesToken.totalSupply();
-        if(balanceAfterCompound == 0) {
-            cycles[currentCycleId].pricePerShare = balanceAfterDeposit / totalShares;
+        if(totalShares  == 0) {
+            sharesToken.mint(address(this), INITIAL_SHARES);
+            cycles[currentCycleId].pricePerShare = balanceAfterDeposit / sharesToken.totalSupply();
         } else {
             cycles[currentCycleId].pricePerShare = balanceAfterCompound / totalShares;
             uint256 newShares = balanceAfterDeposit / cycles[currentCycleId].pricePerShare - totalShares;
@@ -465,6 +464,10 @@ contract StrategyRouter is Ownable {
         uint256 _weight
     ) external onlyOwner {
         if (!supportsCoin(_depositAssetAddress)) revert UnsupportedStablecoin();
+        uint256 len = strategies.length;
+        for (uint256 i = 0; i < len; i++) {
+            if(strategies[i].strategyAddress == _strategyAddress) revert DuplicateStrategy();
+        }
         strategies.push(
             Strategy({
                 strategyAddress: _strategyAddress,
@@ -474,7 +477,13 @@ contract StrategyRouter is Ownable {
         );
     }
 
-    // function removeStrategy(uint256 _strategyID) external onlyOwner {}
+    // function removeStrategy(uint256 _strategyID) external onlyOwner {
+    //     uint256 len = strategies.length;
+    //     Strategy memory strategy = strategies[_strategyID];
+    //     strategies[_strategyID] = strategies[len-1];
+    //     strategies.pop();
+
+    // }
 
     // function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
 
