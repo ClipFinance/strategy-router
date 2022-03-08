@@ -123,7 +123,7 @@ describe("StrategyRouter", function () {
     await provider.send("evm_mine");
 
     await router.depositToStrategies();
-    expect(await router.shares()).to.be.equal(INITIAL_SHARES);
+    expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
     expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
       parseUniform("100"), 
       parseUniform("0.5")
@@ -170,12 +170,15 @@ describe("StrategyRouter", function () {
     expect(await ust.balanceOf(router.address)).to.equal(0);
     expect(await usdc.balanceOf(router.address)).to.equal(0);
 
+  
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.within(0, 5e4)
-    // TODO: fix, 138$ not withdrawn for some reason
-    expect(await usdc.balanceOf(farm.address)).to.be.within(0, 10)
+    // TODO: need fix, investigate why some tokens not withdrawn for some reason
+    // probably division problem, but see if this dust can make problems in functions
+    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.within(0, 3e3);
+    expect(await usdc.balanceOf(farm.address)).to.be.within(0, 10);
   });
 
   describe("walletOfOwner", function () {

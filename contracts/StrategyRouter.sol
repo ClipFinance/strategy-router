@@ -37,7 +37,6 @@ contract StrategyRouter is Ownable {
     uint8 public constant UNIFORM_DECIMALS = 18;
     uint256 public constant INITIAL_SHARES = 1e6;
 
-    uint256 public shares;
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
 
@@ -91,24 +90,26 @@ contract StrategyRouter is Ownable {
         }
 
         // get total strategies balance after deposit
-        (uint256 balance, ) = viewStrategiesBalance();
+        (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
 
-        console.log("balance after deposit", balance);
+        console.log("balance after deposit", balanceAfterDeposit);
 
-        if (shares == 0) shares = INITIAL_SHARES;
+        if (sharesToken.totalSupply() == 0) sharesToken.mint(address(this), INITIAL_SHARES);
 
         console.log("pps before calculations %s", cycles[currentCycleId].pricePerShare);
 
+        uint256 totalShares = sharesToken.totalSupply();
         if(balanceAfterCompound == 0) {
-            cycles[currentCycleId].pricePerShare = balance / shares;
+            cycles[currentCycleId].pricePerShare = balanceAfterDeposit / totalShares;
         } else {
-            cycles[currentCycleId].pricePerShare = balanceAfterCompound / shares;
-            shares = balance / cycles[currentCycleId].pricePerShare;
+            cycles[currentCycleId].pricePerShare = balanceAfterCompound / totalShares;
+            uint256 newShares = balanceAfterDeposit / cycles[currentCycleId].pricePerShare - totalShares;
+            sharesToken.mint(address(this), newShares);
         }
 
         console.log("balanceAfterCompound %s", balanceAfterCompound);
         
-        console.log("final pps %s, balance %s", cycles[currentCycleId].pricePerShare, balance);
+        console.log("final pps %s, balance %s", cycles[currentCycleId].pricePerShare, balanceAfterDeposit);
 
         // start new cycle
         currentCycleId++;
@@ -118,7 +119,8 @@ contract StrategyRouter is Ownable {
 
     /// @notice Compound all strategies and update price per share.
     function compoundAll() external {
-        if(shares == 0) revert();
+        if(sharesToken.totalSupply() == 0) revert();
+
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
@@ -127,10 +129,7 @@ contract StrategyRouter is Ownable {
         // get balance after compound
         (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
 
-        if (shares == 0) shares = INITIAL_SHARES;
-        if (balanceAfterCompound > 0) {
-            cycles[currentCycleId].pricePerShare = balanceAfterCompound / shares;
-        }
+        cycles[currentCycleId].pricePerShare = balanceAfterCompound / sharesToken.totalSupply();
     }
 
     /// @notice Returns amount of usd in strategies.
@@ -173,11 +172,11 @@ contract StrategyRouter is Ownable {
 
     // User Functions
 
-    /// @notice Convert receipt NFT into shares tokens.
+    /// @notice Convert receipt NFT into share tokens.
     ///         Cycle noted in receipt should be closed.
-    function unlockSharesFromNFT(uint256 receiptId) 
+    function unlockSharesFromNFT(uint256 receiptId)
         public 
-        returns (uint256 mintedShares)
+        returns (uint256 receivedShares)
     {
         if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
 
@@ -187,7 +186,7 @@ contract StrategyRouter is Ownable {
         receiptContract.burn(receiptId);
 
         uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
-        sharesToken.mint(msg.sender, userShares);
+        sharesToken.transfer(msg.sender, userShares);
         return userShares;
     }
 
@@ -202,6 +201,8 @@ contract StrategyRouter is Ownable {
         if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
         if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
 
+        console.log("withdrawByReceipt");
+
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
 
@@ -214,18 +215,20 @@ contract StrategyRouter is Ownable {
         {
             uint256 userShares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
             amountWithdrawShares = userShares * amount / receipt.amount;
-            sharesToken.mint(msg.sender, userShares - amountWithdrawShares);
+            console.log("amountWithdrawShares %s, total shares: %s, router shares %s", amountWithdrawShares, sharesToken.totalSupply(), sharesToken.balanceOf(address(this)));
+            // all shares are minted to this contract, transfer to user his part
+            sharesToken.transfer(msg.sender, userShares - amountWithdrawShares);
         }
 
         (uint256 strategiesBalance, uint256[] memory balances) = viewStrategiesBalance();
         uint256 withdrawAmountTotal;
         {
-            uint256 currentPricePerShare = strategiesBalance / shares;
+            uint256 currentPricePerShare = strategiesBalance / sharesToken.totalSupply();
             withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
         }
 
         console.log("withdraw", amountWithdrawShares, withdrawAmountTotal);
-        console.log("withdraw more info, total shares: %s, strategiesBalance %s", shares, strategiesBalance);
+        console.log("total shares: %s, strategiesBalance %s", sharesToken.totalSupply(), strategiesBalance);
 
         uint256 amountToTransfer;
         uint256 len = strategies.length;
@@ -253,9 +256,9 @@ contract StrategyRouter is Ownable {
         }
 
         (strategiesBalance, ) = viewStrategiesBalance();
-        shares -= amountWithdrawShares;
-        if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
-        else cycles[currentCycleId].pricePerShare = strategiesBalance / shares;
+        sharesToken.burn(address(this), amountWithdrawShares);
+        if (sharesToken.totalSupply() == 0) cycles[currentCycleId].pricePerShare = 0;
+        else cycles[currentCycleId].pricePerShare = strategiesBalance / sharesToken.totalSupply();
     
 
         console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
@@ -275,6 +278,8 @@ contract StrategyRouter is Ownable {
     function withdrawFromBatching(uint256 receiptId, address withdrawToken, uint256 amount) external {
         if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
         if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
+
+        console.log("withdrawFromBatching");
 
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(receiptId);
         if (receipt.cycleId != currentCycleId) revert CycleClosed();
@@ -328,14 +333,15 @@ contract StrategyRouter is Ownable {
         if (sharesToken.balanceOf(msg.sender) < amountWithdrawShares) revert InsufficientShares();
         if (supportsCoin(withdrawToken) == false) revert UnsupportedStablecoin();
 
-        sharesToken.burn(msg.sender, amountWithdrawShares);
-
         (uint256 strategiesBalance, uint256[] memory balances) = viewStrategiesBalance();
-        uint256 currentPricePerShare = strategiesBalance / shares;
+        uint256 currentPricePerShare = strategiesBalance / sharesToken.totalSupply();
         uint256 withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
 
+        console.log("withdrawShares");
         console.log("withdraw", amountWithdrawShares, currentPricePerShare, withdrawAmountTotal);
-        console.log("withdraw more info, total shares: %s", shares);
+        console.log("total shares: %s", sharesToken.totalSupply());
+
+        console.log("amountWithdrawShares %s, total shares: %s, router shares %s", amountWithdrawShares, sharesToken.totalSupply(), sharesToken.balanceOf(address(this)));
 
         uint256 len = strategies.length;
         uint256 amountToTransfer;
@@ -364,9 +370,9 @@ contract StrategyRouter is Ownable {
         }
 
         (strategiesBalance, ) = viewStrategiesBalance();
-        shares -= amountWithdrawShares;
-        if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
-        else cycles[currentCycleId].pricePerShare = strategiesBalance / shares;
+        sharesToken.burn(msg.sender, amountWithdrawShares);
+        if (sharesToken.totalSupply() == 0) cycles[currentCycleId].pricePerShare = 0;
+        else cycles[currentCycleId].pricePerShare = strategiesBalance / sharesToken.totalSupply();
 
         console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
         IERC20(withdrawToken).transfer(
