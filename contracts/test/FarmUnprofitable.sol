@@ -32,7 +32,7 @@ contract FarmUnprofitable {
   function compound() external {
   }
 
-  function netAssetValue() external view returns (uint256) { }
+  // function netAssetValue() external view returns (uint256) { }
   
   function totalTokens() external view returns (uint256) {
     return balance;

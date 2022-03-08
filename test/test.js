@@ -124,7 +124,7 @@ describe("StrategyRouter", function () {
 
     await router.depositToStrategies();
     expect(await router.shares()).to.be.equal(INITIAL_SHARES);
-    expect((await router.netAssetValueAll()).totalNetAssetValue).to.be.closeTo(
+    expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
       parseUniform("100"), 
       parseUniform("0.5")
     );
@@ -144,7 +144,7 @@ describe("StrategyRouter", function () {
 
     await router.depositToStrategies();
 
-    expect((await router.netAssetValueAll()).totalNetAssetValue).to.be.closeTo(
+    expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
       parseUniform("290"), 
       parseUniform("1.0")
     );

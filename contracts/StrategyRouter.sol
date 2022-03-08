@@ -61,7 +61,7 @@ contract StrategyRouter is Ownable {
 
     // Universal Functions
 
-    /// @notice Deposit money collected in the batching into strategies.
+    /// @notice Deposit money collected in the batching to strategies.
     function depositToStrategies() external {
 
         // TODO: this is for simplicity, but later should improve cycle's logic
@@ -75,8 +75,8 @@ contract StrategyRouter is Ownable {
             IStrategy(strategies[i].strategyAddress).compound();
         }
         
-        // get nav after compound
-        (uint256 navAfterCompound, ) = netAssetValueAll();
+        // get total strategies balance after compound
+        (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
 
         for (uint256 i; i < len; i++) {
             // deposit to strategy
@@ -90,25 +90,25 @@ contract StrategyRouter is Ownable {
             console.log("deposit to strategies", depositAmount, strategyAssetAddress.balanceOf(strategies[i].strategyAddress));
         }
 
-        // get nav after deposit
-        (uint256 nav, ) = netAssetValueAll();
+        // get total strategies balance after deposit
+        (uint256 balance, ) = viewStrategiesBalance();
 
-        console.log("nav after deposit", nav);
+        console.log("balance after deposit", balance);
 
         if (shares == 0) shares = INITIAL_SHARES;
 
         console.log("pps before calculations %s", cycles[currentCycleId].pricePerShare);
 
-        if(navAfterCompound == 0) {
-            cycles[currentCycleId].pricePerShare = nav / shares;
+        if(balanceAfterCompound == 0) {
+            cycles[currentCycleId].pricePerShare = balance / shares;
         } else {
-            cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
-            shares = nav / cycles[currentCycleId].pricePerShare;
+            cycles[currentCycleId].pricePerShare = balanceAfterCompound / shares;
+            shares = balance / cycles[currentCycleId].pricePerShare;
         }
 
-        console.log("navAfterCompound %s", navAfterCompound);
+        console.log("balanceAfterCompound %s", balanceAfterCompound);
         
-        console.log("final pps %s, nav %s", cycles[currentCycleId].pricePerShare, nav);
+        console.log("final pps %s, balance %s", cycles[currentCycleId].pricePerShare, balance);
 
         // start new cycle
         currentCycleId++;
@@ -116,61 +116,60 @@ contract StrategyRouter is Ownable {
 
     }
 
-    // TODO: verify this is correct implementation
+    /// @notice Compound all strategies and update price per share.
     function compoundAll() external {
+        if(shares == 0) revert();
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
                 
-        // get nav after compound
-        (uint256 navAfterCompound, ) = netAssetValueAll();
+        // get balance after compound
+        (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
 
         if (shares == 0) shares = INITIAL_SHARES;
-        if (navAfterCompound > 0) {
-            cycles[currentCycleId].pricePerShare = navAfterCompound / shares;
+        if (balanceAfterCompound > 0) {
+            cycles[currentCycleId].pricePerShare = balanceAfterCompound / shares;
         }
     }
 
     /// @notice Returns amount of usd in strategies.
     /// @notice All returned numbers have `UNIFORM_DECIMALS` decimals.
-    /// @return totalNetAssetValue Total amount of usd in strategies.
-    /// @return balanceNAVs Array of usd amount in each strategy.
-    function netAssetValueAll() 
+    /// @return totalBalance Total amount of usd in strategies.
+    /// @return balances Array of usd amount in each strategy.
+    function viewStrategiesBalance() 
         public 
         view 
-        returns (uint256 totalNetAssetValue, uint256[] memory balanceNAVs) 
+        returns (uint256 totalBalance, uint256[] memory balances) 
     {
-        balanceNAVs = new uint256[](strategies.length);
-        for (uint256 i; i < balanceNAVs.length; i++) {
+        balances = new uint256[](strategies.length);
+        for (uint256 i; i < balances.length; i++) {
             address strategyAssetAddress = strategies[i].depositAssetAddress;
             uint256 balance = IStrategy(strategies[i].strategyAddress).totalTokens();
             balance = toUniform(balance, strategyAssetAddress);
-            balanceNAVs[i] = balance;
-            totalNetAssetValue += balance;
+            balances[i] = balance;
+            totalBalance += balance;
         }
     }
 
     /// @notice Returns amount of usd to be deposited into strategies.
     /// @notice All returned numbers have `UNIFORM_DECIMALS` decimals.
-    /// @return totalNetAssetValue Total amount of usd to be deposited into strategies.
-    /// @return balanceNAVs Array of usd amount to be deposited into each strategy.
-    function batchNetAssetValue() 
+    /// @return totalBalance Total amount of usd to be deposited into strategies.
+    /// @return balances Array of usd amount to be deposited into each strategy.
+    function viewBatchingBalance() 
         public 
         view 
-        returns (uint256 totalNetAssetValue, uint256[] memory balanceNAVs) 
+        returns (uint256 totalBalance, uint256[] memory balances) 
     {
-        balanceNAVs = new uint256[](strategies.length);
-        for (uint256 i; i < balanceNAVs.length; i++) {
+        balances = new uint256[](strategies.length);
+        for (uint256 i; i < balances.length; i++) {
             address strategyAssetAddress = strategies[i].depositAssetAddress;
             uint256 balance = ERC20(strategyAssetAddress).balanceOf(address(this));
             balance = toUniform(balance, strategyAssetAddress);
-            balanceNAVs[i] = balance;
-            totalNetAssetValue += balance; 
+            balances[i] = balance;
+            totalBalance += balance; 
         }
     }
-
-    function balanceAll() external {}
 
     // User Functions
 
@@ -218,22 +217,22 @@ contract StrategyRouter is Ownable {
             sharesToken.mint(msg.sender, userShares - amountWithdrawShares);
         }
 
-        (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
+        (uint256 strategiesBalance, uint256[] memory balances) = viewStrategiesBalance();
         uint256 withdrawAmountTotal;
         {
-            uint256 currentPricePerShare = strategiesNAV / shares;
+            uint256 currentPricePerShare = strategiesBalance / shares;
             withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
         }
 
         console.log("withdraw", amountWithdrawShares, withdrawAmountTotal);
-        console.log("withdraw more info, total shares: %s, strategiesNAV %s", shares, strategiesNAV);
+        console.log("withdraw more info, total shares: %s, strategiesBalance %s", shares, strategiesBalance);
 
         uint256 amountToTransfer;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
 
             address strategyAssetAddress = strategies[i].depositAssetAddress;
-            uint256 withdrawAmount = withdrawAmountTotal * balanceNAVs[i] / strategiesNAV;
+            uint256 withdrawAmount = withdrawAmountTotal * balances[i] / strategiesBalance;
             withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(withdrawAmount);
 
@@ -253,10 +252,10 @@ contract StrategyRouter is Ownable {
             amountToTransfer += withdrawAmount;
         }
 
-        (strategiesNAV, ) = netAssetValueAll();
+        (strategiesBalance, ) = viewStrategiesBalance();
         shares -= amountWithdrawShares;
         if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
-        else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
+        else cycles[currentCycleId].pricePerShare = strategiesBalance / shares;
     
 
         console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
@@ -286,15 +285,15 @@ contract StrategyRouter is Ownable {
         if (amount == receipt.amount) receiptContract.burn(receiptId);
         else receiptContract.setAmount(receiptId, receipt.amount - amount);
 
-        (uint256 batchNAV, uint256[] memory balanceNAVs) = batchNetAssetValue();
-        console.log("batchNav", batchNAV);
+        (uint256 totalBalance, uint256[] memory balances) = viewBatchingBalance();
+        console.log("batchingBalance", totalBalance);
 
         uint256 amountToTransfer;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
 
             address strategyAssetAddress = strategies[i].depositAssetAddress;
-            uint256 amountWithdraw = amount * balanceNAVs[i] / batchNAV;
+            uint256 amountWithdraw = amount * balances[i] / totalBalance;
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
             console.log("balance: %s, amountWithdraw: %s", IERC20(strategyAssetAddress).balanceOf(address(this)), amountWithdraw);
@@ -331,8 +330,8 @@ contract StrategyRouter is Ownable {
 
         sharesToken.burn(msg.sender, amountWithdrawShares);
 
-        (uint256 strategiesNAV, uint256[] memory balanceNAVs) = netAssetValueAll();
-        uint256 currentPricePerShare = strategiesNAV / shares;
+        (uint256 strategiesBalance, uint256[] memory balances) = viewStrategiesBalance();
+        uint256 currentPricePerShare = strategiesBalance / shares;
         uint256 withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
 
         console.log("withdraw", amountWithdrawShares, currentPricePerShare, withdrawAmountTotal);
@@ -343,7 +342,7 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
 
             address strategyAssetAddress = strategies[i].depositAssetAddress;
-            uint256 amountWithdraw = withdrawAmountTotal * balanceNAVs[i] / strategiesNAV;
+            uint256 amountWithdraw = withdrawAmountTotal * balances[i] / strategiesBalance;
     
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
@@ -364,10 +363,10 @@ contract StrategyRouter is Ownable {
             amountToTransfer += withdrawn;
         }
 
-        (strategiesNAV, ) = netAssetValueAll();
+        (strategiesBalance, ) = viewStrategiesBalance();
         shares -= amountWithdrawShares;
         if (shares == 0) cycles[currentCycleId].pricePerShare = 0;
-        else cycles[currentCycleId].pricePerShare = strategiesNAV / shares;
+        else cycles[currentCycleId].pricePerShare = strategiesBalance / shares;
 
         console.log("total withdraw", IERC20(withdrawToken).balanceOf(address(this)), amountToTransfer);
         IERC20(withdrawToken).transfer(
@@ -453,6 +452,7 @@ contract StrategyRouter is Ownable {
     /// @param _depositAssetAddress Asset to be deposited into strategy.
     /// @param _weight Weight of the strategy used to split each deposit between strategies.
     /// @dev Admin function.
+    /// @dev Deposit asset must be supported by the router.
     function addStrategy(
         address _strategyAddress,
         address _depositAssetAddress,
@@ -480,15 +480,6 @@ contract StrategyRouter is Ownable {
     {
         stablecoins[stablecoinAddress] = supported;
     }
-
-    /// @notice Set token to use as secondary withdraw option.
-    /// @dev Admin function.
-    // function setWithdrawToken(address tokenAddr) 
-    //     external 
-    //     onlyOwner 
-    // {
-    //     withdrawToken = tokenAddr;
-    // }
 
     // Internals
 
@@ -548,21 +539,6 @@ contract StrategyRouter is Ownable {
             ERC20(token).decimals()
         );
     }
-
-    // function updateCycle() private {
-    //     if (
-    //         // cycle should finish if it is 1 day old
-    //         cycles[currentCycleId].startAt + CYCLE_DURATION <
-    //         block.timestamp ||
-    //             // or enough usd deposited
-    //             cycles[currentCycleId].depositedAmount >= minUsdPerCycle
-    //     ) {
-    //         // start new cycle
-    //         currentCycleId++;
-    //         cycles[currentCycleId].startAt = block.timestamp;
-
-    //     }
-    // }
 
     /// @notice Returns whether provided stablecoin is supported.
     /// @param stablecoinAddress Address to lookup.

@@ -33,7 +33,7 @@ contract Farm {
       balance = balance * 2;
   }
 
-  function netAssetValue() external view returns (uint256) { }
+  // function netAssetValue() external view returns (uint256) { }
   
   function totalTokens() external view returns (uint256) {
     return balance;
