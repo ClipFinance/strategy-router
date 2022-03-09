@@ -38,7 +38,6 @@ contract Exchange is Ownable {
 
         tokenA.approve(address(curveExchangeRegistry), amountA);
 
-        // TODO: look README, this func might be expensive on-chain
         (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
             address(tokenA),
             address(tokenB),
@@ -57,5 +56,18 @@ contract Exchange is Ownable {
         );
 
         return received;
+    }
+    
+    function test(
+        uint256 amountA, 
+        IERC20 tokenA, 
+        IERC20 tokenB
+    ) public returns (uint256 amountReceivedTokenB) {
+
+        (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
+            address(tokenA),
+            address(tokenB),
+            amountA
+        );
     }
 }

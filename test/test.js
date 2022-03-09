@@ -66,8 +66,15 @@ describe("Test StrategyRouter contract", function () {
       "SharesToken",
       await router.sharesToken()
     );
+    exchange = await ethers.getContractAt(
+      "Exchange",
+      await router.exchange()
+    );
     CYCLE_DURATION = Number(await router.CYCLE_DURATION());
     INITIAL_SHARES = Number(await router.INITIAL_SHARES());
+
+    await exchange.test(parseUst("10"), ust.address, usdc.address);
+    await exchange.test(parseUsdc("1000"), usdc.address, ust.address);
   });
 
   it("Deploy fake farms", async function () {
@@ -106,11 +113,25 @@ describe("Test StrategyRouter contract", function () {
 
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.viewReceipt(0);
+    let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching(0, usdc.address, receipt.amount.div(2));
+    let newBalance = await usdc.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("50"),
+      parseUsdc("1.0")
+    );
   });
 
   it("User withdraw other half from current cycle", async function () {
+    let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching(0, usdc.address, 0);
+    let newBalance = await usdc.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("50"),
+      parseUsdc("1.0")
+    );
   });
 
   it("User deposit", async function () {
@@ -151,18 +172,40 @@ describe("Test StrategyRouter contract", function () {
 
   it("Withdraw half from strategies", async function () {
     let receipt = await receiptContract.viewReceipt(1);
+    let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawByReceipt(1, usdc.address, receipt.amount.div(2));
+    let newBalance = await usdc.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("95"),
+      parseUniform("1.0")
+    );
   });
 
   it("Withdraw other half from strategies", async function () {
     let shares = await sharesToken.balanceOf(owner.address);
-    // withdraw whatever leftover, should also burn nft
+    let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(shares, usdc.address);
+    let newBalance = await usdc.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("95"),
+      parseUniform("1.0")
+    );
   });
 
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(2));
+    let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawByReceipt(2, usdc.address, 0);
+    let newBalance = await usdc.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("100"),
+      parseUniform("1.0")
+    );
+
+    // should've withdrawn all, so verify that
 
     expect(await ust.balanceOf(farm.address)).to.equal(0);
     expect(await usdc.balanceOf(farmUnprofitable.address)).to.be.equal(0);
@@ -178,6 +221,7 @@ describe("Test StrategyRouter contract", function () {
   });
 
   it("Scenario", async function () {
+
     // user deposit
     await router.depositToBatch(ust.address, parseUst("100"));
     await router.depositToBatch(usdc.address, parseUsdc("100"));
@@ -211,6 +255,8 @@ describe("Test StrategyRouter contract", function () {
     sharesUnlocked = await sharesToken.balanceOf(owner.address);
     console.log("sharesUnlocked", sharesUnlocked);
     await router.withdrawShares(sharesUnlocked, usdc.address);
+
+    console.log("strategies balance", await router.viewStrategiesBalance());
 
     expect(await ust.balanceOf(farm.address)).to.equal(0);
     expect(await usdc.balanceOf(farmUnprofitable.address)).to.be.equal(0);
