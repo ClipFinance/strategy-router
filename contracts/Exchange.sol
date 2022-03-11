@@ -32,6 +32,7 @@ contract Exchange is Ownable {
      *  @return amountReceivedTokenB Amount of tokenB received.
      */
     function swapExactTokensForTokens(
+        address pool,
         uint256 amountA, 
         IERC20 tokenA, 
         IERC20 tokenB
@@ -39,35 +40,50 @@ contract Exchange is Ownable {
 
         tokenA.approve(address(curveExchangeRegistry), amountA);
 
-        (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
-            address(tokenA),
-            address(tokenB),
-            amountA
-        );
-
-        // console.log(pool, address(tokenA), address(tokenB), amountA);
-
         uint256 received = curveExchangeRegistry.exchange(
             pool, 
             address(tokenA), 
             address(tokenB), 
             amountA, 
-            toReceive, 
+            0, 
             msg.sender
         );
 
         return received;
     }
     
-    function test(
+    function findCurvePools(
         StrategyRouter router,
-        IERC20 depositToken
-    ) public view returns (uint256 amountReceivedTokenB) {
+        IERC20 tokenToSwap,
+        uint256 swapAmount 
+    ) public view returns (address[] memory pools) {
 
-        // (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
-        //     address(tokenA),
-        //     address(tokenB),
-        //     amountA
-        // );
+        uint256 len = router.viewStrategiesCount();
+        pools = new address[](len);
+        for (uint256 i; i < len; i++) {
+            uint256 amount = swapAmount * router.viewStrategyPercentWeight(i) / 10000;
+            (, address strategyAssetAddress, ) = router.strategies(i);
+
+            (address pool, /* uint256 toReceive */) = curveExchangeRegistry.get_best_rate(
+                address(tokenToSwap),
+                address(strategyAssetAddress),
+                amount 
+            );
+            pools[i] = pool;
+            // console.log("amount: %s, token: %s", amount, ERC20(strategyAssetAddress).name());
+        }
     }
+
+    // function test(
+    //     uint256 swapAmount,
+    //     IERC20 tokenToSwap,
+    //     IERC20 depositToken2
+    // ) public view returns (address pool) {
+
+    //       (pool, ) = curveExchangeRegistry.get_best_rate(
+    //         address(tokenToSwap),
+    //         address(depositToken2),
+    //        swapAmount 
+    //     );
+    // }
 }
