@@ -44,7 +44,6 @@ contract StrategyRouter is Ownable {
     ReceiptNFT public receiptContract;
     Exchange public exchange;
     SharesToken public sharesToken;
-    // address public withdrawToken;
 
     Strategy[] public strategies;
     mapping(address => bool) public stablecoins;
@@ -95,7 +94,7 @@ contract StrategyRouter is Ownable {
         console.log("balanceAfterDeposit %s, balanceAfterCompound %s, pps before math", balanceAfterDeposit, balanceAfterCompound, cycles[currentCycleId].pricePerShare);
 
         uint256 totalShares = sharesToken.totalSupply();
-        if(totalShares  == 0) {
+        if(totalShares == 0) {
             sharesToken.mint(address(this), INITIAL_SHARES);
             cycles[currentCycleId].pricePerShare = balanceAfterDeposit / sharesToken.totalSupply();
         } else {
@@ -383,6 +382,7 @@ contract StrategyRouter is Ownable {
     function depositToBatch(address _depositTokenAddress, uint256 _amount) external {
         if (!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
 
+        console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
         IERC20(_depositTokenAddress).transferFrom(
             msg.sender, 
             address(this), 
@@ -416,11 +416,11 @@ contract StrategyRouter is Ownable {
                 UNIFORM_DECIMALS
             );
 
-            console.log("deposit price: %s, amount: %s, token: %s", totalDepositAmount, depositAmount, ERC20(strategyAssetAddress).name());
+            console.log("totalDepositAmount: %s, depositAmount: %s, token: %s", totalDepositAmount, depositAmount, ERC20(strategyAssetAddress).name());
         }
         // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
         // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());
-        console.log(totalDepositAmount);
+        console.log("totalDepositAmount: %s", totalDepositAmount);
         cycles[currentCycleId].depositedAmount += totalDepositAmount;
 
         receiptContract.mint(
@@ -472,13 +472,56 @@ contract StrategyRouter is Ownable {
         );
     }
 
-    // function removeStrategy(uint256 _strategyID) external onlyOwner {
-    //     uint256 len = strategies.length;
-    //     Strategy memory strategy = strategies[_strategyID];
-    //     strategies[_strategyID] = strategies[len-1];
-    //     strategies.pop();
+    function removeStrategy(uint256 _strategyID) external onlyOwner {
+        console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
+        uint256 len = strategies.length;
+        Strategy memory removedStrategy = strategies[_strategyID];
+        address _depositTokenAddress = removedStrategy.depositAssetAddress;
+        strategies[_strategyID] = strategies[len-1];
+        strategies.pop();
 
-    // }
+        // compound removed strategy
+        IStrategy(removedStrategy.strategyAddress).compound();
+        // withdraw all from removed strategy
+        uint256 withdrawnAmount = IStrategy(removedStrategy.strategyAddress).withdraw(
+            IStrategy(removedStrategy.strategyAddress).totalTokens()
+        );
+
+        // deposit withdrawn funds into other strategies
+
+        len = strategies.length;
+        // compound all strategies
+        for (uint256 i; i < len; i++) {
+            IStrategy(strategies[i].strategyAddress).compound();
+        }
+        
+        // get total strategies balance after compound
+        (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
+
+        for (uint256 i; i < len; i++) {
+
+            uint256 depositAmount = withdrawnAmount * strategyPercentWeight(i) / 10000;
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+
+            if (strategyAssetAddress != _depositTokenAddress){
+
+                IERC20(_depositTokenAddress).transfer(
+                    address(exchange), 
+                    depositAmount
+                );
+
+                depositAmount = exchange.swapExactTokensForTokens(
+                    depositAmount,
+                    IERC20(_depositTokenAddress),
+                    IERC20(strategyAssetAddress) 
+                );
+            }
+
+            // console.log("deposit price: %s, amount: %s, token: %s", totalDepositAmount, depositAmount, ERC20(strategyAssetAddress).name());
+        }
+        // console.log("balanceAfterDeposit %s, balanceAfterCompound %s, pps before math", balanceAfterDeposit, balanceAfterCompound, cycles[currentCycleId].pricePerShare);
+        // console.log("final pps %s, shares %s", cycles[currentCycleId].pricePerShare, sharesToken.totalSupply());
+    }
 
     // function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
 

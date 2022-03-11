@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IMainRegistry.sol";
 import "./interfaces/IExchangeRegistry.sol";
+import "./StrategyRouter.sol";
 
 import "hardhat/console.sol";
 
@@ -59,15 +60,14 @@ contract Exchange is Ownable {
     }
     
     function test(
-        uint256 amountA, 
-        IERC20 tokenA, 
-        IERC20 tokenB
-    ) public returns (uint256 amountReceivedTokenB) {
+        StrategyRouter router,
+        IERC20 depositToken
+    ) public view returns (uint256 amountReceivedTokenB) {
 
-        (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
-            address(tokenA),
-            address(tokenB),
-            amountA
-        );
+        // (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
+        //     address(tokenA),
+        //     address(tokenB),
+        //     amountA
+        // );
     }
 }
