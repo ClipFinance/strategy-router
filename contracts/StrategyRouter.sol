@@ -47,6 +47,7 @@ contract StrategyRouter is Ownable {
 
     Strategy[] public strategies;
     mapping(address => bool) public stablecoins;
+    mapping(address => bool) public stablecoinsArray;
     mapping(uint256 => Cycle) public cycles; 
 
     constructor (
@@ -221,7 +222,6 @@ contract StrategyRouter is Ownable {
     /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
     /// @dev Cycle noted in receipt must be closed.
     function withdrawByReceipt(
-        address[] calldata curvePools,
         uint256 receiptId,
         address withdrawToken, 
         uint256 amount
@@ -257,7 +257,7 @@ contract StrategyRouter is Ownable {
 
         console.log("withdrawAmountTotal %s, strategiesBalance %s", withdrawAmountTotal, strategiesBalance);
 
-        uint256 amountToTransfer = _withdrawByReceipt(curvePools, withdrawAmountTotal, strategiesBalance, balances, withdrawToken);
+        uint256 amountToTransfer = _withdrawByReceipt(withdrawAmountTotal, strategiesBalance, balances, withdrawToken);
 
         (strategiesBalance, ) = viewStrategiesBalance();
         sharesToken.burn(address(this), amountWithdrawShares);
@@ -274,7 +274,6 @@ contract StrategyRouter is Ownable {
 
     // this function is needed to avoid 'stack too deep' error
     function _withdrawByReceipt(
-        address[] calldata curvePools,
         uint256 withdrawAmountTotal, 
         uint256 strategiesBalance,
         uint256[] memory balances,
@@ -295,7 +294,6 @@ contract StrategyRouter is Ownable {
                     withdrawAmount
                 );
                 withdrawAmount = exchange.swapExactTokensForTokens(
-                    curvePools[i],
                     withdrawAmount,
                     IERC20(strategyAssetAddress), 
                     IERC20(withdrawToken)
@@ -313,7 +311,6 @@ contract StrategyRouter is Ownable {
     /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
     /// @dev Cycle noted in receipt must match current cycle.
     function withdrawFromBatching(
-        address[] calldata curvePools, 
         uint256 receiptId, 
         address withdrawToken, 
         uint256 amount
@@ -352,7 +349,6 @@ contract StrategyRouter is Ownable {
                     amountWithdraw
                 );
                 amountWithdraw = exchange.swapExactTokensForTokens(
-                    curvePools[i],
                     amountWithdraw,
                     IERC20(strategyAssetAddress), 
                     IERC20(withdrawToken)
@@ -375,7 +371,6 @@ contract StrategyRouter is Ownable {
     /// @param amountWithdrawShares Amount of shares to withdraw.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     function withdrawShares(
-        address[] calldata curvePools,
         uint256 amountWithdrawShares, 
         address withdrawToken
     ) external {
@@ -411,7 +406,6 @@ contract StrategyRouter is Ownable {
                     amountWithdraw
                 );
                 amountWithdraw = exchange.swapExactTokensForTokens(
-                    curvePools[i],
                     amountWithdraw,
                     IERC20(strategyAssetAddress), 
                     IERC20(withdrawToken)
@@ -438,7 +432,6 @@ contract StrategyRouter is Ownable {
     /// @param _depositTokenAddress Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.
     function depositToBatch(
-        address[] calldata curvePools,
         address _depositTokenAddress, 
         uint256 _amount
     ) external {
@@ -465,9 +458,8 @@ contract StrategyRouter is Ownable {
                     depositAmount
                 );
 
-                console.log("curvePools[i]: %s, depositAmount: %s, token: %s", curvePools[i], depositAmount, ERC20(strategyAssetAddress).name());
+                console.log("depositAmount: %s, token: %s", depositAmount, ERC20(strategyAssetAddress).name());
                 depositAmount = exchange.swapExactTokensForTokens(
-                    curvePools[i],
                     depositAmount,
                     IERC20(_depositTokenAddress),
                     IERC20(strategyAssetAddress) 
@@ -538,7 +530,6 @@ contract StrategyRouter is Ownable {
     }
 
     function removeStrategy(
-        address[] calldata curvePools,
         uint256 _strategyID
     ) external onlyOwner {
         console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
@@ -550,6 +541,7 @@ contract StrategyRouter is Ownable {
 
         // compound removed strategy
         IStrategy(removedStrategy.strategyAddress).compound();
+        console.log("totalTokens %s, balance %s", IStrategy(removedStrategy.strategyAddress).totalTokens(), IERC20(_depositTokenAddress).balanceOf(removedStrategy.strategyAddress));
         // withdraw all from removed strategy
         uint256 withdrawnAmount = IStrategy(removedStrategy.strategyAddress).withdraw(
             IStrategy(removedStrategy.strategyAddress).totalTokens()
@@ -579,13 +571,17 @@ contract StrategyRouter is Ownable {
                 );
 
                 depositAmount = exchange.swapExactTokensForTokens(
-                    curvePools[i],
                     depositAmount,
                     IERC20(_depositTokenAddress),
                     IERC20(strategyAssetAddress) 
                 );
             }
 
+            IERC20(strategyAssetAddress).approve(
+                strategies[i].strategyAddress, 
+                depositAmount
+            );
+            IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
             // console.log("deposit price: %s, amount: %s, token: %s", totalDepositAmount, depositAmount, ERC20(strategyAssetAddress).name());
         }
         // console.log("balanceAfterDeposit %s, balanceAfterCompound %s, pps before math", balanceAfterDeposit, balanceAfterCompound, cycles[currentCycleId].pricePerShare);

@@ -24,15 +24,12 @@ contract Exchange is Ownable {
         );
     }
 
-    /**
-     *  @notice Swap exact tokensA for tokensB.
-     *  @param amountA Amount of tokenA to spend.
-     *  @param tokenA Address of tokenA to spend.
-     *  @param tokenB Address of token to receive.
-     *  @return amountReceivedTokenB Amount of tokenB received.
-     */
+    /// @notice Swap exact tokensA for tokensB.
+    /// @param amountA Amount of tokenA to spend.
+    /// @param tokenA Address of tokenA to spend.
+    /// @param tokenB Address of token to receive.
+    /// @return amountReceivedTokenB Amount of tokenB received.
     function swapExactTokensForTokens(
-        address pool,
         uint256 amountA, 
         IERC20 tokenA, 
         IERC20 tokenB
@@ -40,38 +37,22 @@ contract Exchange is Ownable {
 
         tokenA.approve(address(curveExchangeRegistry), amountA);
 
+        (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
+            address(tokenA),
+            address(tokenB),
+            amountA
+        );
+
         uint256 received = curveExchangeRegistry.exchange(
             pool, 
             address(tokenA), 
             address(tokenB), 
             amountA, 
-            0, 
+            toReceive,
             msg.sender
         );
 
         return received;
-    }
-    
-    function findCurvePools(
-        StrategyRouter router,
-        IERC20 tokenToSwap,
-        uint256 swapAmount 
-    ) public view returns (address[] memory pools) {
-
-        uint256 len = router.viewStrategiesCount();
-        pools = new address[](len);
-        for (uint256 i; i < len; i++) {
-            uint256 amount = swapAmount * router.viewStrategyPercentWeight(i) / 10000;
-            (, address strategyAssetAddress, ) = router.strategies(i);
-
-            (address pool, /* uint256 toReceive */) = curveExchangeRegistry.get_best_rate(
-                address(tokenToSwap),
-                address(strategyAssetAddress),
-                amount 
-            );
-            pools[i] = pool;
-            // console.log("amount: %s, token: %s", amount, ERC20(strategyAssetAddress).name());
-        }
     }
 
     // function test(
