@@ -46,8 +46,9 @@ contract StrategyRouter is Ownable {
     SharesToken public sharesToken;
 
     Strategy[] public strategies;
-    mapping(address => bool) public stablecoins;
-    mapping(address => bool) public stablecoinsArray;
+    address[] private stablecoins;
+    // address[] private stablecoinsArray;
+    // mapping(address => bool) private stablecoins;
     mapping(uint256 => Cycle) public cycles; 
 
     constructor (
@@ -125,6 +126,15 @@ contract StrategyRouter is Ownable {
         (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
 
         cycles[currentCycleId].pricePerShare = balanceAfterCompound / sharesToken.totalSupply();
+    }
+
+    /// @dev Returns list of supported stablecoins.
+    function viewStablecoins()
+        public
+        view
+        returns (address[] memory)
+    {
+        return stablecoins;
     }
 
     /// @dev Returns strategy weight as percent of weight of all strategies.
@@ -596,7 +606,20 @@ contract StrategyRouter is Ownable {
         external 
         onlyOwner 
     {
-        stablecoins[stablecoinAddress] = supported;
+        if(supported && supportsCoin(stablecoinAddress)) revert AlreadyAddedStablecoin();
+
+        if(supported) {
+            stablecoins.push(stablecoinAddress);
+        } else {
+            int256 found = -1;
+            for (uint256 i = 0; i < stablecoins.length; i++) {
+                if(stablecoins[i] == stablecoinAddress) found = int256(i);
+            }
+            if(found > -1) {
+                stablecoins[uint256(found)] = stablecoins[stablecoins.length-1];
+                stablecoins.pop();
+            }
+        }
     }
 
     // Internals
@@ -648,6 +671,9 @@ contract StrategyRouter is Ownable {
         view 
         returns (bool isSupported) 
     {
-        return stablecoins[stablecoinAddress];
+        uint256 len = stablecoins.length;
+        for (uint256 i = 0; i < len; i++) {
+            if(stablecoins[i] == stablecoinAddress) return true;
+        }
     }
 }
