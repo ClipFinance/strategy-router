@@ -9,7 +9,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.ETHEREUM_URL,
+        url: process.env.BNB_URL,
         blockNumber: 14250342, // use this only with archival node
         enabled: true
       },
