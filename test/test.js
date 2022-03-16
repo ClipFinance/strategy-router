@@ -15,6 +15,11 @@ describe("Test StrategyRouter contract", function () {
   it("Define globals", async function () {
 
     [owner, joe, bob] = await ethers.getSigners();
+    // ~~~~~~~~~~~ GET EXCHANGE ROUTER ~~~~~~~~~~~ 
+    uniswapRouter = await ethers.getContractAt(
+      "IUniswapV2Router02",
+      "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+    )
 
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
 
@@ -341,6 +346,18 @@ describe("Test StrategyRouter contract", function () {
     //   parseUsdc("10987"), 
     //   parseUsdc("1")
     // );
+  });
+
+  it("Test rebalance function", async function () {
+
+    console.log("strategies balance", await router.viewStrategiesBalance());
+
+    // deposit to strategies
+    await router.updateStrategy(0, 5000);
+    await router.updateStrategy(1, 5000);
+
+    await router.rebalance(usdc.address);
+    console.log("strategies balance", await router.viewStrategiesBalance());
   });
 
   // it("Scenario", async function () {

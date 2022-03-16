@@ -138,7 +138,7 @@ contract StrategyRouter is Ownable {
     }
 
     /// @dev Returns strategy weight as percent of weight of all strategies.
-    function viewStrategyPercentWeight(uint256 _strategyID)
+    function viewStrategyPercentWeight(uint256 _strategyId)
         public
         view
         returns (uint256 strategyPercentAllocation)
@@ -149,7 +149,7 @@ contract StrategyRouter is Ownable {
             totalStrategyWeight += strategies[i].weight;
         }
         strategyPercentAllocation =
-            strategies[_strategyID].weight * 1e4 / totalStrategyWeight;
+            strategies[_strategyId].weight * 1e4 / totalStrategyWeight;
             
         return strategyPercentAllocation;
     }
@@ -517,7 +517,7 @@ contract StrategyRouter is Ownable {
     /// @notice Add strategy.
     /// @param _strategyAddress Address of the strategy.
     /// @param _depositAssetAddress Asset to be deposited into strategy.
-    /// @param _weight Weight of the strategy used to split each deposit between strategies.
+    /// @param _weight Weight of the strategy. Used to split user deposit between strategies.
     /// @dev Admin function.
     /// @dev Deposit asset must be supported by the router.
     function addStrategy(
@@ -539,14 +539,28 @@ contract StrategyRouter is Ownable {
         );
     }
 
+    /// @notice Update strategy weight.
+    /// @param _strategyId Id of the strategy.
+    /// @param _weight Weight of the strategy.
+    /// @dev Admin function.
+    function updateStrategy(
+        uint256 _strategyId,
+        uint256 _weight
+    ) external onlyOwner {
+        strategies[_strategyId].weight = _weight;
+    }
+
+    /// @notice Remove strategy.
+    /// @param _strategyId Id of the strategy.
+    /// @dev Admin function.
     function removeStrategy(
-        uint256 _strategyID
+        uint256 _strategyId
     ) external onlyOwner {
         console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
         uint256 len = strategies.length;
-        Strategy memory removedStrategy = strategies[_strategyID];
+        Strategy memory removedStrategy = strategies[_strategyId];
         address _depositTokenAddress = removedStrategy.depositAssetAddress;
-        strategies[_strategyID] = strategies[len-1];
+        strategies[_strategyId] = strategies[len-1];
         strategies.pop();
 
         // compound removed strategy
@@ -598,7 +612,73 @@ contract StrategyRouter is Ownable {
         // console.log("final pps %s, shares %s", cycles[currentCycleId].pricePerShare, sharesToken.totalSupply());
     }
 
-    // function withdrawFromStrategy(uint256 _strategyID) external onlyOwner {}
+    /// @notice Rebalance strategies.
+    /// @param tempAsset Strategies assets will be swapped to this intermediary asset
+    ///                  which then will be swapped back into strategies assets according to their weights.
+    /// @dev Admin function.
+    function rebalance(address tempAsset) external onlyOwner {
+        console.log("~~~~~~~~~~~~~ rebalance ~~~~~~~~~~~~~");
+        uint256 len = strategies.length;
+
+        uint256 totalWithdrawn;
+        for (uint256 i; i < len; i++) {
+            // compound strategy
+            IStrategy(strategies[i].strategyAddress).compound();
+            // withdraw all tokens
+            uint256 withdrawn = IStrategy(strategies[i].strategyAddress).withdraw(
+                IStrategy(strategies[i].strategyAddress).totalTokens()
+            );
+            // swap strategy asset into tempAsset if they are different
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+            if(strategyAssetAddress != tempAsset) {
+                IERC20(strategyAssetAddress).transfer(
+                    address(exchange), 
+                    withdrawn
+                );
+                withdrawn = exchange.swapExactTokensForTokens(
+                    withdrawn,
+                    IERC20(strategyAssetAddress),
+                    IERC20(tempAsset) 
+                );
+            }
+            console.log("withdrawn: %s,", withdrawn);
+            totalWithdrawn += withdrawn;
+        }
+
+        for (uint256 i; i < len; i++) {
+
+            uint256 depositAmount = totalWithdrawn * viewStrategyPercentWeight(i) / 10000;
+            address strategyAssetAddress = strategies[i].depositAssetAddress;
+
+            if (strategyAssetAddress != tempAsset){
+
+                IERC20(tempAsset).transfer(
+                    address(exchange), 
+                    depositAmount
+                );
+
+                console.log("before swap: %s,", depositAmount);
+                depositAmount = exchange.swapExactTokensForTokens(
+                    depositAmount,
+                    IERC20(tempAsset),
+                    IERC20(strategyAssetAddress) 
+                );
+                console.log("after swap: %s,", depositAmount);
+            }
+
+            IERC20(strategyAssetAddress).approve(
+                strategies[i].strategyAddress, 
+                depositAmount
+            );
+            console.log("depositAmount: %s, totalWithdrawn %s, token: %s", depositAmount, totalWithdrawn, ERC20(strategyAssetAddress).name());
+            console.log("balance: %s, weight %s", ERC20(strategyAssetAddress).balanceOf(address(this)), viewStrategyPercentWeight(i));
+            IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
+        }
+        // console.log("balanceAfterDeposit %s, balanceAfterCompound %s, pps before math", balanceAfterDeposit, balanceAfterCompound, cycles[currentCycleId].pricePerShare);
+        // console.log("final pps %s, shares %s", cycles[currentCycleId].pricePerShare, sharesToken.totalSupply());
+    }
+
+    // function withdrawFromStrategy(uint256 _strategyId) external onlyOwner {}
 
     /// @notice Add supported stablecoind for deposits.
     /// @dev Admin function.
