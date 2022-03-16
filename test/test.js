@@ -350,14 +350,19 @@ describe("Test StrategyRouter contract", function () {
 
   it("Test rebalance function", async function () {
 
-    console.log("strategies balance", await router.viewStrategiesBalance());
+    // console.log("strategies balance", await router.viewStrategiesBalance());
 
     // deposit to strategies
-    await router.updateStrategy(0, 5000);
-    await router.updateStrategy(1, 5000);
+    await router.updateStrategy(0, 1000);
+    await router.updateStrategy(1, 9000);
 
     await router.rebalance(usdc.address);
-    console.log("strategies balance", await router.viewStrategiesBalance());
+
+    let {balances, totalBalance} = await router.viewStrategiesBalance();
+    // strategies should be balanced as 10% and 90%
+    expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
+    expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
+    // console.log("strategies balance", await router.viewStrategiesBalance());
   });
 
   // it("Scenario", async function () {
