@@ -13,20 +13,16 @@ contract Exchange is Ownable {
 
     uint256 public constant EXCHANGE_REGISTRY_ID = 2;
 
-    IMainRegistry public curveMainRegistry = IMainRegistry(
-        0x0000000022D53366457F9d5E68Ec105046FC4383
+    IUniswapV2Router02 public router = IUniswapV2Router02(
+        0x10ED43C718714eb63d5aA57B78B54704E256024E
     );
-    IExchangeRegistry public curveExchangeRegistry;
 
-    constructor () {
-        curveExchangeRegistry = IExchangeRegistry(
-            curveMainRegistry.get_address(EXCHANGE_REGISTRY_ID)
-        );
-    }
 
-    /// @notice Swap exact tokensA for tokensB.
+    constructor () { }
+
+    /// @notice Swap exact amount of tokenA to tokenB.
     /// @param amountA Amount of tokenA to spend.
-    /// @param tokenA Address of tokenA to spend.
+    /// @param tokenA Address of token to spend.
     /// @param tokenB Address of token to receive.
     /// @return amountReceivedTokenB Amount of tokenB received.
     function swapExactTokensForTokens(
@@ -35,22 +31,25 @@ contract Exchange is Ownable {
         IERC20 tokenB
     ) public returns (uint256 amountReceivedTokenB) {
 
-        tokenA.approve(address(curveExchangeRegistry), amountA);
+        tokenA.approve(address(router), amountA);
 
-        (address pool, uint256 toReceive) = curveExchangeRegistry.get_best_rate(
-            address(tokenA),
-            address(tokenB),
-            amountA
-        );
+        address[] memory path = new address[](3);
+        path[0] = address(tokenA);
+        path[1] = router.WETH();
+        path[2] = address(tokenB);
 
-        uint256 received = curveExchangeRegistry.exchange(
-            pool, 
-            address(tokenA), 
-            address(tokenB), 
+        uint256 amountOutMin = router.getAmountsOut(
+            amountA,
+            path
+        )[path.length - 1];
+
+        uint256 received = router.swapExactTokensForTokens(
             amountA, 
-            toReceive,
-            msg.sender
-        );
+            amountOutMin, 
+            path, 
+            address(msg.sender), 
+            block.timestamp + 1200
+        )[path.length - 1];
 
         return received;
     }

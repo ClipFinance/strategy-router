@@ -5,7 +5,7 @@ const { ethers, waffle } = require("hardhat");
 
 // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
 provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 6);
+parseUsdc = (args) => parseUnits(args, 18);
 parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
@@ -18,26 +18,30 @@ describe("Test StrategyRouter contract", function () {
 
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
 
-    UST = "0xa47c8bf37f92aBed4A126BDA807A7b7498661acD";
+    UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
     ust = await ethers.getContractAt("ERC20", UST);
 
-    ustHolder = "0xD6216fC19DB775Df9774a6E33526131dA7D19a2c";
+    ustHolder = "0x05faf555522fa3f93959f86b41a3808666093210";
     await hre.network.provider.request({
       method: "hardhat_impersonateAccount",
       params: [ustHolder],
     });
     ustHolder = await ethers.getSigner(ustHolder);
+    await network.provider.send("hardhat_setBalance", [
+      ustHolder.address.toString(),
+      "0x" + Number(parseEther("1").toHexString(2)).toString(2),
+    ]);
     await ust.connect(ustHolder).transfer(
       owner.address,
-      parseUnits("500000", 18)
+      parseUst("500000")
     );
 
     // ~~~~~~~~~~~ GET USDC TOKENS ON MAINNET ~~~~~~~~~~~ 
 
-    USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+    USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
     usdc = await ethers.getContractAt("ERC20", USDC);
 
-    usdcHolder = "0xE78388b4CE79068e89Bf8aA7f218eF6b9AB0e9d0";
+    usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
     await hre.network.provider.request({
       method: "hardhat_impersonateAccount",
       params: [usdcHolder],
@@ -45,8 +49,11 @@ describe("Test StrategyRouter contract", function () {
     usdcHolder = await ethers.getSigner(usdcHolder);
     await usdc.connect(usdcHolder).transfer(
       owner.address,
-      parseUnits("500000", 6)
+      parseUsdc("500000")
     );
+
+    // console.log(await usdc.balanceOf(owner.address));
+    // console.log(await ust.balanceOf(owner.address));
   });
 
   it("Deploy StrategyRouter", async function () {
@@ -122,7 +129,7 @@ describe("Test StrategyRouter contract", function () {
     );
     expect(await usdc.balanceOf(router.address)).to.be.closeTo(
       parseUsdc("90"),
-      parseUsdc("0.3")
+      parseUsdc("1.0")
     );
   });
 
@@ -192,7 +199,7 @@ describe("Test StrategyRouter contract", function () {
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("95"),
-      parseUniform("1.0")
+      parseUniform("2.0")
     );
   });
 
@@ -203,7 +210,7 @@ describe("Test StrategyRouter contract", function () {
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("95"),
+      parseUsdc("96"),
       parseUniform("1.0")
     );
   });
@@ -273,7 +280,7 @@ describe("Test StrategyRouter contract", function () {
       parseUst("1")
     );
     expect(await usdc.balanceOf(farm.address)).to.be.closeTo(
-      parseUsdc("5719"), 
+      parseUsdc("5682"), 
       parseUsdc("1")
     );
   });
@@ -312,7 +319,7 @@ describe("Test StrategyRouter contract", function () {
     await router.withdrawByReceipt(receipts[0], usdc.address, 0);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("20"),
+      parseUsdc("21"),
       parseUniform("1.0")
     );
 
