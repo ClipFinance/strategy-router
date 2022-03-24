@@ -19,7 +19,7 @@ module.exports = {
     enabled: process.env.REPORT_GAS !== undefined,
   },
   mocha: {
-    bail: true,
+    // bail: true,
     timeout: 600000
   },
   solidity: {

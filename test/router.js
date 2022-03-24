@@ -19,7 +19,7 @@ describe("Test StrategyRouter contract", function () {
     uniswapRouter = await ethers.getContractAt(
       "IUniswapV2Router02",
       "0x10ED43C718714eb63d5aA57B78B54704E256024E"
-    )
+    );
 
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
 
@@ -57,6 +57,28 @@ describe("Test StrategyRouter contract", function () {
       parseUsdc("500000")
     );
 
+
+    let path = [
+      await usdc.address,
+      await uniswapRouter.WETH(),
+      await ust.address
+    ];
+    let amountIn = parseUsdc("1");
+    let outMin = (await uniswapRouter.getAmountsOut(
+      amountIn,
+      path
+    ))[2];
+    let deadline = Math.floor(Date.now() / 1000) + 1200;
+
+    await usdc.approve(uniswapRouter.address, amountIn);
+    let fakeSwapResult = await uniswapRouter.callStatic.swapExactTokensForTokens(
+      amountIn,
+      0,
+      path,
+      owner.address,
+      deadline
+    );
+    console.log(outMin, fakeSwapResult);
     // console.log(await usdc.balanceOf(owner.address));
     // console.log(await ust.balanceOf(owner.address));
   });

@@ -17,7 +17,6 @@ contract Exchange is Ownable {
         0x10ED43C718714eb63d5aA57B78B54704E256024E
     );
 
-
     constructor () { }
 
     /// @notice Swap exact amount of tokenA to tokenB.
