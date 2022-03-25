@@ -97,14 +97,14 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.closeTo(
       expectedLPs,
-      parseEther("0.1"), //lps 18 decimals
+      parseEther("0.1"),
     );
   });
   
   it("Test totalTokens function", async function () {
     expect(await strategy.totalTokens()).to.be.closeTo(
       parseUst("100"),
-      parseUst("0.1"), //lps 18 decimals
+      parseUst("0.1"),
     );
   });
 
@@ -130,7 +130,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.closeTo(
       expectedLPs,
-      parseEther("0.1"), //lps 18 decimals
+      parseEther("0.1"),
     );
 
   });
@@ -138,7 +138,7 @@ describe("Test strategies", function () {
   it("Test totalTokens function", async function () {
     expect(await strategy.totalTokens()).to.be.closeTo(
       parseUst("50"),
-      parseUst("0.1"), //lps 18 decimals
+      parseUst("0.1"),
     );
   });
   
@@ -160,7 +160,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.within(
       amountLeft,
-      parseEther("0.1"), //lps 18 decimals
+      parseEther("0.1"),
     );
 
   });
@@ -198,7 +198,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.within(
       amountLeft,
-      parseEther("5.0"), //lps 18 decimals
+      parseEther("5.0"),
     );
   });
 

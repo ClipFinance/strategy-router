@@ -88,7 +88,7 @@ describe("Test strategies", function () {
   it("Test totalTokens function", async function () {
     expect(await strategy.totalTokens()).to.be.closeTo(
       parseUst("100"),
-      parseUst("0.2"), //lps 18 decimals
+      parseUst("0.2"),
     );
   });
 
@@ -106,15 +106,10 @@ describe("Test strategies", function () {
     expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
     expect(await lpToken.balanceOf(strategy.address)).to.be.equal(0);
 
-    let amountLeft = parseUst("50");
-    let expectedLPs = await zapDepositer.calc_token_amount(
-      [amountLeft, 0, 0, 0, 0], 
-      false
-    );
-    let userInfo = await farm.userInfo(lpToken.address, strategy.address);
+    let userInfo = await farm.userInfo(poolId, strategy.address);
     expect(userInfo.amount).to.be.closeTo(
-      expectedLPs,
-      parseEther("0.1"), //lps 18 decimals
+      parseEther("25"),
+      parseEther("0.5"),
     );
 
   });
@@ -122,7 +117,7 @@ describe("Test strategies", function () {
   it("Test totalTokens function", async function () {
     expect(await strategy.totalTokens()).to.be.closeTo(
       parseUst("50"),
-      parseUst("0.1"), //lps 18 decimals
+      parseUst("0.2"),
     );
   });
   
@@ -135,7 +130,7 @@ describe("Test strategies", function () {
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUst("50"),
-      parseUst("0.1"),
+      parseUst("0.2"),
     );
     expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
     expect(await lpToken.balanceOf(strategy.address)).to.be.equal(0);
@@ -144,7 +139,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.within(
       amountLeft,
-      parseEther("0.1"), //lps 18 decimals
+      parseEther("0.1"),
     );
 
   });
@@ -182,7 +177,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.within(
       amountLeft,
-      parseEther("5.0"), //lps 18 decimals
+      parseEther("5.0"),
     );
   });
 

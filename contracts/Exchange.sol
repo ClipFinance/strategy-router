@@ -19,11 +19,7 @@ contract Exchange is Ownable {
 
     constructor () { }
 
-    /// @notice Swap exact amount of tokenA to tokenB.
-    /// @param amountA Amount of tokenA to spend.
-    /// @param tokenA Address of token to spend.
-    /// @param tokenB Address of token to receive.
-    /// @return amountReceivedTokenB Amount of tokenB received.
+    /// @notice Swap tokens through WETH in middle.
     function swapExactTokensForTokens(
         uint256 amountA, 
         IERC20 tokenA, 
@@ -37,17 +33,12 @@ contract Exchange is Ownable {
         path[1] = router.WETH();
         path[2] = address(tokenB);
 
-        uint256 amountOutMin = router.getAmountsOut(
-            amountA,
-            path
-        )[path.length - 1];
-
         uint256 received = router.swapExactTokensForTokens(
             amountA, 
-            amountOutMin, 
+            0, 
             path, 
             address(msg.sender), 
-            block.timestamp + 1200
+            block.timestamp
         )[path.length - 1];
 
         return received;

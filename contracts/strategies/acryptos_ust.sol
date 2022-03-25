@@ -112,17 +112,12 @@ contract acryptos_ust is Ownable, IStrategy {
         path[1] = router.WETH();
         path[2] = address(tokenB);
 
-        uint256 amountOutMin = router.getAmountsOut(
-            amountA,
-            path
-        )[path.length - 1];
-
         uint256 received = router.swapExactTokensForTokens(
             amountA, 
-            amountOutMin, 
+            0, 
             path, 
             address(this), 
-            block.timestamp + 1200
+            block.timestamp
         )[path.length - 1];
 
         return received;

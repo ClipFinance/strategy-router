@@ -1,4 +1,5 @@
 TODO: disallow strategy-router usage from contracts to prevent flashloan attack, because we calculate lp prices it may be dangerous.
+TODO: find out how to deal with dust on strategy after adding liquidity
 
 --------- biswap ust-busd strategy --------- 
 biswap router: https://bscscan.com/address/0x3a6d8ca21d1cf76f653a67577fa0d27453350dd8#code
@@ -17,7 +18,7 @@ farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
     but first, need to find pid for our lp token though
 
     - harvest and reinvest -
-5) harvest BSW tokens by call to deposit(uint256 _pid, uint256 _amount) need to pass _amount 0 to harvest
+5) harvest BSW tokens by call to withdraw(uint256 _pid, uint256 _amount) need to pass _amount 0 to harvest
 6) swap BSW to more UST & BUSD
 7) go to step 1
 
