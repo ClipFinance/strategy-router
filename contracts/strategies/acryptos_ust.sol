@@ -6,8 +6,10 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IZapDepositer.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IACryptoSFarmV4.sol";
+import "../interfaces/IAcryptoSPool.sol";
 // import "./interfaces/IExchangeRegistry.sol";
 // import "./StrategyRouter.sol";
+import "../Exchange.sol";
 
 import "hardhat/console.sol";
 
@@ -19,11 +21,12 @@ contract acryptos_ust is Ownable, IStrategy {
     IERC20 public lpToken = IERC20(0xD3DEBe4a971e4492d0D61aB145468A5B2c23301b);
     IACryptoSFarmV4 public farm =
         IACryptoSFarmV4(0x0C3B6058c25205345b8f22578B27065a7506671C);
-    IUniswapV2Router02 public router = IUniswapV2Router02(
-        0x10ED43C718714eb63d5aA57B78B54704E256024E
-    );
 
-    constructor() {}
+    StrategyRouter public strategyRouter;
+
+    constructor(StrategyRouter _strategyRouter) {
+        strategyRouter = _strategyRouter;
+    }
 
     function deposit(uint256 amount) external override onlyOwner {
         console.log("block.number", block.number);
@@ -69,8 +72,15 @@ contract acryptos_ust is Ownable, IStrategy {
         uint256 acsiAmount = acsi.balanceOf(address(this));
         console.log("acsiAmount", acsiAmount);
         console.log("block.number", block.number);
-        if(acsiAmount > 0) {
-            uint256 amount = swapExactTokensForTokens(acsiAmount, acsi, ust);
+        if (acsiAmount > 0) {
+            Exchange exchange = strategyRouter.exchange();
+            acsi.transfer(address(exchange), acsiAmount);
+            uint256 amount = exchange.swapRouted(
+                acsiAmount,
+                acsi,
+                ust,
+                address(this)
+            );
             ust.approve(address(zapDepositer), amount);
             uint256[5] memory amounts;
             amounts[0] = amount;
@@ -86,7 +96,8 @@ contract acryptos_ust is Ownable, IStrategy {
         }
     }
 
-    function totalTokens() external view override onlyOwner returns (uint256) {
+    function totalTokens() external view override returns (uint256) {
+
         (uint256 amountOnFarm, , , ) = farm.userInfo(
             address(lpToken),
             address(this)
@@ -95,31 +106,12 @@ contract acryptos_ust is Ownable, IStrategy {
             amountOnFarm,
             0
         );
-        // notice: if withdraw all then actual received amount could possibly be slighlty different 
+        console.log("vp %s, lp to tokens %s, withdrawableAmount %s", 
+            IAcryptoSPool(zapDepositer.pool()).get_virtual_price(),
+            IAcryptoSPool(zapDepositer.pool()).get_virtual_price() * amountOnFarm / 1e18,
+            withdrawableAmount
+        );
+        // notice: if withdraw all then actual received amount could possibly be slighlty different
         return withdrawableAmount;
-    }
-
-    function swapExactTokensForTokens(
-        uint256 amountA, 
-        IERC20 tokenA, 
-        IERC20 tokenB
-    ) public returns (uint256 amountReceivedTokenB) {
-
-        tokenA.approve(address(router), amountA);
-
-        address[] memory path = new address[](3);
-        path[0] = address(tokenA);
-        path[1] = router.WETH();
-        path[2] = address(tokenB);
-
-        uint256 received = router.swapExactTokensForTokens(
-            amountA, 
-            0, 
-            path, 
-            address(this), 
-            block.timestamp
-        )[path.length - 1];
-
-        return received;
     }
 }

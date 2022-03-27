@@ -1,5 +1,19 @@
-TODO: disallow strategy-router usage from contracts to prevent flashloan attack, because we calculate lp prices it may be dangerous.
 TODO: find out how to deal with dust on strategy after adding liquidity
+
+--------- exchange contract with routing --------- 
+1) Needs a function to route swap through predefined dex such as pancakeswap or acryptos, maybe some other in future.
+    - this would be useful in strategy router as we may have different stables, some of them can be swapped on acryptos to save on fees and slippage.
+2) AcryptoS pool is relatively hard to integrate on-chain.
+    - good to know that they have multiple stableswap metapools, and one base pool ACS4USD. We only use UST metapool for now, to add new pools will need to add new DexType, setup coinIds and dexTypes mappings via setter functions. 
+
+So possible implementation in general: 
+1) when calling swapRouted we will get DexType for these two tokens. If DexType not set for them we use default route which is pancakeswap with intermediary WETH.
+2) Function to swap on certain DexType directly, by passing dex type as argument.
+
+If we need to add more dex types then we should have possibility to replace Exchange contract with new version in every other contract that depends on it.
+--------- end --------- 
+
+
 
 --------- biswap ust-busd strategy --------- 
 biswap router: https://bscscan.com/address/0x3a6d8ca21d1cf76f653a67577fa0d27453350dd8#code
@@ -32,6 +46,7 @@ farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
 NOTE: deposit and withdraw functions always harvest BSW tokens if there is any on farm
 
 --------- end --------- 
+
 
 
 --------- acryptos ust strategy --------- 
@@ -78,5 +93,25 @@ ACryptoSFarmV4: https://bscscan.com/address/0x0c3b6058c25205345b8f22578b27065a75
     @dev Useful for calculating profits
     @return LP token virtual price normalized to 1e18
     """
+
+-------
+if totalTokens uses calc_withdraw_one_coin & calc_token_amount which accounts for slippage, then for 1 LP we get number like 1.099 (and for 1.0 usd we would get 0.99 LP) but if instead we use get_virtual_price to convert LP to tokens and vice versa, then we would get amounts without slippage, the question is which method to use. 
+
+if use calc_withdraw_one_coin and calc_token_amount:
+
+user withdraw 100 tokens, 
+use calc_token_amount to convert to LP (accounts for slippage)
+withdrawAmount would be 99.9 LP
+now user got 99.9 and on farm leftover is 0.1 LP
+so from each withdraw there is small leftover ammount.
+
+
+if use get_virtual_price:
+
+user withdraw 100 tokens, 
+use get_virtual_price to convert to LP 
+withdrawAmount would be 100 LP (but can it be bigger such as 101.0? not sure, Curve pool math is quite hard)
+now user got 100 and on farm leftover is 0.0 LP
+
 
 --------- end --------- 

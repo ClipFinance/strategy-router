@@ -50,11 +50,27 @@ describe("Test strategies", function () {
     busd = await ethers.getContractAt("ERC20", BUSD);
   });
 
+  it("Deploy Exchange", async function () {
+
+    // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
+    exchange = await ethers.getContractFactory("Exchange");
+    exchange = await exchange.deploy();
+    await exchange.deployed();
+
+    // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
+    const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
+    router = await StrategyRouter.deploy();
+    await router.deployed();
+    await router.setMinUsdPerCycle(parseUniform("1.0"));
+    await router.setExchange(exchange.address);
+
+  });
+
   it("Deploy biswap_ust_busd", async function () {
 
     // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
     strategy = await ethers.getContractFactory("biswap_ust_busd");
-    strategy = await strategy.deploy();
+    strategy = await strategy.deploy(router.address);
     await strategy.deployed();
 
     lpToken = await strategy.lpToken();
@@ -81,7 +97,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(poolId, strategy.address);
     expect(userInfo.amount).to.be.closeTo(
       parseEther("50"),
-      parseEther("0.5"),
+      parseEther("1.0"),
     );
   });
   
@@ -177,7 +193,7 @@ describe("Test strategies", function () {
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     expect(userInfo.amount).to.be.within(
       amountLeft,
-      parseEther("5.0"),
+      parseEther("1.0"),
     );
   });
 

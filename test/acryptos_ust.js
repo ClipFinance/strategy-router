@@ -63,11 +63,27 @@ describe("Test strategies", function () {
 
   });
 
+  it("Deploy Exchange", async function () {
+
+    // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
+    exchange = await ethers.getContractFactory("Exchange");
+    exchange = await exchange.deploy();
+    await exchange.deployed();
+
+    // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
+    const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
+    router = await StrategyRouter.deploy();
+    await router.deployed();
+    await router.setMinUsdPerCycle(parseUniform("1.0"));
+    await router.setExchange(exchange.address);
+
+  });
+
   it("Deploy acryptos_ust", async function () {
 
     // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
     strategy = await ethers.getContractFactory("acryptos_ust");
-    strategy = await strategy.deploy();
+    strategy = await strategy.deploy(router.address);
     await strategy.deployed();
 
     lpToken = await strategy.lpToken();
@@ -180,6 +196,7 @@ describe("Test strategies", function () {
     let oldBalance = await strategy.totalTokens();
     await strategy.compound();
     let newBalance = await strategy.totalTokens();
+    console.log("added after compound", newBalance.sub(oldBalance));
 
     expect(newBalance).to.be.gt(oldBalance);
     expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
@@ -196,6 +213,8 @@ describe("Test strategies", function () {
 
     let amountLeft = 0;
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
+    // console.log(userInfo);
+    // console.log(userInfo.amount, await strategy.totalTokens());
     expect(userInfo.amount).to.be.within(
       amountLeft,
       parseEther("5.0"),

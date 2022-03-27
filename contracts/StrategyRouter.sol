@@ -24,8 +24,8 @@ contract StrategyRouter is Ownable {
     error TooEarly(uint256 cycleEndAt);
     error NotEnoughInBatching(uint256 amountInBatching);
 
-    modifier OnlyEOW {
-        if(msg.sender != tx.origin) revert NotCallableByContracts();
+    modifier OnlyEOW() {
+        if (msg.sender != tx.origin) revert NotCallableByContracts();
         _;
     }
 
@@ -59,10 +59,8 @@ contract StrategyRouter is Ownable {
     mapping(uint256 => Cycle) public cycles;
 
     constructor() {
-        exchange = new Exchange();
         receiptContract = new ReceiptNFT();
         sharesToken = new SharesToken();
-
         cycles[currentCycleId].startAt = block.timestamp;
     }
 
@@ -369,10 +367,11 @@ contract StrategyRouter is Ownable {
                     address(exchange),
                     withdrawAmount
                 );
-                withdrawAmount = exchange.swapExactTokensForTokens(
+                withdrawAmount = exchange.swapRouted(
                     withdrawAmount,
                     IERC20(strategyAssetAddress),
-                    IERC20(withdrawToken)
+                    IERC20(withdrawToken),
+                    address(this)
                 );
             }
             amountToTransfer += withdrawAmount;
@@ -433,10 +432,11 @@ contract StrategyRouter is Ownable {
                     address(exchange),
                     amountWithdraw
                 );
-                amountWithdraw = exchange.swapExactTokensForTokens(
+                amountWithdraw = exchange.swapRouted(
                     amountWithdraw,
                     IERC20(strategyAssetAddress),
-                    IERC20(withdrawToken)
+                    IERC20(withdrawToken),
+                    address(this)
                 );
             }
             amountToTransfer += amountWithdraw;
@@ -456,7 +456,8 @@ contract StrategyRouter is Ownable {
     /// @param amountWithdrawShares Amount of shares to withdraw.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     function withdrawShares(uint256 amountWithdrawShares, address withdrawToken)
-        external OnlyEOW
+        external
+        OnlyEOW
     {
         if (sharesToken.balanceOf(msg.sender) < amountWithdrawShares)
             revert InsufficientShares();
@@ -505,10 +506,11 @@ contract StrategyRouter is Ownable {
                     address(exchange),
                     amountWithdraw
                 );
-                amountWithdraw = exchange.swapExactTokensForTokens(
+                amountWithdraw = exchange.swapRouted(
                     amountWithdraw,
                     IERC20(strategyAssetAddress),
-                    IERC20(withdrawToken)
+                    IERC20(withdrawToken),
+                    address(this)
                 );
             }
             amountToTransfer += amountWithdraw;
@@ -537,7 +539,8 @@ contract StrategyRouter is Ownable {
     /// @param _depositTokenAddress Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.
     function depositToBatch(address _depositTokenAddress, uint256 _amount)
-        external OnlyEOW
+        external
+        OnlyEOW
     {
         if (!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
 
@@ -566,10 +569,11 @@ contract StrategyRouter is Ownable {
                     depositAmount,
                     ERC20(strategyAssetAddress).name()
                 );
-                depositAmount = exchange.swapExactTokensForTokens(
+                depositAmount = exchange.swapRouted(
                     depositAmount,
                     IERC20(_depositTokenAddress),
-                    IERC20(strategyAssetAddress)
+                    IERC20(strategyAssetAddress),
+                    address(this)
                 );
             }
 
@@ -596,8 +600,7 @@ contract StrategyRouter is Ownable {
 
     // Admin functions
 
-    /// @notice Set address of exchange for any stablecoin swaps.
-    /// @dev Exchange contract must be custom, we don't use uniswap or curver directly.
+    /// @notice Set address of exchange contract.
     /// @dev Admin function.
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
@@ -693,10 +696,11 @@ contract StrategyRouter is Ownable {
                     depositAmount
                 );
 
-                depositAmount = exchange.swapExactTokensForTokens(
+                depositAmount = exchange.swapRouted(
                     depositAmount,
                     IERC20(_depositTokenAddress),
-                    IERC20(strategyAssetAddress)
+                    IERC20(strategyAssetAddress),
+                    address(this)
                 );
             }
 
@@ -735,10 +739,11 @@ contract StrategyRouter is Ownable {
                     address(exchange),
                     withdrawn
                 );
-                withdrawn = exchange.swapExactTokensForTokens(
+                withdrawn = exchange.swapRouted(
                     withdrawn,
                     IERC20(strategyAssetAddress),
-                    IERC20(tempAsset)
+                    IERC20(tempAsset),
+                    address(this)
                 );
             }
             console.log("withdrawn: %s,", withdrawn);
@@ -754,10 +759,11 @@ contract StrategyRouter is Ownable {
                 IERC20(tempAsset).transfer(address(exchange), depositAmount);
 
                 console.log("before swap: %s,", depositAmount);
-                depositAmount = exchange.swapExactTokensForTokens(
+                depositAmount = exchange.swapRouted(
                     depositAmount,
                     IERC20(tempAsset),
-                    IERC20(strategyAssetAddress)
+                    IERC20(strategyAssetAddress),
+                    address(this)
                 );
                 console.log("after swap: %s,", depositAmount);
             }

@@ -5,55 +5,207 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IMainRegistry.sol";
 import "./interfaces/IExchangeRegistry.sol";
+import "./interfaces/IAcryptoSPool.sol";
 import "./StrategyRouter.sol";
 
 import "hardhat/console.sol";
 
+enum DexType {
+    // pancakeswap with WETH as intermediary, default option
+    pancakeSwapThroughWETH,
+    // tokenA to tokenB direct swap on pancake
+    pancakeDirectSwap,
+    // ACS4UST metapool
+    acryptosACS4UST
+}
+
 contract Exchange is Ownable {
+    // id zero corresponds to different coins based on pool
+    int128 public constant UST_ID = 0;
+    // base coins should stay the same across acryptos ACS pools
+    int128 public constant BUSD_ID = 1;
+    int128 public constant BUSDT_ID = 2;
+    int128 public constant DAI_ID = 3;
+    int128 public constant USDC_ID = 4;
 
-    uint256 public constant EXCHANGE_REGISTRY_ID = 2;
+    address public constant UST = 0x23396cF899Ca06c4472205fC903bDB4de249D6fC;
+    address public constant BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
+    address public constant BUSDT = 0x55d398326f99059fF775485246999027B3197955;
+    address public constant DAI = 0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3;
+    address public constant USDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
 
-    IUniswapV2Router02 public router = IUniswapV2Router02(
-        0x10ED43C718714eb63d5aA57B78B54704E256024E
-    );
+    // in dexTypes tokens addresses should be sorted in ascending order
+    // tokenA -> tokenB -> DexType
+    mapping(address => mapping(address => DexType)) dexTypes;
+    // acryptosPool -> token -> coin id from pool
+    mapping(address => mapping(address => int128)) coinIds;
 
-    constructor () { }
+    IUniswapV2Router02 public pancakeRouter =
+        IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+    // for now we only support one metapool: UST-BUSD-USDT-DAI-USDC
+    IAcryptoSPool public acryptosPool =
+        IAcryptoSPool(0x99c92765EfC472a9709Ced86310D64C4573c4b77);
 
-    /// @notice Swap tokens through WETH in middle.
-    function swapExactTokensForTokens(
-        uint256 amountA, 
-        IERC20 tokenA, 
-        IERC20 tokenB
+    constructor() {
+        // add more dex types and coin ids when new strategies added and they would need that
+        _setDexType(UST, BUSD, DexType.acryptosACS4UST);
+        _setCoinId(address(acryptosPool), UST, UST_ID);
+        _setCoinId(address(acryptosPool), BUSD, BUSD_ID);
+        // coinIds[address(acryptosPool)][BUSDT] = BUSDT_ID;
+        // coinIds[address(acryptosPool)][DAI] = DAI_ID;
+        // coinIds[address(acryptosPool)][USDC] = USDC_ID;
+    }
+
+    function sortTokens(address tokenA, address tokenB)
+        internal
+        pure
+        returns (address token0, address token1)
+    {
+        (token0, token1) = tokenA < tokenB
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
+    }
+
+    function setDexType(
+        address tokenA,
+        address tokenB,
+        DexType _type
+    ) external onlyOwner {
+        _setDexType(tokenA, tokenB, _type);
+    }
+
+    function _setDexType(
+        address tokenA,
+        address tokenB,
+        DexType _type
+    ) private {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        dexTypes[token0][token1] = _type;
+    }
+
+    function setCoinId(
+        address _acryptosPool,
+        address token,
+        int128 coinId
+    ) external onlyOwner {
+        _setCoinId(_acryptosPool, token, coinId);
+    }
+
+    function _setCoinId(
+        address _acryptosPool,
+        address token,
+        int128 coinId
+    ) private {
+        coinIds[address(_acryptosPool)][token] = coinId;
+    }
+
+    function getDexType(address tokenA, address tokenB)
+        internal
+        view
+        returns (DexType)
+    {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        return dexTypes[token0][token1];
+    }
+
+    function swapRouted(
+        uint256 amountA,
+        IERC20 tokenA,
+        IERC20 tokenB,
+        address to
     ) public returns (uint256 amountReceivedTokenB) {
+        DexType _dexType = getDexType(address(tokenA), address(tokenB));
+        return swap(amountA, tokenA, tokenB, _dexType, to);
+    }
 
-        tokenA.approve(address(router), amountA);
+    function swap(
+        uint256 amountA,
+        IERC20 tokenA,
+        IERC20 tokenB,
+        DexType _dexType,
+        address to
+    ) public returns (uint256 amountReceivedTokenB) {
+        if (_dexType == DexType.pancakeSwapThroughWETH) {
+            return _swapOnPancakeWithWETH(amountA, tokenA, tokenB, to);
+        } else if (_dexType == DexType.pancakeDirectSwap) {
+            return _swapDirect(amountA, tokenA, tokenB, to);
+        } else if (_dexType == DexType.acryptosACS4UST) {
+            return _swapOnAcryptosUST(amountA, tokenA, tokenB, to);
+        }
+
+        revert("No swap route");
+    }
+
+    function _swapOnPancakeWithWETH(
+        uint256 amountA,
+        IERC20 tokenA,
+        IERC20 tokenB,
+        address to
+    ) private returns (uint256 amountReceivedTokenB) {
+        tokenA.approve(address(pancakeRouter), amountA);
 
         address[] memory path = new address[](3);
         path[0] = address(tokenA);
-        path[1] = router.WETH();
+        path[1] = pancakeRouter.WETH();
         path[2] = address(tokenB);
 
-        uint256 received = router.swapExactTokensForTokens(
-            amountA, 
-            0, 
-            path, 
-            address(msg.sender), 
+        uint256 received = pancakeRouter.swapExactTokensForTokens(
+            amountA,
+            0,
+            path,
+            address(this),
             block.timestamp
         )[path.length - 1];
+
+        tokenB.transfer(to, received);
+
+        return received;
+    }    
+    
+    function _swapDirect(
+        uint256 amountA,
+        IERC20 tokenA,
+        IERC20 tokenB,
+        address to
+    ) private returns (uint256 amountReceivedTokenB) {
+        tokenA.approve(address(pancakeRouter), amountA);
+
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        uint256 received = pancakeRouter.swapExactTokensForTokens(
+            amountA,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        )[path.length - 1];
+
+        tokenB.transfer(to, received);
 
         return received;
     }
 
-    // function test(
-    //     uint256 swapAmount,
-    //     IERC20 tokenToSwap,
-    //     IERC20 depositToken2
-    // ) public view returns (address pool) {
+    function _swapOnAcryptosUST(
+        uint256 amountA,
+        IERC20 tokenA,
+        IERC20 tokenB,
+        address to
+    ) private returns (uint256 amountReceivedTokenB) {
+        tokenA.approve(address(acryptosPool), amountA);
 
-    //       (pool, ) = curveExchangeRegistry.get_best_rate(
-    //         address(tokenToSwap),
-    //         address(depositToken2),
-    //        swapAmount 
-    //     );
-    // }
+        int128 _tokenAIndex = coinIds[address(acryptosPool)][address(tokenA)];
+        int128 _tokenBIndex = coinIds[address(acryptosPool)][address(tokenB)];
+        uint256 received = acryptosPool.exchange_underlying(
+            _tokenAIndex,
+            _tokenBIndex,
+            amountA,
+            0
+        );
+
+        tokenB.transfer(to, received);
+
+        return received;
+    }
 }

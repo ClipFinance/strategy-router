@@ -85,11 +85,17 @@ describe("Test StrategyRouter contract", function () {
 
   it("Deploy StrategyRouter", async function () {
 
+    // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
+    exchange = await ethers.getContractFactory("Exchange");
+    exchange = await exchange.deploy();
+    await exchange.deployed();
+
     // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
     const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
     router = await StrategyRouter.deploy();
     await router.deployed();
     await router.setMinUsdPerCycle(parseUniform("1.0"));
+    await router.setExchange(exchange.address);
 
     // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
     receiptContract = await ethers.getContractAt(

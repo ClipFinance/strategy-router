@@ -8,7 +8,7 @@ import "../interfaces/IZapDepositer.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 // import "./interfaces/IExchangeRegistry.sol";
-// import "./StrategyRouter.sol";
+import "../StrategyRouter.sol";
 
 import "hardhat/console.sol";
 
@@ -19,12 +19,14 @@ contract biswap_ust_busd is Ownable, IStrategy {
     IERC20 public lpToken = IERC20(0x9E78183dD68cC81bc330CAF3eF84D354a58303B5);
     IBiswapFarm public farm =
         IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
-    // pancake router
-    IUniswapV2Router02 public router =
-        IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+    IUniswapV2Router02 public biswapRouter =
+        IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
+    StrategyRouter public strategyRouter;
     uint256 public poolId = 18;
 
-    constructor() {}
+    constructor(StrategyRouter _strategyRouter) {
+        strategyRouter = _strategyRouter;
+    }
 
     function deposit(uint256 amount) external override onlyOwner {
         console.log("block.number", block.number);
@@ -32,13 +34,26 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         // ust balance in case there is dust left from previous deposits
         uint256 ustAmount = amount / 2;
+        // this is ust amount to be swapped to busd
         uint256 busdAmount = amount - ustAmount;
-        busdAmount = swapExactTokensForTokens(busdAmount, ust, busd);
-        console.log("ust %s busd %s", ust.balanceOf(address(this)), busd.balanceOf(address(this)));
 
-        ust.approve(address(router), ustAmount);
-        busd.approve(address(router), busdAmount);
-        (uint256 amountA, uint256 amountB, uint256 liquidity) = router
+        Exchange exchange = strategyRouter.exchange();
+        ust.transfer(address(exchange), busdAmount);
+        busdAmount = exchange.swapRouted(
+            busdAmount,
+            ust,
+            busd,
+            address(this)
+        );
+        console.log(
+            "ust %s busd %s",
+            ust.balanceOf(address(this)),
+            busd.balanceOf(address(this))
+        );
+
+        ust.approve(address(biswapRouter), ustAmount);
+        busd.approve(address(biswapRouter), busdAmount);
+        (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
             .addLiquidity(
                 address(ust),
                 address(busd),
@@ -79,9 +94,17 @@ contract biswap_ust_busd is Ownable, IStrategy {
         ).getReserves();
 
         if (token0 == address(ust)) {
-            amountBusd = router.quote(amountUstToBusd, _reserve0, _reserve1);
+            amountBusd = biswapRouter.quote(
+                amountUstToBusd,
+                _reserve0,
+                _reserve1
+            );
         } else {
-            amountBusd = router.quote(amountUstToBusd, _reserve1, _reserve0);
+            amountBusd = biswapRouter.quote(
+                amountUstToBusd,
+                _reserve1,
+                _reserve0
+            );
         }
 
         uint256 liquidity = (lpToken.totalSupply() * (amountUst + amountBusd)) /
@@ -93,8 +116,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
             liquidity,
             lpToken.balanceOf(address(this))
         );
-        lpToken.approve(address(router), liquidity);
-        (uint256 amountA, uint256 amountB) = router.removeLiquidity(
+        lpToken.approve(address(biswapRouter), liquidity);
+        (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
             address(ust),
             address(busd),
             lpToken.balanceOf(address(this)),
@@ -104,7 +127,9 @@ contract biswap_ust_busd is Ownable, IStrategy {
             block.timestamp
         );
 
-        amountA += swapExactTokensForTokens(amountB, busd, ust);
+        Exchange exchange = strategyRouter.exchange();
+        busd.transfer(address(exchange), amountB);
+        amountA += exchange.swapRouted(amountB, busd, ust, address(this));
         ust.transfer(msg.sender, amountA);
     }
 
@@ -115,33 +140,47 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         console.log("block.number", block.number);
         if (bswAmount > 0) {
-            // (uint256 receivedUst, uint256 receivedBusd) = sellBSW(bswAmount);
-            // ust.approve(address(router), receivedUst);
-            // busd.approve(address(router), receivedBusd);
+            (uint256 receivedUst, uint256 receivedBusd) = sellBSW(bswAmount);
+            ust.approve(address(biswapRouter), receivedUst);
+            busd.approve(address(biswapRouter), receivedBusd);
 
-            // (uint256 amountA, uint256 amountB, uint256 liquidity) = router
-            //     .addLiquidity(
-            //         address(ust),
-            //         address(busd),
-            //         receivedUst,
-            //         receivedBusd,
-            //         0,
-            //         0,
-            //         address(this),
-            //         block.timestamp
-            //     );
+            console.log(
+                "receivedUst %s receivedBusd %s",
+                receivedUst,
+                receivedBusd
+            );
+            (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
+                .addLiquidity(
+                    address(ust),
+                    address(busd),
+                    receivedUst,
+                    receivedBusd,
+                    0,
+                    0,
+                    address(this),
+                    block.timestamp
+                );
 
-            // uint256 lpAmount = lpToken.balanceOf(address(this));
-            // lpToken.approve(address(farm), lpAmount);
-            //  console.log("liquidity %s receivedUst %s receivedBusd %s", liquidity, receivedUst, receivedBusd);
-            // farm.deposit(poolId, lpAmount);
-            // console.log("ust balance %s busd balance %s", ust.balanceOf(address(this)), busd.balanceOf(address(this)));
-            // ust.transfer(msg.sender, ust.balanceOf(address(this)));
-            // busd.transfer(msg.sender, busd.balanceOf(address(this)));
+            uint256 lpAmount = lpToken.balanceOf(address(this));
+            lpToken.approve(address(farm), lpAmount);
+            console.log(
+                "liquidity %s receivedUst %s receivedBusd %s",
+                liquidity,
+                receivedUst,
+                receivedBusd
+            );
+            farm.deposit(poolId, lpAmount);
+            console.log(
+                "ust balance %s busd balance %s",
+                ust.balanceOf(address(this)),
+                busd.balanceOf(address(this))
+            );
+            ust.transfer(msg.sender, ust.balanceOf(address(this)));
+            busd.transfer(msg.sender, busd.balanceOf(address(this)));
         }
     }
 
-    function totalTokens() external view override onlyOwner returns (uint256) {
+    function totalTokens() external view override returns (uint256) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
         uint256 amountUst = (liquidity * ust.balanceOf(address(lpToken))) /
@@ -152,71 +191,30 @@ contract biswap_ust_busd is Ownable, IStrategy {
         address[] memory path = new address[](2);
         path[0] = address(busd);
         path[1] = address(ust);
-        amountUst += router.getAmountsOut(amountBusd, path)[path.length - 1];
+        amountUst += biswapRouter.getAmountsOut(amountBusd, path)[
+            path.length - 1
+        ];
 
         return amountUst;
     }
 
-    // use to swap ust & busd without WETH in middle
-    function swapExactTokensForTokens(
-        uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB
-    ) public returns (uint256 amountReceivedTokenB) {
-        tokenA.approve(address(router), amountA);
-
-        address[] memory path = new address[](3);
-        path[0] = address(tokenA);
-        path[1] = router.WETH();
-        path[2] = address(tokenB);
-
-        uint256 debug = router.getAmountsOut(amountA, path)[path.length-1];
-        console.log("debug", debug, address(tokenA), address(tokenB));
-
-        uint256 received = router.swapExactTokensForTokens(
-            amountA,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        )[path.length - 1];
-
-        return received;
-    }
-
     // swap bsw for ust & busd in proportions 50/50
-    // function sellBSW(
-    //     uint256 amountA
-    // ) public returns (uint256 receivedUst, uint256 receivedBusd) {
-    //     bsw.approve(address(router), amountA);
+    function sellBSW(uint256 amountA)
+        public
+        returns (uint256 receivedUst, uint256 receivedBusd)
+    {
+        bsw.approve(address(biswapRouter), amountA);
 
-    //     uint256 ustPart = amountA / 2;
-    //     uint256 busdPart = amountA - ustPart;
+        uint256 ustPart = amountA / 2;
+        uint256 busdPart = amountA - ustPart;
 
-    //     address[] memory path = new address[](3);
-    //     path[0] = address(bsw);
-    //     path[1] = router.WETH();
-    //     path[2] = address(ust);
+        Exchange exchange = strategyRouter.exchange();
+        bsw.transfer(address(exchange), ustPart);
+        receivedUst = exchange.swapRouted(ustPart, bsw, ust, address(this));
 
-    //     // swap all BSW to UST
-    //     uint256 totalReceivedUst = router.swapExactTokensForTokens(
-    //         ustPart,
-    //         0,
-    //         path,
-    //         address(this),
-    //         block.timestamp
-    //     )[path.length - 1];
-
-    //     // swap half ust to busd
-    //     path[2] = address(busd);
-    //     receivedBusd = router.swapExactTokensForTokens(
-    //         busdPart,
-    //         0,
-    //         path,
-    //         address(this),
-    //         block.timestamp
-    //     )[path.length - 1];
-    // }
+        bsw.transfer(address(exchange), busdPart);
+        receivedBusd = exchange.swapRouted(busdPart, bsw, busd, address(this));
+    }
 
     function min(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x < y ? x : y;
