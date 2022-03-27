@@ -29,7 +29,9 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-        console.log("block.number", block.number);
+
+        console.log("--- deposit call, block: %s", block.number);
+
         ust.transferFrom(msg.sender, address(this), amount);
         ust.approve(address(zapDepositer), amount);
         uint256[5] memory amounts;
@@ -51,6 +53,8 @@ contract acryptos_ust is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
+        console.log("--- withdraw call");
+
         uint256[5] memory amounts;
         amounts[0] = amount;
         // get LP amount from ust amount
@@ -68,6 +72,7 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function compound() external override onlyOwner {
+        console.log("--- compound call");
         farm.harvest(address(lpToken));
         uint256 acsiAmount = acsi.balanceOf(address(this));
         console.log("acsiAmount", acsiAmount);
@@ -97,6 +102,9 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function totalTokens() external view override returns (uint256) {
+
+
+        console.log("--- totalTokens call");
 
         (uint256 amountOnFarm, , , ) = farm.userInfo(
             address(lpToken),
