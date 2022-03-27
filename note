@@ -113,5 +113,13 @@ use get_virtual_price to convert to LP
 withdrawAmount would be 100 LP (but can it be bigger such as 101.0? not sure, Curve pool math is quite hard)
 now user got 100 and on farm leftover is 0.0 LP
 
+test: after withdraw all tokens, only withdraw function has math based on virtual price, lefover on farm
+on farm LPs 1425101280499913967, totalTokens 1627105805945261011
+(1.4 LP and 1.6 $)
+
+test: all functions based on get_virtual_price
+on farm LPs 1, totalTokens 1
+
+looks like get_virtual_price approach works better without problems 
 
 --------- end --------- 

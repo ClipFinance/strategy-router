@@ -55,11 +55,11 @@ contract acryptos_ust is Ownable, IStrategy {
     {
         console.log("--- withdraw call");
 
-        uint256[5] memory amounts;
-        amounts[0] = amount;
         // get LP amount from ust amount
-        uint256 withdrawAmount = zapDepositer.calc_token_amount(amounts, false);
-        console.log("withdrawAmount", withdrawAmount);
+        uint256 withdrawAmount = 
+            amount * 1e18 / IAcryptoSPool(zapDepositer.pool()).get_virtual_price();
+
+        console.log("withdrawAmount LPs", withdrawAmount);
         farm.withdraw(address(lpToken), withdrawAmount);
         uint256 lpAmount = lpToken.balanceOf(address(this));
         lpToken.approve(address(zapDepositer), lpAmount);
@@ -78,6 +78,7 @@ contract acryptos_ust is Ownable, IStrategy {
         console.log("acsiAmount", acsiAmount);
         console.log("block.number", block.number);
         if (acsiAmount > 0) {
+            // swap ACSI to UST
             Exchange exchange = strategyRouter.exchange();
             acsi.transfer(address(exchange), acsiAmount);
             uint256 amount = exchange.swapRouted(
@@ -86,6 +87,8 @@ contract acryptos_ust is Ownable, IStrategy {
                 ust,
                 address(this)
             );
+
+            // deposit UST to farm
             ust.approve(address(zapDepositer), amount);
             uint256[5] memory amounts;
             amounts[0] = amount;
@@ -110,12 +113,11 @@ contract acryptos_ust is Ownable, IStrategy {
             address(lpToken),
             address(this)
         );
-        uint256 withdrawableAmount = zapDepositer.calc_withdraw_one_coin(
+        uint256 withdrawableAmount = 
+            IAcryptoSPool(zapDepositer.pool()).get_virtual_price() * amountOnFarm / 1e18;
+
+        console.log("amountOnFarm %s, lp to tokens %s, withdrawableAmount %s", 
             amountOnFarm,
-            0
-        );
-        console.log("vp %s, lp to tokens %s, withdrawableAmount %s", 
-            IAcryptoSPool(zapDepositer.pool()).get_virtual_price(),
             IAcryptoSPool(zapDepositer.pool()).get_virtual_price() * amountOnFarm / 1e18,
             withdrawableAmount
         );

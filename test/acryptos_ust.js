@@ -188,7 +188,7 @@ describe("Test strategies", function () {
     await strategy.deposit(amountDeposit);
 
     // skip blocks
-    let MONTH_BLOCKS = 60 * 60 * 24 * 30 * 12 / 3; // 1 yearn in block on bnb chain
+    let MONTH_BLOCKS = 60 * 60 * 24 * 30 / 3;
     MONTH_BLOCKS = "0x" + MONTH_BLOCKS.toString(16);
     await hre.network.provider.send("hardhat_mine", [MONTH_BLOCKS]);
 
@@ -214,7 +214,67 @@ describe("Test strategies", function () {
     let amountLeft = 0;
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
     // console.log(userInfo);
-    // console.log(userInfo.amount, await strategy.totalTokens());
+    console.log("on farm LPs %s, totalTokens %s", userInfo.amount, await strategy.totalTokens());
+    expect(userInfo.amount).to.be.within(
+      amountLeft,
+      parseEther("5.0"),
+    );
+  });
+
+  it("Random actions", async function () {
+
+    /*
+      loop,
+        deposit 100
+        skip 1 month
+        compound
+        withdraw 50% of totalTokens
+      exit loop
+      withdraw 50%
+      withdraw all lefover
+    */
+
+    for (let i = 0; i < 5; i++) {
+      
+      // deposit
+      let amountDeposit = parseUst("100");
+      await ust.approve(strategy.address, amountDeposit)
+      await strategy.deposit(amountDeposit);
+  
+      // skip blocks
+      let MONTH_BLOCKS = 60 * 60 * 24 * 30 / 3; // 1 yearn in block on bnb chain
+      MONTH_BLOCKS = "0x" + MONTH_BLOCKS.toString(16);
+      await hre.network.provider.send("hardhat_mine", [MONTH_BLOCKS]);
+  
+      // compound
+      let oldBalance = await strategy.totalTokens();
+      await strategy.compound();
+      let newBalance = await strategy.totalTokens();
+      // console.log("added after compound", newBalance.sub(oldBalance));
+
+      // withdraw
+      // oldBalance = await strategy.totalTokens();
+      await strategy.withdraw((await strategy.totalTokens()).div(2));
+      newBalance = await strategy.totalTokens();
+      // console.log("leftover after withdarw", newBalance);
+
+
+    }
+
+    // withdraw all
+    oldBalance = await ust.balanceOf(owner.address);
+    await strategy.withdraw((await strategy.totalTokens()));
+    newBalance = await ust.balanceOf(owner.address);
+    // console.log("final leftover after withdarw", newBalance);
+
+    expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
+    expect(await lpToken.balanceOf(strategy.address)).to.be.equal(0);
+    expect(await strategy.totalTokens()).to.be.within(0, parseUst("5"));
+
+    let amountLeft = 0;
+    let userInfo = await farm.userInfo(lpToken.address, strategy.address);
+    // console.log(userInfo);
+    // console.log("on farm LPs %s, totalTokens %s", userInfo.amount, await strategy.totalTokens());
     expect(userInfo.amount).to.be.within(
       amountLeft,
       parseEther("5.0"),

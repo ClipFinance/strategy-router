@@ -191,6 +191,7 @@ describe("Test strategies", function () {
 
     let amountLeft = 0;
     let userInfo = await farm.userInfo(lpToken.address, strategy.address);
+    console.log("on farm LPs %s, totalTokens %s", userInfo.amount, await strategy.totalTokens());
     expect(userInfo.amount).to.be.within(
       amountLeft,
       parseEther("1.0"),
