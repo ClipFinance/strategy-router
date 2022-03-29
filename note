@@ -1,4 +1,5 @@
 TODO: find out how to deal with dust on strategy after adding liquidity
+TODO: restrict to withdraw admin initial deposit, it should be locked
 
 --------- exchange contract with routing --------- 
 1) Needs a function to route swap through predefined dex such as pancakeswap or acryptos, maybe some other in future.
@@ -43,7 +44,15 @@ farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
 
 9) swap LP tokens to ust
 
-NOTE: deposit and withdraw functions always harvest BSW tokens if there is any on farm
+* farm's deposit and withdraw functions always harvest internally
+
+--- try to change functions from using getAmountsOut to a better way to price LPs and vice versa. Mentioned function accounts for fee, but totalTokens should not do that. 
+
+* need to think more about the fact that strategies rely on Exchange contract for swaps, but then inside function such as totalTokens they rely on dex and pools that are predefined in these strategies, so it can be easy to break something if not knowing that. I think of two options: 
+1) to have also 'quote' and 'getAmountsOut' functions on Exchange contract that will use dex based on pair provided. This sounds like a big field for bugs.
+2) make strategies to not rely on Exchange contract at all (so only StrategyRouter will do as it don't use 'quote' and similar functions), this way if we would have 5 strategies with the similar tokens, we would need to copy paste code related to swaps & getAmounts...
+
+For now just use Exchange for swaps, and 'quote' from dex predefined in strategy, though its a must to sync dex used on exchange and in strategy!
 
 --------- end --------- 
 
@@ -121,5 +130,7 @@ test: all functions based on get_virtual_price
 on farm LPs 1, totalTokens 1
 
 looks like get_virtual_price approach works better without problems 
+
+* if users deposited 100 + 100, then in withdraw they should not pass 100, it will not work. Instead withdraw amount should rely on totalTokens. This seems to be fine since StrategyRouter is using totalTokens to calculate shares and pps. 
 
 --------- end --------- 

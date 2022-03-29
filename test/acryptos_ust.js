@@ -10,7 +10,7 @@ parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
-describe("Test strategies", function () {
+describe("Test acryptos_ust strategy", function () {
 
   it("Snapshot evm", async function () {
     snapshotId = await provider.send("evm_snapshot");

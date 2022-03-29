@@ -37,23 +37,23 @@ contract Exchange is Ownable {
     // in dexTypes tokens addresses should be sorted in ascending order
     // tokenA -> tokenB -> DexType
     mapping(address => mapping(address => DexType)) dexTypes;
-    // acryptosPool -> token -> coin id from pool
+    // poolACS4UST -> token -> coin id from pool
     mapping(address => mapping(address => int128)) coinIds;
 
     IUniswapV2Router02 public pancakeRouter =
         IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
     // for now we only support one metapool: UST-BUSD-USDT-DAI-USDC
-    IAcryptoSPool public acryptosPool =
+    IAcryptoSPool public poolACS4UST =
         IAcryptoSPool(0x99c92765EfC472a9709Ced86310D64C4573c4b77);
 
     constructor() {
-        // add more dex types and coin ids when new strategies added and they would need that
+        // add more dex types and coin ids when new strategies added, if needed
         _setDexType(UST, BUSD, DexType.acryptosACS4UST);
-        _setCoinId(address(acryptosPool), UST, UST_ID);
-        _setCoinId(address(acryptosPool), BUSD, BUSD_ID);
-        // coinIds[address(acryptosPool)][BUSDT] = BUSDT_ID;
-        // coinIds[address(acryptosPool)][DAI] = DAI_ID;
-        // coinIds[address(acryptosPool)][USDC] = USDC_ID;
+        _setCoinId(address(poolACS4UST), UST, UST_ID);
+        _setCoinId(address(poolACS4UST), BUSD, BUSD_ID);
+        // coinIds[address(poolACS4UST)][BUSDT] = BUSDT_ID;
+        // coinIds[address(poolACS4UST)][DAI] = DAI_ID;
+        // coinIds[address(poolACS4UST)][USDC] = USDC_ID;
     }
 
     function sortTokens(address tokenA, address tokenB)
@@ -84,19 +84,19 @@ contract Exchange is Ownable {
     }
 
     function setCoinId(
-        address _acryptosPool,
+        address _poolACS4UST,
         address token,
         int128 coinId
     ) external onlyOwner {
-        _setCoinId(_acryptosPool, token, coinId);
+        _setCoinId(_poolACS4UST, token, coinId);
     }
 
     function _setCoinId(
-        address _acryptosPool,
+        address _poolACS4UST,
         address token,
         int128 coinId
     ) private {
-        coinIds[address(_acryptosPool)][token] = coinId;
+        coinIds[address(_poolACS4UST)][token] = coinId;
     }
 
     function getDexType(address tokenA, address tokenB)
@@ -193,11 +193,13 @@ contract Exchange is Ownable {
         IERC20 tokenB,
         address to
     ) private returns (uint256 amountReceivedTokenB) {
-        tokenA.approve(address(acryptosPool), amountA);
+        tokenA.approve(address(poolACS4UST), amountA);
 
-        int128 _tokenAIndex = coinIds[address(acryptosPool)][address(tokenA)];
-        int128 _tokenBIndex = coinIds[address(acryptosPool)][address(tokenB)];
-        uint256 received = acryptosPool.exchange_underlying(
+        int128 _tokenAIndex = coinIds[address(poolACS4UST)][address(tokenA)];
+        int128 _tokenBIndex = coinIds[address(poolACS4UST)][address(tokenB)];
+
+        console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
+        uint256 received = poolACS4UST.exchange_underlying(
             _tokenAIndex,
             _tokenBIndex,
             amountA,

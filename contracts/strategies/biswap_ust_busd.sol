@@ -32,6 +32,10 @@ contract biswap_ust_busd is Ownable, IStrategy {
         console.log("block.number", block.number);
         ust.transferFrom(msg.sender, address(this), amount);
 
+        // TODO: maybe there is a better way to add liquidity
+        //       for example use reserves proportions to split amount
+        //       and maybe use balanceOf(this)
+
         // ust balance in case there is dust left from previous deposits
         uint256 ustAmount = amount / 2;
         // this is ust amount to be swapped to busd
@@ -39,12 +43,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         ust.transfer(address(exchange), busdAmount);
-        busdAmount = exchange.swapRouted(
-            busdAmount,
-            ust,
-            busd,
-            address(this)
-        );
+        console.log("ustAmount %s, busdAmount", ustAmount, busdAmount);
+        busdAmount = exchange.swapRouted(busdAmount, ust, busd, address(this));
         console.log(
             "ust %s busd %s",
             ust.balanceOf(address(this)),
@@ -81,10 +81,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        uint256 amountUst = amount / 2;
-        uint256 amountBusd;
-        uint256 amountUstToBusd = amount - amountUst;
-
+        console.log("--- biswap withdraw");
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
         address token1 = IUniswapV2Pair(address(lpToken)).token1();
         uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
@@ -93,22 +90,24 @@ contract biswap_ust_busd is Ownable, IStrategy {
             address(lpToken)
         ).getReserves();
 
-        if (token0 == address(ust)) {
-            amountBusd = biswapRouter.quote(
-                amountUstToBusd,
-                _reserve0,
-                _reserve1
-            );
-        } else {
-            amountBusd = biswapRouter.quote(
-                amountUstToBusd,
-                _reserve1,
-                _reserve0
-            );
-        }
+        uint256 amountUst = amount / 2;
+        uint256 amountBusd;
+        uint256 amountUstToBusd = amount - amountUst;
+
+        (_reserve0, _reserve1) = token0 == address(ust)
+            ? (_reserve0, _reserve1)
+            : (_reserve1, _reserve0);
+
+        amountBusd = biswapRouter.quote(amountUstToBusd, _reserve0, _reserve1);
 
         uint256 liquidity = (lpToken.totalSupply() * (amountUst + amountBusd)) /
             (balance0 + balance1);
+
+        // console.log(
+        //     "amountUst %s amountBusd %s",
+        //     amountUst,
+        //     amountBusd
+        // );
 
         farm.withdraw(poolId, liquidity);
         console.log(
@@ -129,12 +128,16 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         busd.transfer(address(exchange), amountB);
+        console.log("amountA %s amountB %s", amountA, amountB);
         amountA += exchange.swapRouted(amountB, busd, ust, address(this));
+        console.log("amountA %s amountB %s", amountA, amountB);
         ust.transfer(msg.sender, amountA);
+        amountWithdrawn = amountA;
     }
 
     function compound() external override onlyOwner {
         farm.withdraw(poolId, 0);
+        // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
         console.log("bswAmount", bswAmount);
 
@@ -164,10 +167,10 @@ contract biswap_ust_busd is Ownable, IStrategy {
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(farm), lpAmount);
             console.log(
-                "liquidity %s receivedUst %s receivedBusd %s",
+                "liquidity %s amountA %s amountB %s",
                 liquidity,
-                receivedUst,
-                receivedBusd
+                amountA,
+                amountB
             );
             farm.deposit(poolId, lpAmount);
             console.log(
@@ -175,6 +178,9 @@ contract biswap_ust_busd is Ownable, IStrategy {
                 ust.balanceOf(address(this)),
                 busd.balanceOf(address(this))
             );
+
+            // TODO: how leftover liquidity should be treated??
+            //       probably swap to ust and send back to strategy router
             ust.transfer(msg.sender, ust.balanceOf(address(this)));
             busd.transfer(msg.sender, busd.balanceOf(address(this)));
         }
@@ -188,12 +194,21 @@ contract biswap_ust_busd is Ownable, IStrategy {
         uint256 amountBusd = (liquidity * busd.balanceOf(address(lpToken))) /
             lpToken.totalSupply();
 
-        address[] memory path = new address[](2);
-        path[0] = address(busd);
-        path[1] = address(ust);
-        amountUst += biswapRouter.getAmountsOut(amountBusd, path)[
-            path.length - 1
-        ];
+        // convert amountBusd to amount of ust
+        address token0 = IUniswapV2Pair(address(lpToken)).token0();
+
+        (uint112 _reserve0, uint112 _reserve1, ) = IUniswapV2Pair(
+            address(lpToken)
+        ).getReserves();
+
+        (_reserve0, _reserve1) = token0 == address(busd)
+            ? (_reserve0, _reserve1)
+            : (_reserve1, _reserve0);
+
+        // sum ust part and busd part that was converted to ust
+        // we use biswap router to quote because liquidity removal is done by it
+        if (amountBusd > 0)
+            amountUst += biswapRouter.quote(amountBusd, _reserve0, _reserve1);
 
         return amountUst;
     }
