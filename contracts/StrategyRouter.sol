@@ -30,7 +30,7 @@ contract StrategyRouter is Ownable {
         _;
     }
 
-    struct Strategy {
+    struct StrategyInfo {
         address strategyAddress;
         address depositAssetAddress;
         uint256 weight;
@@ -55,10 +55,10 @@ contract StrategyRouter is Ownable {
     Exchange public exchange;
     SharesToken public sharesToken;
 
-    Strategy[] public strategies;
+    StrategyInfo[] public strategies;
     address[] private stablecoins;
     // address[] private stablecoinsArray;
-    // mapping(address => bool) private stablecoins;
+    mapping(address => bool) private stablecoinsMap;
     mapping(uint256 => Cycle) public cycles;
 
     constructor() {
@@ -88,7 +88,7 @@ contract StrategyRouter is Ownable {
 
         // get total strategies balance after compound
         (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
-
+        uint256 totalDepositUniform;
         for (uint256 i; i < len; i++) {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(
@@ -96,6 +96,7 @@ contract StrategyRouter is Ownable {
             );
 
             uint256 depositAmount = strategies[i].depositedAmount;
+            totalDepositUniform += toUniform(depositAmount, address(strategyAssetAddress));
             strategies[i].depositedAmount = 0;
             strategyAssetAddress.approve(
                 strategies[i].strategyAddress,
@@ -106,36 +107,48 @@ contract StrategyRouter is Ownable {
         }
 
         // get total strategies balance after deposit
-        (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
+        // (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
 
-        console.log(
-            "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math",
-            balanceAfterDeposit,
-            balanceAfterCompound,
-            cycles[currentCycleId].pricePerShare
-        );
+        // console.log(
+        //     "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math",
+        //     balanceAfterDeposit,
+        //     balanceAfterCompound,
+        //     cycles[currentCycleId].pricePerShare
+        // );
 
         uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
             sharesToken.mint(DEAD_ADDRESS, INITIAL_SHARES);
             cycles[currentCycleId].pricePerShare =
-                balanceAfterDeposit /
+                totalDepositUniform /
                 sharesToken.totalSupply();
+            console.log(
+                "initial pps %s, shares %s",
+                cycles[currentCycleId].pricePerShare,
+                sharesToken.totalSupply()
+            );
         } else {
             cycles[currentCycleId].pricePerShare =
                 balanceAfterCompound /
                 totalShares;
-            uint256 newShares = balanceAfterDeposit /
-                cycles[currentCycleId].pricePerShare -
-                totalShares;
+
+            console.log(
+                "cycle %s, pps %s, shares %s",
+                currentCycleId,
+                cycles[currentCycleId].pricePerShare,
+                sharesToken.totalSupply()
+            );
+
+            console.log(
+                "totalDepositUniform %s totalDepositUniform/pps %s",
+                totalDepositUniform,
+                totalDepositUniform / cycles[currentCycleId].pricePerShare
+            );
+            uint256 newShares = totalDepositUniform /
+                cycles[currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
 
-        console.log(
-            "final pps %s, shares %s",
-            cycles[currentCycleId].pricePerShare,
-            sharesToken.totalSupply()
-        );
 
         // start new cycle
         currentCycleId++;
@@ -296,7 +309,8 @@ contract StrategyRouter is Ownable {
                 cycles[receipt.cycleId].pricePerShare;
             amountWithdrawShares = (userShares * percent) / 1e4;
             console.log(
-                "userShares %s, receipt's cycle pps %s",
+                "receipt.cycleId %s, userShares %s, receipt.pps %s",
+                receipt.cycleId,
                 userShares,
                 cycles[receipt.cycleId].pricePerShare
             );
@@ -337,12 +351,12 @@ contract StrategyRouter is Ownable {
 
         (strategiesBalance, ) = viewStrategiesBalance();
         sharesToken.burn(address(this), amountWithdrawShares);
-        if (sharesToken.totalSupply() == 0)
-            cycles[currentCycleId].pricePerShare = 0;
-        else
-            cycles[currentCycleId].pricePerShare =
-                strategiesBalance /
-                sharesToken.totalSupply();
+        // if (sharesToken.totalSupply() == 0)
+        //     cycles[currentCycleId].pricePerShare = 0;
+        // else
+        //     cycles[currentCycleId].pricePerShare =
+        //         strategiesBalance /
+        //         sharesToken.totalSupply();
 
         console.log(
             "withdraw token balance %s, total withdraw %s",
@@ -489,17 +503,19 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-        uint256 withdrawAmountTotal;
         (
             uint256 strategiesBalance,
             uint256[] memory balances
         ) = viewStrategiesBalance();
+
+        uint256 withdrawAmountTotal;
         {
             // calculate current pps (based on totalTokens function)
             uint256 currentPricePerShare = strategiesBalance /
                 sharesToken.totalSupply();
             // withdraw amount based on pps
             withdrawAmountTotal = amountWithdrawShares * currentPricePerShare;
+            console.log("PPS %s", currentPricePerShare);
         }
 
         console.log("~~~~~~~~~~~~~ withdrawShares ~~~~~~~~~~~~~");
@@ -545,12 +561,12 @@ contract StrategyRouter is Ownable {
 
         (strategiesBalance, ) = viewStrategiesBalance();
         sharesToken.burn(msg.sender, amountWithdrawShares);
-        if (sharesToken.totalSupply() == 0)
-            cycles[currentCycleId].pricePerShare = 0;
-        else
-            cycles[currentCycleId].pricePerShare =
-                strategiesBalance /
-                sharesToken.totalSupply();
+        // if (sharesToken.totalSupply() == 0)
+        //     cycles[currentCycleId].pricePerShare = 0;
+        // else
+        //     cycles[currentCycleId].pricePerShare =
+        //         strategiesBalance /
+        //         sharesToken.totalSupply();
 
         console.log(
             "withdraw token balance %s, total withdraw %s",
@@ -668,7 +684,7 @@ contract StrategyRouter is Ownable {
                 revert DuplicateStrategy();
         }
         strategies.push(
-            Strategy({
+            StrategyInfo({
                 strategyAddress: _strategyAddress,
                 depositAssetAddress: _depositAssetAddress,
                 weight: _weight,
@@ -693,28 +709,30 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function removeStrategy(uint256 _strategyId) external onlyOwner {
         console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
-        uint256 len = strategies.length;
-        Strategy memory removedStrategy = strategies[_strategyId];
-        address _depositTokenAddress = removedStrategy.depositAssetAddress;
-        strategies[_strategyId] = strategies[len - 1];
+        
+        StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
+        IStrategy removedStrategy = IStrategy(removedStrategyInfo.strategyAddress);
+        address _depositTokenAddress = removedStrategyInfo.depositAssetAddress;
+
+        uint256 len = strategies.length - 1;
+        strategies[_strategyId] = strategies[len];
         strategies.pop();
 
         // compound removed strategy
-        IStrategy(removedStrategy.strategyAddress).compound();
+        removedStrategy.compound();
         console.log(
             "totalTokens %s, balance %s",
-            IStrategy(removedStrategy.strategyAddress).totalTokens(),
+            removedStrategy.totalTokens(),
             IERC20(_depositTokenAddress).balanceOf(
-                removedStrategy.strategyAddress
+                removedStrategyInfo.strategyAddress
             )
         );
+        // TODO: maybe worth to create withdrawAll function in strategies
         // withdraw all from removed strategy
-        uint256 withdrawnAmount = IStrategy(removedStrategy.strategyAddress)
-            .withdraw(IStrategy(removedStrategy.strategyAddress).totalTokens());
+        uint256 withdrawnAmount = removedStrategy
+            .withdraw(removedStrategy.totalTokens());
 
-        // deposit withdrawn funds into other strategies
 
-        len = strategies.length;
         // compound all strategies
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
@@ -723,6 +741,7 @@ contract StrategyRouter is Ownable {
         // get total strategies balance after compound
         // (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
 
+        // deposit withdrawn funds into other strategies
         for (uint256 i; i < len; i++) {
             uint256 depositAmount = (withdrawnAmount *
                 viewStrategyPercentWeight(i)) / 10000;
@@ -838,18 +857,16 @@ contract StrategyRouter is Ownable {
         if (supported && supportsCoin(stablecoinAddress))
             revert AlreadyAddedStablecoin();
 
+        stablecoinsMap[stablecoinAddress] = supported;
         if (supported) {
             stablecoins.push(stablecoinAddress);
         } else {
-            int256 found = -1;
             for (uint256 i = 0; i < stablecoins.length; i++) {
-                if (stablecoins[i] == stablecoinAddress) found = int256(i);
-            }
-            if (found > -1) {
-                stablecoins[uint256(found)] = stablecoins[
-                    stablecoins.length - 1
-                ];
-                stablecoins.pop();
+                if (stablecoins[i] == stablecoinAddress) {
+                    stablecoins[i] = stablecoins[stablecoins.length - 1];
+                    stablecoins.pop();
+                    break;
+                }
             }
         }
     }
@@ -897,9 +914,6 @@ contract StrategyRouter is Ownable {
         view
         returns (bool isSupported)
     {
-        uint256 len = stablecoins.length;
-        for (uint256 i = 0; i < len; i++) {
-            if (stablecoins[i] == stablecoinAddress) return true;
-        }
+        return stablecoinsMap[stablecoinAddress];
     }
 }

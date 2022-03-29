@@ -68,7 +68,9 @@ contract biswap_ust_busd is Ownable, IStrategy {
         lpToken.approve(address(farm), liquidity);
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
         farm.deposit(poolId, liquidity);
+        // TODO: what to do with leftover? send back? but then StrategyRouter should be aware that we did that
         ust.transfer(msg.sender, ust.balanceOf(address(this)));
+        busd.transfer(msg.sender, busd.balanceOf(address(this)));
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
 
         // (uint256 amount, , , ) = farm.userInfo(address(lpToken), address(this));
@@ -174,7 +176,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
             );
             farm.deposit(poolId, lpAmount);
             console.log(
-                "ust balance %s busd balance %s",
+                "biswap farm compound leftover ust %s busd %s",
                 ust.balanceOf(address(this)),
                 busd.balanceOf(address(this))
             );

@@ -264,23 +264,16 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     // should've withdrawn all (excpet admin), so verify that
 
-    expect(await ust.balanceOf(farm.address)).to.equal(0);
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(INITIAL_SHARES);
+    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.closeTo(
-      parseUst("16"), 
-      parseUst("1")
-    );
-    expect(await ust.balanceOf(farm.address)).to.be.closeTo(
-      parseUsdc("170"), 
-      parseUsdc("1")
-    );
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Farms should be empty on withdraw all multiple times", async function () {
@@ -292,33 +285,24 @@ describe("Test StrategyRouter with two real strategies", function () {
       await router.depositToBatch(ust.address, parseUst("10"));
       await skipCycleTime();
       await router.depositToStrategies();
-      await ust.transfer(farm.address, await ust.balanceOf(farm.address));
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       console.log(receipts);
-      await router.withdrawByReceipt(receipts[0], ust.address, 0);
+      await router.withdrawByReceipt(receipts[0], ust.address, 10000);
       
       console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
     }
 
-    expect(await ust.balanceOf(farm.address)).to.equal(0);
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(INITIAL_SHARES);
+    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-    // admin initial deposit
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.closeTo(
-      parseUst("21"), 
-      parseUst("1")
-    );
-    expect(await ust.balanceOf(farm.address)).to.be.closeTo(
-      parseUsdc("5682"), 
-      parseUsdc("1")
-    );
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Remove strategy", async function () {
@@ -331,15 +315,11 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToStrategies();
     console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
     
-
-    let simulateGrowthAmount = (await farm.totalTokens()).sub(await ust.balanceOf(farm.address));
-    simulateGrowthAmount = simulateGrowthAmount.mul(3); // removeStrategy calls compound
-    await ust.transfer(farm.address, simulateGrowthAmount);
-
     // deploy new farm
-    const Farm = await ethers.getContractFactory("MockFarm");
-    farm2 = await Farm.deploy(ust.address, 10000);
+    const Farm = await ethers.getContractFactory("acryptos_ust");
+    farm2 = await Farm.deploy(router.address);
     await farm2.deployed();
+    await farm2.transferOwnership(router.address);
 
     // add new farm
     await router.addStrategy(farm2.address, ust.address, 1000);
@@ -349,34 +329,27 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     // withdraw user shares
     let receipts = await receiptContract.walletOfOwner(owner.address);
-    console.log('1', receipts);
+    console.log(receipts);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(receipts[0], ust.address, 0);
+    await router.withdrawByReceipt(receipts[0], ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("21"),
-      parseUniform("1.0")
+      parseUsdc("10"),
+      parseUniform("0.5")
     );
 
 
-    expect(await ust.balanceOf(farm.address)).to.equal(0);
-    expect(await ust.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
-    expect(await ust.balanceOf(router.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(INITIAL_SHARES);
+    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-    // expect(await ust.balanceOf(farmUnprofitable.address)).to.be.closeTo(
-    //   parseUst("22361"), 
-    //   parseUst("1")
-    // );
-    // expect(await ust.balanceOf(farm.address)).to.be.closeTo(
-    //   parseUsdc("10987"), 
-    //   parseUsdc("1")
-    // );
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Test rebalance function", async function () {

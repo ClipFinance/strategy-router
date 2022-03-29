@@ -29,7 +29,6 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-
         console.log("--- deposit call, block: %s", block.number);
 
         ust.transferFrom(msg.sender, address(this), amount);
@@ -37,6 +36,10 @@ contract acryptos_ust is Ownable, IStrategy {
         uint256[5] memory amounts;
         amounts[0] = amount;
         zapDepositer.add_liquidity(amounts, 0);
+        // console.log(
+        //     "acryptos farm balance after add_liquidity %s",
+        //     ust.balanceOf(address(this))
+        // );
         uint256 lpAmount = lpToken.balanceOf(address(this));
         lpToken.approve(address(farm), lpAmount);
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
@@ -56,8 +59,8 @@ contract acryptos_ust is Ownable, IStrategy {
         console.log("--- withdraw call");
 
         // get LP amount from ust amount
-        uint256 withdrawAmount = 
-            amount * 1e18 / IAcryptoSPool(zapDepositer.pool()).get_virtual_price();
+        uint256 withdrawAmount = (amount * 1e18) /
+            IAcryptoSPool(zapDepositer.pool()).get_virtual_price();
 
         console.log("withdrawAmount LPs", withdrawAmount);
         farm.withdraw(address(lpToken), withdrawAmount);
@@ -105,20 +108,20 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function totalTokens() external view override returns (uint256) {
-
-
         console.log("--- totalTokens call");
 
         (uint256 amountOnFarm, , , ) = farm.userInfo(
             address(lpToken),
             address(this)
         );
-        uint256 withdrawableAmount = 
-            IAcryptoSPool(zapDepositer.pool()).get_virtual_price() * amountOnFarm / 1e18;
+        uint256 withdrawableAmount = (IAcryptoSPool(zapDepositer.pool())
+            .get_virtual_price() * amountOnFarm) / 1e18;
 
-        console.log("amountOnFarm %s, lp to tokens %s, withdrawableAmount %s", 
+        console.log(
+            "amountOnFarm %s, lp to tokens %s, withdrawableAmount %s",
             amountOnFarm,
-            IAcryptoSPool(zapDepositer.pool()).get_virtual_price() * amountOnFarm / 1e18,
+            (IAcryptoSPool(zapDepositer.pool()).get_virtual_price() *
+                amountOnFarm) / 1e18,
             withdrawableAmount
         );
         // notice: if withdraw all then actual received amount could possibly be slighlty different
