@@ -3,10 +3,18 @@ pragma solidity ^0.8.0;
 
 
 interface IStrategy {
+
+
+    /// @notice Deposit token to strategy and immediately pushing funds on farms.
     function deposit(uint256 amount) external;
+
+    /// @notice Withdraw tokens from strategy.
+    /// @dev Max withdrawable amount is returned by totalTokens.
     function withdraw(uint256 amount) external returns (uint256 amountWithdrawn);
+
+    /// @notice Harvest rewards and reinvest them. 
     function compound() external;
 
-    // function netAssetValue() external view returns (uint256);
+    /// @notice Approximated amount of token on the strategy.
     function totalTokens() external view returns (uint256);
 }

@@ -98,7 +98,7 @@ contract StrategyRouter is Ownable {
             uint256 depositAmount = strategies[i].depositedAmount;
             totalDepositUniform += toUniform(depositAmount, address(strategyAssetAddress));
             strategies[i].depositedAmount = 0;
-            strategyAssetAddress.approve(
+            strategyAssetAddress.transfer(
                 strategies[i].strategyAddress,
                 depositAmount
             );
@@ -761,7 +761,7 @@ contract StrategyRouter is Ownable {
                 );
             }
 
-            IERC20(strategyAssetAddress).approve(
+            IERC20(strategyAssetAddress).transfer(
                 strategies[i].strategyAddress,
                 depositAmount
             );
@@ -825,7 +825,7 @@ contract StrategyRouter is Ownable {
                 console.log("after swap: %s,", depositAmount);
             }
 
-            IERC20(strategyAssetAddress).approve(
+            IERC20(strategyAssetAddress).transfer(
                 strategies[i].strategyAddress,
                 depositAmount
             );

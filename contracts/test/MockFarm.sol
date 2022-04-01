@@ -18,7 +18,6 @@ contract MockFarm {
   }
 
   function deposit(uint256 amount) external {
-    ERC20(asset).transferFrom(msg.sender, address(this), amount);
     balance += amount;
   }
 

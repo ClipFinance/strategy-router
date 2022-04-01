@@ -10,7 +10,7 @@ parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
-describe("Test walletOfOwner function", function () {
+describe("Test ReceiptNFT.walletOfOwner function", function () {
   it("Snapshot evm", async function () {
     snapshotId = await provider.send("evm_snapshot");
   });

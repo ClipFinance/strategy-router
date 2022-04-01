@@ -30,26 +30,22 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
     function deposit(uint256 amount) external override onlyOwner {
         console.log("block.number", block.number);
-        ust.transferFrom(msg.sender, address(this), amount);
 
-        // TODO: maybe there is a better way to add liquidity
-        //       for example use reserves proportions to split amount
-        //       and maybe use balanceOf(this)
+        // TODO: maybe there is a better way to swap tokens so that liquidity will be added at (almost) perfect ratio
 
-        // ust balance in case there is dust left from previous deposits
-        uint256 ustAmount = amount / 2;
-        // this is ust amount to be swapped to busd
-        uint256 busdAmount = amount - ustAmount;
-
+        uint256 busdAmount = amount / 2;
         Exchange exchange = strategyRouter.exchange();
         ust.transfer(address(exchange), busdAmount);
-        console.log("ustAmount %s, busdAmount", ustAmount, busdAmount);
+        console.log("busdAmount", busdAmount);
         busdAmount = exchange.swapRouted(busdAmount, ust, busd, address(this));
         console.log(
             "ust %s busd %s",
             ust.balanceOf(address(this)),
             busd.balanceOf(address(this))
         );
+
+        uint256 ustAmount = ust.balanceOf(address(this));
+        busdAmount = busd.balanceOf(address(this));
 
         ust.approve(address(biswapRouter), ustAmount);
         busd.approve(address(biswapRouter), busdAmount);
@@ -69,8 +65,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
         farm.deposit(poolId, liquidity);
         // TODO: what to do with leftover? send back? but then StrategyRouter should be aware that we did that
-        ust.transfer(msg.sender, ust.balanceOf(address(this)));
-        busd.transfer(msg.sender, busd.balanceOf(address(this)));
+        // ust.transfer(msg.sender, ust.balanceOf(address(this)));
+        // busd.transfer(msg.sender, busd.balanceOf(address(this)));
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
 
         // (uint256 amount, , , ) = farm.userInfo(address(lpToken), address(this));
@@ -145,21 +141,24 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         console.log("block.number", block.number);
         if (bswAmount > 0) {
-            (uint256 receivedUst, uint256 receivedBusd) = sellBSW(bswAmount);
-            ust.approve(address(biswapRouter), receivedUst);
-            busd.approve(address(biswapRouter), receivedBusd);
+            sellBSW(bswAmount);
+            uint256 balanceUst = ust.balanceOf(address(this)); 
+            uint256 balanceBusd = busd.balanceOf(address(this)); 
+            
+            ust.approve(address(biswapRouter), balanceUst);
+            busd.approve(address(biswapRouter), balanceBusd);
 
             console.log(
                 "receivedUst %s receivedBusd %s",
-                receivedUst,
-                receivedBusd
+                balanceUst,
+                balanceBusd 
             );
             (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
                 .addLiquidity(
                     address(ust),
                     address(busd),
-                    receivedUst,
-                    receivedBusd,
+                    balanceUst,
+                    balanceBusd,
                     0,
                     0,
                     address(this),
@@ -183,8 +182,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
             // TODO: how leftover liquidity should be treated??
             //       probably swap to ust and send back to strategy router
-            ust.transfer(msg.sender, ust.balanceOf(address(this)));
-            busd.transfer(msg.sender, busd.balanceOf(address(this)));
+            // ust.transfer(msg.sender, ust.balanceOf(address(this)));
+            // busd.transfer(msg.sender, busd.balanceOf(address(this)));
         }
     }
 

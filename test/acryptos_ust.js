@@ -100,7 +100,7 @@ describe("Test acryptos_ust strategy", function () {
   it("Test deposit function", async function () {
 
     let amountDeposit = parseUst("100");
-    await ust.approve(strategy.address, amountDeposit)
+    await ust.transfer(strategy.address, amountDeposit)
     await strategy.deposit(amountDeposit);
 
     expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
@@ -184,7 +184,7 @@ describe("Test acryptos_ust strategy", function () {
   it("Test compound", async function () {
 
     let amountDeposit = parseUst("10000");
-    await ust.approve(strategy.address, amountDeposit)
+    await ust.transfer(strategy.address, amountDeposit)
     await strategy.deposit(amountDeposit);
 
     // skip blocks
@@ -238,7 +238,7 @@ describe("Test acryptos_ust strategy", function () {
       
       // deposit
       let amountDeposit = parseUst("100");
-      await ust.approve(strategy.address, amountDeposit)
+      await ust.transfer(strategy.address, amountDeposit)
       await strategy.deposit(amountDeposit);
   
       // skip blocks

@@ -31,7 +31,6 @@ contract acryptos_ust is Ownable, IStrategy {
     function deposit(uint256 amount) external override onlyOwner {
         console.log("--- deposit call, block: %s", block.number);
 
-        ust.transferFrom(msg.sender, address(this), amount);
         ust.approve(address(zapDepositer), amount);
         uint256[5] memory amounts;
         amounts[0] = amount;

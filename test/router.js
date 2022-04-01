@@ -10,7 +10,7 @@ parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
-describe("Test StrategyRouter contract", function () {
+describe("Test StrategyRouter with fake strategies", function () {
 
   it("Snapshot evm", async function () {
     snapshotId = await provider.send("evm_snapshot");

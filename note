@@ -24,6 +24,8 @@ BUSD: https://bscscan.com/token/0xe9e7cea3dedca5984780bafc599bd69add087d56
 PAIR (and lp token): https://bscscan.com/address/0x9E78183dD68cC81bc330CAF3eF84D354a58303B5
 farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
 
+* good swap path for bsw to ust and busd is bsw -> weth on biswap router, then weth to ust on pancake, that's due to liquidity amounts
+
     - deposit -
 1) approve router to transfer UST & busd
 2) call add_liquidity on router and receive LP tokens
