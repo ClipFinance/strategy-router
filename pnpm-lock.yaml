@@ -11,14 +11,14 @@ specifiers:
   dotenv: ^16.0.0
   ethereum-waffle: ^3.0.0
   ethers: ^5.0.0
-  hardhat: ^2.9.1
+  hardhat: ^2.9.2
   hardhat-gas-reporter: ^1.0.8
   typescript: ^4.5.5
 
 devDependencies:
   '@chainlink/contracts': 0.4.0
-  '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.9.1
-  '@nomiclabs/hardhat-waffle': 2.0.2_4ca91ff0ae3287f0c062953da8932f13
+  '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.9.2
+  '@nomiclabs/hardhat-waffle': 2.0.2_f803c1ebf8003fe764dfa9b9bba2fca8
   '@openzeppelin/contracts': 4.5.0
   '@uniswap/v2-core': 1.0.1
   '@uniswap/v2-periphery': 1.1.0-beta.0
@@ -26,8 +26,8 @@ devDependencies:
   dotenv: 16.0.0
   ethereum-waffle: 3.4.0_typescript@4.5.5
   ethers: 5.5.4
-  hardhat: 2.9.1
-  hardhat-gas-reporter: 1.0.8_hardhat@2.9.1
+  hardhat: 2.9.2
+  hardhat-gas-reporter: 1.0.8_hardhat@2.9.2
   typescript: 4.5.5
 
 packages:
@@ -529,17 +529,17 @@ packages:
       tweetnacl-util: 0.15.1
     dev: true
 
-  /@nomiclabs/hardhat-ethers/2.0.5_ethers@5.5.4+hardhat@2.9.1:
+  /@nomiclabs/hardhat-ethers/2.0.5_ethers@5.5.4+hardhat@2.9.2:
     resolution: {integrity: sha512-A2gZAGB6kUvLx+kzM92HKuUF33F1FSe90L0TmkXkT2Hh0OKRpvWZURUSU2nghD2yC4DzfEZ3DftfeHGvZ2JTUw==}
     peerDependencies:
       ethers: ^5.0.0
       hardhat: ^2.0.0
     dependencies:
       ethers: 5.5.4
-      hardhat: 2.9.1
+      hardhat: 2.9.2
     dev: true
 
-  /@nomiclabs/hardhat-waffle/2.0.2_4ca91ff0ae3287f0c062953da8932f13:
+  /@nomiclabs/hardhat-waffle/2.0.2_f803c1ebf8003fe764dfa9b9bba2fca8:
     resolution: {integrity: sha512-dnhry6Bj15O8L3pBksTuXfr4RAUIf+BxRxWJXiu+ioSawcQaOcNF4gfMxn6ik0auk3zrsAJLA6m9vqe87d4xvg==}
     peerDependencies:
       '@nomiclabs/hardhat-ethers': ^2.0.0
@@ -547,12 +547,12 @@ packages:
       ethers: ^5.0.0
       hardhat: ^2.0.0
     dependencies:
-      '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.9.1
+      '@nomiclabs/hardhat-ethers': 2.0.5_ethers@5.5.4+hardhat@2.9.2
       '@types/sinon-chai': 3.2.8
       '@types/web3': 1.0.19
       ethereum-waffle: 3.4.0_typescript@4.5.5
       ethers: 5.5.4
-      hardhat: 2.9.1
+      hardhat: 2.9.2
     dev: true
 
   /@openzeppelin/contracts/4.5.0:
@@ -3860,21 +3860,21 @@ packages:
       har-schema: 2.0.0
     dev: true
 
-  /hardhat-gas-reporter/1.0.8_hardhat@2.9.1:
+  /hardhat-gas-reporter/1.0.8_hardhat@2.9.2:
     resolution: {integrity: sha512-1G5thPnnhcwLHsFnl759f2tgElvuwdkzxlI65fC9PwxYMEe9cmjkVAAWTf3/3y8uP6ZSPiUiOW8PgZnykmZe0g==}
     peerDependencies:
       hardhat: ^2.0.2
     dependencies:
       array-uniq: 1.0.3
       eth-gas-reporter: 0.2.24
-      hardhat: 2.9.1
+      hardhat: 2.9.2
       sha1: 1.1.1
     transitivePeerDependencies:
       - '@codechecks/client'
     dev: true
 
-  /hardhat/2.9.1:
-    resolution: {integrity: sha512-q0AkYXV7R26RzyAkHGQRhhQjk508pseVvH3wSwZwwPUbvA+tjl0vMIrD4aFQDonRXkrnXX4+5KglozzjSd0//Q==}
+  /hardhat/2.9.2:
+    resolution: {integrity: sha512-elTcUK1EdFverWinybQ+DoJzsM6sgiHUYs0ZYNNXMfESty6ESHiFSwkfJsC88/q09vmIz6YVaMh73BYnYd+feQ==}
     engines: {node: ^12.0.0 || ^14.0.0 || ^16.0.0}
     hasBin: true
     dependencies:

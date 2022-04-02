@@ -45,7 +45,8 @@ contract StrategyRouter is Ownable {
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     uint256 public constant INITIAL_SHARES = 1e6;
-    address private constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    address private constant DEAD_ADDRESS =
+        0x000000000000000000000000000000000000dEaD;
 
     uint256 public cycleDuration = 1 days;
     uint256 public currentCycleId;
@@ -71,7 +72,6 @@ contract StrategyRouter is Ownable {
 
     /// @notice Deposit money collected in the batching to strategies.
     function depositToStrategies() external OnlyEOW {
-
         if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp)
             revert TooEarly(cycles[currentCycleId].startAt + cycleDuration);
         if (cycles[currentCycleId].totalInBatch < minUsdPerCycle)
@@ -100,7 +100,10 @@ contract StrategyRouter is Ownable {
                 depositAmount
             );
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
-            totalDepositUniform += toUniform(depositAmount, address(strategyAssetAddress));
+            totalDepositUniform += toUniform(
+                depositAmount,
+                address(strategyAssetAddress)
+            );
             console.log("depositAmount %s leftoverAmount %s", depositAmount);
             strategies[i].batchingBalance = 0;
         }
@@ -147,7 +150,6 @@ contract StrategyRouter is Ownable {
                 cycles[currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
-
 
         // start new cycle
         currentCycleId++;
@@ -284,8 +286,7 @@ contract StrategyRouter is Ownable {
             revert NotReceiptOwner();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
-        if (percent > 1e4 || percent == 0)
-            revert BadPercent();
+        if (percent > 1e4 || percent == 0) revert BadPercent();
 
         console.log("~~~~~~~~~~~~~ withdrawByReceipt ~~~~~~~~~~~~~");
 
@@ -371,13 +372,13 @@ contract StrategyRouter is Ownable {
             address strategyAssetAddress = strategies[i].depositAssetAddress;
             uint256 withdrawAmount = (withdrawAmountTotal * balances[i]) /
                 strategiesBalance;
-            console.log( "withdrawAmount", withdrawAmount);
+            console.log("withdrawAmount", withdrawAmount);
             withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
-            console.log( "withdrawAmount", withdrawAmount);
+            console.log("withdrawAmount", withdrawAmount);
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
             );
-            console.log( "withdrawAmount", withdrawAmount);
+            console.log("withdrawAmount", withdrawAmount);
 
             console.log(
                 "iterate strategy",
@@ -386,7 +387,7 @@ contract StrategyRouter is Ownable {
             );
             console.log(
                 "balances[i] %s strategiesBalance %s",
-                 balances[i],
+                balances[i],
                 strategiesBalance
             );
             if (strategyAssetAddress != withdrawToken) {
@@ -701,9 +702,11 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function removeStrategy(uint256 _strategyId) external onlyOwner {
         console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
-        
+
         StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
-        IStrategy removedStrategy = IStrategy(removedStrategyInfo.strategyAddress);
+        IStrategy removedStrategy = IStrategy(
+            removedStrategyInfo.strategyAddress
+        );
         address _depositTokenAddress = removedStrategyInfo.depositAssetAddress;
 
         uint256 len = strategies.length - 1;
@@ -719,10 +722,9 @@ contract StrategyRouter is Ownable {
                 removedStrategyInfo.strategyAddress
             )
         );
-        // TODO: maybe worth to create withdrawAll function in strategies
+
         // withdraw all from removed strategy
-        uint256 withdrawnAmount = removedStrategy
-            .withdrawAll();
+        uint256 withdrawnAmount = removedStrategy.withdrawAll();
 
         // compound all strategies
         for (uint256 i; i < len; i++) {
@@ -767,74 +769,92 @@ contract StrategyRouter is Ownable {
     /// @param tempAsset Strategies assets will be swapped to this intermediary asset
     ///                  which then will be swapped back into strategies assets according to their weights.
     /// @dev Admin function.
+    // TODO: need to rebalance batching also
     function rebalance(address tempAsset) external onlyOwner {
         console.log("~~~~~~~~~~~~~ rebalance ~~~~~~~~~~~~~");
         uint256 len = strategies.length;
 
-        uint256 totalWithdrawn;
+        (
+            uint256 totalBalance,
+            uint256[] memory balances
+        ) = viewStrategiesBalance();
+        uint256[] memory toAdd = new uint256[](len);
+        uint256 totalSold;
+        uint256 totalToAdd;
+
         for (uint256 i; i < len; i++) {
-            // compound strategy
-            IStrategy(strategies[i].strategyAddress).compound();
-            // withdraw all tokens
-            uint256 withdrawn = IStrategy(strategies[i].strategyAddress)
-                .withdraw(
-                    IStrategy(strategies[i].strategyAddress).totalTokens()
+            uint256 desiredBalance = (totalBalance *
+                viewStrategyPercentWeight(i)) / 10000;
+            if (desiredBalance > balances[i]) {
+                toAdd[i] = desiredBalance - balances[i];
+                totalToAdd += toAdd[i];
+            } else if (desiredBalance < balances[i]) {
+                address strategyAssetAddress = strategies[i]
+                    .depositAssetAddress;
+                uint256 amountSell = balances[i] - desiredBalance;
+                amountSell = fromUniform(amountSell, strategyAssetAddress);
+                amountSell = IStrategy(strategies[i].strategyAddress).withdraw(
+                    amountSell
                 );
-            // swap strategy asset into tempAsset if they are different
-            address strategyAssetAddress = strategies[i].depositAssetAddress;
-            if (strategyAssetAddress != tempAsset) {
-                IERC20(strategyAssetAddress).transfer(
-                    address(exchange),
-                    withdrawn
-                );
-                withdrawn = exchange.swapRouted(
-                    withdrawn,
-                    IERC20(strategyAssetAddress),
-                    IERC20(tempAsset),
-                    address(this)
-                );
+                if (strategyAssetAddress != tempAsset) {
+                    IERC20(strategyAssetAddress).transfer(
+                        address(exchange),
+                        amountSell
+                    );
+                    amountSell = exchange.swapRouted(
+                        amountSell,
+                        IERC20(strategyAssetAddress),
+                        IERC20(tempAsset),
+                        address(this)
+                    );
+                }
+                totalSold += amountSell;
             }
-            console.log("withdrawn: %s,", withdrawn);
-            totalWithdrawn += withdrawn;
         }
 
         for (uint256 i; i < len; i++) {
-            uint256 depositAmount = (totalWithdrawn *
-                viewStrategyPercentWeight(i)) / 10000;
+            // TODO: probably need check that toAdd is greater than some value (such as 1 ust)
+            // similar should be in first loop, because swaps may fail due to too low amounts
+            if(toAdd[i] == 0) continue;
+            uint256 curAdd = (totalSold * toAdd[i]) / totalToAdd;
+            console.log(
+                "curAdd: %s totalSold: %s toAdd[i]: %s",
+                totalToAdd,
+                totalSold,
+                toAdd[i]
+            );
             address strategyAssetAddress = strategies[i].depositAssetAddress;
 
             if (strategyAssetAddress != tempAsset) {
-                IERC20(tempAsset).transfer(address(exchange), depositAmount);
+                IERC20(tempAsset).transfer(address(exchange), curAdd);
 
-                console.log("before swap: %s,", depositAmount);
-                depositAmount = exchange.swapRouted(
-                    depositAmount,
+                console.log("before swap: %s,", curAdd);
+                curAdd = exchange.swapRouted(
+                    curAdd,
                     IERC20(tempAsset),
                     IERC20(strategyAssetAddress),
                     address(this)
                 );
-                console.log("after swap: %s,", depositAmount);
+                console.log("after swap: %s,", curAdd);
             }
 
             IERC20(strategyAssetAddress).transfer(
                 strategies[i].strategyAddress,
-                depositAmount
+                curAdd
             );
-            console.log(
-                "depositAmount: %s, totalWithdrawn %s, token: %s",
-                depositAmount,
-                totalWithdrawn,
-                ERC20(strategyAssetAddress).name()
-            );
+            console.log("token: %s", ERC20(strategyAssetAddress).name());
             console.log(
                 "balance: %s, weight %s",
                 ERC20(strategyAssetAddress).balanceOf(address(this)),
                 viewStrategyPercentWeight(i)
             );
-            IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
+            IStrategy(strategies[i].strategyAddress).deposit(curAdd);
         }
         // console.log("balanceAfterDeposit %s, balanceAfterCompound %s, pps before math", balanceAfterDeposit, balanceAfterCompound, cycles[currentCycleId].pricePerShare);
-        // console.log("final pps %s, shares %s", cycles[currentCycleId].pricePerShare, sharesToken.totalSupply());
+        console.log(
+            "temp token at the end %s",
+            ERC20(tempAsset).balanceOf(address(this))
+        );
     }
 
     // function withdrawFromStrategy(uint256 _strategyId) external onlyOwner {}

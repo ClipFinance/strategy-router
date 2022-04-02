@@ -351,7 +351,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.updateStrategy(0, 1000);
     await router.updateStrategy(1, 9000);
 
-    await router.rebalance(ust.address);
+    await router.rebalance(usdc.address);
 
     let {balances, totalBalance} = await router.viewStrategiesBalance();
     // strategies should be balanced as 10% and 90%
