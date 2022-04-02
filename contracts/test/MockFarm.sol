@@ -7,37 +7,42 @@ import "../interfaces/IStrategy.sol";
 
 /// profitable farm gives x2 on each compound
 contract MockFarm {
+    address private asset;
+    uint256 private balance;
+    uint256 private mockProfitPercent;
 
-  address private asset;
-  uint256 private balance;
-  uint256 private mockProfitPercent;
+    constructor(address _asset, uint256 _mockProfitPercent) {
+        asset = _asset;
+        mockProfitPercent = _mockProfitPercent;
+    }
 
-  constructor(address _asset, uint256 _mockProfitPercent) {
-    asset = _asset;
-    mockProfitPercent = _mockProfitPercent;
-  }
+    function deposit(uint256 amount) external {
+        balance += amount;
+    }
 
-  function deposit(uint256 amount) external {
-    balance += amount;
-  }
+    function withdraw(uint256 amount)
+        external
+        returns (uint256 amountWithdrawn)
+    {
+        ERC20(asset).transfer(msg.sender, amount);
+        balance -= amount;
+        return amount;
+    }
 
-  function withdraw(uint256 amount) 
-    external 
-    returns (uint256 amountWithdrawn) 
-  {
-    ERC20(asset).transfer(msg.sender, amount);
-    balance -= amount;
-    return amount;
-  }
+    function compound() external {
+        balance = (balance * mockProfitPercent) / 10000;
+    }
 
-  function compound() external {
-      balance = balance * mockProfitPercent / 10000;
-  }
+    // function netAssetValue() external view returns (uint256) { }
 
-  // function netAssetValue() external view returns (uint256) { }
-  
-  function totalTokens() external view returns (uint256) {
-    return balance;
-  }
+    function totalTokens() external view returns (uint256) {
+        return balance;
+    }
 
+    function withdrawAll() external returns (uint256 amountWithdrawn) {
+        if (balance > 0) {
+            amountWithdrawn = balance;
+            ERC20(asset).transfer(msg.sender, amountWithdrawn);
+        }
+    }
 }

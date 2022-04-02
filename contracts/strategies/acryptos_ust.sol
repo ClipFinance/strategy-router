@@ -22,18 +22,24 @@ contract acryptos_ust is Ownable, IStrategy {
     IACryptoSFarmV4 public farm =
         IACryptoSFarmV4(0x0C3B6058c25205345b8f22578B27065a7506671C);
 
+    uint256 private UST_ID = 0;
+
     StrategyRouter public strategyRouter;
 
     constructor(StrategyRouter _strategyRouter) {
         strategyRouter = _strategyRouter;
     }
 
-    function deposit(uint256 amount) external override onlyOwner {
+    function deposit(uint256 amount)
+        external
+        override
+        onlyOwner
+    {
         console.log("--- deposit call, block: %s", block.number);
 
         ust.approve(address(zapDepositer), amount);
         uint256[5] memory amounts;
-        amounts[0] = amount;
+        amounts[UST_ID] = amount;
         zapDepositer.add_liquidity(amounts, 0);
         // console.log(
         //     "acryptos farm balance after add_liquidity %s",
@@ -67,13 +73,17 @@ contract acryptos_ust is Ownable, IStrategy {
         lpToken.approve(address(zapDepositer), lpAmount);
         amountWithdrawn = zapDepositer.remove_liquidity_one_coin(
             lpAmount,
-            0,
+            int128(int256(UST_ID)),
             0
         );
         ust.transfer(msg.sender, amountWithdrawn);
     }
 
-    function compound() external override onlyOwner {
+    function compound()
+        external
+        override
+        onlyOwner
+    {
         console.log("--- compound call");
         farm.harvest(address(lpToken));
         uint256 acsiAmount = acsi.balanceOf(address(this));
@@ -93,7 +103,7 @@ contract acryptos_ust is Ownable, IStrategy {
             // deposit UST to farm
             ust.approve(address(zapDepositer), amount);
             uint256[5] memory amounts;
-            amounts[0] = amount;
+            amounts[UST_ID] = amount;
             zapDepositer.add_liquidity(amounts, 0);
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(farm), lpAmount);
@@ -125,5 +135,29 @@ contract acryptos_ust is Ownable, IStrategy {
         );
         // notice: if withdraw all then actual received amount could possibly be slighlty different
         return withdrawableAmount;
+    }
+
+     function withdrawAll()
+        external
+        override
+        onlyOwner
+        returns (uint256 amountWithdrawn)
+    {
+        console.log("--- withdrawAll call");
+
+        (uint256 amount, , , ) = farm.userInfo(address(lpToken), address(this));
+        console.log("withdraw amount LPs %s", amount);
+        if(amount > 0) {
+            farm.withdraw(address(lpToken), amount);
+            uint256 lpAmount = lpToken.balanceOf(address(this));
+            lpToken.approve(address(zapDepositer), lpAmount);
+             zapDepositer.remove_liquidity_one_coin(
+                lpAmount,
+                int128(int256(UST_ID)),
+                0
+            );
+        }
+        amountWithdrawn = ust.balanceOf(address(this));
+        ust.transfer(msg.sender, amountWithdrawn);
     }
 }

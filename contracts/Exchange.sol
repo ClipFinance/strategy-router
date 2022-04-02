@@ -47,7 +47,6 @@ contract Exchange is Ownable {
         IAcryptoSPool(0x99c92765EfC472a9709Ced86310D64C4573c4b77);
 
     constructor() {
-        // add more dex types and coin ids when new strategies added, if needed
         _setDexType(UST, BUSD, DexType.acryptosACS4UST);
         _setCoinId(address(poolACS4UST), UST, UST_ID);
         _setCoinId(address(poolACS4UST), BUSD, BUSD_ID);
@@ -66,6 +65,8 @@ contract Exchange is Ownable {
             : (tokenB, tokenA);
     }
 
+    /// @notice Choose how pair of tokens should be swapped.
+    /// @notice Order of tokens doesn't matter.
     function setDexType(
         address tokenA,
         address tokenB,
@@ -83,6 +84,7 @@ contract Exchange is Ownable {
         dexTypes[token0][token1] = _type;
     }
 
+    /// @notice Save coin ids of tokens from acryptos pool.
     function setCoinId(
         address _poolACS4UST,
         address token,

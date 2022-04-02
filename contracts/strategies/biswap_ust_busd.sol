@@ -23,15 +23,22 @@ contract biswap_ust_busd is Ownable, IStrategy {
         IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
     StrategyRouter public strategyRouter;
     uint256 public poolId = 18;
+    uint256 public max_leftover_busd = 1 * 10**ERC20(address(busd)).decimals();
+    uint256 public max_leftover_ust = 1 * 10**ERC20(address(ust)).decimals();
 
     constructor(StrategyRouter _strategyRouter) {
         strategyRouter = _strategyRouter;
     }
 
-    function deposit(uint256 amount) external override onlyOwner {
+    function deposit(uint256 amount)
+        external
+        override
+        onlyOwner
+    {
         console.log("block.number", block.number);
 
         // TODO: maybe there is a better way to swap tokens so that liquidity will be added at (almost) perfect ratio
+        fix_leftover(amount);
 
         uint256 busdAmount = amount / 2;
         Exchange exchange = strategyRouter.exchange();
@@ -64,8 +71,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
         lpToken.approve(address(farm), liquidity);
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
         farm.deposit(poolId, liquidity);
-        // TODO: what to do with leftover? send back? but then StrategyRouter should be aware that we did that
-        // ust.transfer(msg.sender, ust.balanceOf(address(this)));
+
+        // after add_liquidity some tokens leftover, send them back to StrategyRouter
         // busd.transfer(msg.sender, busd.balanceOf(address(this)));
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
 
@@ -133,7 +140,11 @@ contract biswap_ust_busd is Ownable, IStrategy {
         amountWithdrawn = amountA;
     }
 
-    function compound() external override onlyOwner {
+    function compound()
+        external
+        override
+        onlyOwner
+    {
         farm.withdraw(poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
@@ -141,17 +152,18 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         console.log("block.number", block.number);
         if (bswAmount > 0) {
+            fix_leftover(0);
             sellBSW(bswAmount);
-            uint256 balanceUst = ust.balanceOf(address(this)); 
-            uint256 balanceBusd = busd.balanceOf(address(this)); 
-            
+            uint256 balanceUst = ust.balanceOf(address(this));
+            uint256 balanceBusd = busd.balanceOf(address(this));
+
             ust.approve(address(biswapRouter), balanceUst);
             busd.approve(address(biswapRouter), balanceBusd);
 
             console.log(
                 "receivedUst %s receivedBusd %s",
                 balanceUst,
-                balanceBusd 
+                balanceBusd
             );
             (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
                 .addLiquidity(
@@ -175,15 +187,26 @@ contract biswap_ust_busd is Ownable, IStrategy {
             );
             farm.deposit(poolId, lpAmount);
             console.log(
-                "biswap farm compound leftover ust %s busd %s",
+                "biswap farm compound leftover ust %s busd %s, max_leftover_busd %s",
                 ust.balanceOf(address(this)),
-                busd.balanceOf(address(this))
+                busd.balanceOf(address(this)),
+                max_leftover_busd
             );
+        }
+    }
 
-            // TODO: how leftover liquidity should be treated??
-            //       probably swap to ust and send back to strategy router
-            // ust.transfer(msg.sender, ust.balanceOf(address(this)));
-            // busd.transfer(msg.sender, busd.balanceOf(address(this)));
+    /// @dev Once leftover amounts reach predefined value they'll be reinvested.
+    function fix_leftover(uint256 amoungIgnore) public {
+        Exchange exchange = strategyRouter.exchange();
+        uint256 busdAmount = busd.balanceOf(address(this));
+        uint256 ustAmount = ust.balanceOf(address(this)) - amoungIgnore;
+        if (busdAmount > max_leftover_busd) {
+            exchange.swapRouted(busdAmount / 2, busd, ust, address(this));
+            console.log("fix_leftover busd %s", busdAmount);
+        }
+        if (ustAmount > max_leftover_ust) {
+            exchange.swapRouted(ustAmount / 2, ust, busd, address(this));
+            console.log("fix_leftover ust %s", ustAmount);
         }
     }
 
@@ -232,7 +255,44 @@ contract biswap_ust_busd is Ownable, IStrategy {
         receivedBusd = exchange.swapRouted(busdPart, bsw, busd, address(this));
     }
 
-    function min(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        z = x < y ? x : y;
+    function withdrawAll()
+        external
+        override
+        onlyOwner
+        returns (uint256 amountWithdrawn)
+    {
+        console.log("--- withdrawAll call");
+
+        (uint256 amount, ) = farm.userInfo(poolId, address(this));
+        console.log("withdraw amount LPs %s", amount);
+        if(amount > 0) {
+            farm.withdraw(poolId, amount);
+            uint256 lpAmount = lpToken.balanceOf(address(this));
+            lpToken.approve(address(biswapRouter), lpAmount);
+            (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
+                address(ust),
+                address(busd),
+                lpToken.balanceOf(address(this)),
+                0,
+                0,
+                address(this),
+                block.timestamp
+            );
+        }
+
+        uint256 amountUst = ust.balanceOf(address(this));
+        uint256 amountBusd = busd.balanceOf(address(this));
+
+        console.log("ust balance %s busd %s", amountUst, amountBusd);
+        if(amountBusd > 0) {
+            Exchange exchange = strategyRouter.exchange();
+            busd.transfer(address(exchange), amountBusd);
+            amountUst += exchange.swapRouted(amountBusd, busd, ust, address(this));
+        }
+        // console.log("amountA %s amountB %s", amountA, amountB);
+        if(amountUst > 0) {
+            ust.transfer(msg.sender, amountUst);
+            amountWithdrawn = amountUst;
+        }
     }
 }

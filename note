@@ -1,5 +1,3 @@
-TODO: find out how to deal with dust on strategy after adding liquidity
-TODO: restrict to withdraw admin initial deposit, it should be locked
 
 --------- exchange contract with routing --------- 
 1) Needs a function to route swap through predefined dex such as pancakeswap or acryptos, maybe some other in future.
@@ -24,7 +22,7 @@ BUSD: https://bscscan.com/token/0xe9e7cea3dedca5984780bafc599bd69add087d56
 PAIR (and lp token): https://bscscan.com/address/0x9E78183dD68cC81bc330CAF3eF84D354a58303B5
 farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
 
-* good swap path for bsw to ust and busd is bsw -> weth on biswap router, then weth to ust on pancake, that's due to liquidity amounts
+* consider to use swap path for bsw to ust and busd to be bsw -> weth on biswap router, then weth to ust on pancake, that's due to liquidity amounts
 
     - deposit -
 1) approve router to transfer UST & busd
@@ -32,7 +30,7 @@ farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
 
 3) approve farm to transfer BSW LP tokens
 4) call function on farm: deposit(uint256 _pid, uint256 _amount)
-    but first, need to find pid for our lp token though
+    (_pid should be 18)
 
     - harvest and reinvest -
 5) harvest BSW tokens by call to withdraw(uint256 _pid, uint256 _amount) need to pass _amount 0 to harvest

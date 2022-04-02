@@ -34,13 +34,13 @@ contract StrategyRouter is Ownable {
         address strategyAddress;
         address depositAssetAddress;
         uint256 weight;
-        uint256 depositedAmount;
+        uint256 batchingBalance;
     }
 
     struct Cycle {
         uint256 startAt;
         uint256 pricePerShare;
-        uint256 depositedAmount;
+        uint256 totalInBatch;
     }
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -71,12 +71,11 @@ contract StrategyRouter is Ownable {
 
     /// @notice Deposit money collected in the batching to strategies.
     function depositToStrategies() external OnlyEOW {
-        // TODO: add adminInitialDeposit function
 
         if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp)
             revert TooEarly(cycles[currentCycleId].startAt + cycleDuration);
-        if (cycles[currentCycleId].depositedAmount < minUsdPerCycle)
-            revert NotEnoughInBatching(cycles[currentCycleId].depositedAmount);
+        if (cycles[currentCycleId].totalInBatch < minUsdPerCycle)
+            revert NotEnoughInBatching(cycles[currentCycleId].totalInBatch);
 
         console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
 
@@ -95,15 +94,15 @@ contract StrategyRouter is Ownable {
                 strategies[i].depositAssetAddress
             );
 
-            uint256 depositAmount = strategies[i].depositedAmount;
-            totalDepositUniform += toUniform(depositAmount, address(strategyAssetAddress));
-            strategies[i].depositedAmount = 0;
+            uint256 depositAmount = strategies[i].batchingBalance;
             strategyAssetAddress.transfer(
                 strategies[i].strategyAddress,
                 depositAmount
             );
-            console.log("depositAmount", depositAmount);
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
+            totalDepositUniform += toUniform(depositAmount, address(strategyAssetAddress));
+            console.log("depositAmount %s leftoverAmount %s", depositAmount);
+            strategies[i].batchingBalance = 0;
         }
 
         // get total strategies balance after deposit
@@ -163,13 +162,6 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
-
-        // get balance after compound
-        (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
-
-        cycles[currentCycleId].pricePerShare =
-            balanceAfterCompound /
-            sharesToken.totalSupply();
     }
 
     /// @dev Returns list of supported stablecoins.
@@ -235,8 +227,8 @@ contract StrategyRouter is Ownable {
             // uint256 balance = ERC20(strategyAssetAddress).balanceOf(
             //     address(this)
             // );
-            // depositedAmount is in token decimals
-            uint256 balance = strategies[i].depositedAmount;
+            // batchingBalance is in token decimals
+            uint256 balance = strategies[i].batchingBalance;
             balance = toUniform(balance, strategyAssetAddress);
             balances[i] = balance;
             totalBalance += balance;
@@ -464,7 +456,7 @@ contract StrategyRouter is Ownable {
                 amountWithdraw,
                 balances[i]
             );
-            strategies[i].depositedAmount -= amountWithdraw;
+            strategies[i].batchingBalance -= amountWithdraw;
             // swap strategies tokens to withdraw token
             if (strategyAssetAddress != withdrawToken) {
                 IERC20(strategyAssetAddress).transfer(
@@ -480,7 +472,7 @@ contract StrategyRouter is Ownable {
             }
             amountToTransfer += amountWithdraw;
         }
-        cycles[currentCycleId].depositedAmount -= amount;
+        cycles[currentCycleId].totalInBatch -= amount;
 
         console.log(
             "withdraw token balance %s, total withdraw %s",
@@ -622,7 +614,7 @@ contract StrategyRouter is Ownable {
                 );
             }
 
-            strategies[i].depositedAmount += depositAmount;
+            strategies[i].batchingBalance += depositAmount;
             totalDepositAmount += changeDecimals(
                 depositAmount,
                 ERC20(strategyAssetAddress).decimals(),
@@ -639,7 +631,7 @@ contract StrategyRouter is Ownable {
         // console.log(depositAmount , oracle.scalePrice(price, priceDecimals, 18) , ERC20(strategyAssetAddress).decimals());
         // console.log(depositAmount * oracle.scalePrice(price, priceDecimals, 18) / 10**ERC20(strategyAssetAddress).decimals());
         console.log("totalDepositAmount: %s", totalDepositAmount);
-        cycles[currentCycleId].depositedAmount += totalDepositAmount;
+        cycles[currentCycleId].totalInBatch += totalDepositAmount;
 
         receiptContract.mint(currentCycleId, totalDepositAmount, msg.sender);
     }
@@ -688,7 +680,7 @@ contract StrategyRouter is Ownable {
                 strategyAddress: _strategyAddress,
                 depositAssetAddress: _depositAssetAddress,
                 weight: _weight,
-                depositedAmount: 0
+                batchingBalance: 0
             })
         );
     }
@@ -730,8 +722,7 @@ contract StrategyRouter is Ownable {
         // TODO: maybe worth to create withdrawAll function in strategies
         // withdraw all from removed strategy
         uint256 withdrawnAmount = removedStrategy
-            .withdraw(removedStrategy.totalTokens());
-
+            .withdrawAll();
 
         // compound all strategies
         for (uint256 i; i < len; i++) {

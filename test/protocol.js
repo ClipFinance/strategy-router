@@ -265,15 +265,12 @@ describe("Test StrategyRouter with two real strategies", function () {
     // should've withdrawn all (excpet admin), so verify that
 
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
-
-    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Farms should be empty on withdraw all multiple times", async function () {
@@ -294,15 +291,12 @@ describe("Test StrategyRouter with two real strategies", function () {
     }
 
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
-
-    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Remove strategy", async function () {
@@ -341,15 +335,12 @@ describe("Test StrategyRouter with two real strategies", function () {
 
 
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
-
-    expect(await ust.balanceOf(strategyAcryptos.address)).to.be.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.equal(0);
   });
 
   it("Test rebalance function", async function () {
