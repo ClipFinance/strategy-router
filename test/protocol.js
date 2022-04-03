@@ -360,57 +360,76 @@ describe("Test StrategyRouter with two real strategies", function () {
     // console.log("strategies balance", await router.viewStrategiesBalance());
   });
 
-  // it("Scenario", async function () {
+  it("Scenario", async function () {
 
-    //////////
-    // // user deposit
-    // await router.depositToBatch(ust.address, parseUst("100"));
-    // // await router.depositToBatch(ust.address, parseUsdc("100"));
+    ////////
+    // user deposit
+    await router.depositToBatch(ust.address, parseUst("100000"));
+    await router.depositToBatch(ust.address, parseUst("100000"));
+    // deposit to strategies
+    await skipCycleTime();
+    // await provider.send("evm_increaseTime", [CYCLE_DURATION]);
+    // await provider.send("evm_mine");
+    await router.depositToStrategies();
+
+    // user deposit
+    await router.depositToBatch(ust.address, parseUst("100"));
+    await router.depositToBatch(ust.address, parseUsdc("100"));
     // // deposit to strategies
-    // await skipCycleTime();
-    // await router.depositToStrategies();
+    await skipCycleTime();
+    await router.depositToStrategies();
 
-    // // user deposit
-    // // await router.depositToBatch(ust.address, parseUst("100"));
-    // // await router.depositToBatch(ust.address, parseUsdc("100"));
-    // // // deposit to strategies
-    // // await skipCycleTime();
-    // // await router.depositToStrategies();
+    let receipts = await receiptContract.walletOfOwner(owner.address);
+    console.log(receipts);
+    // withdraw by receipt
+    let oldBalance = await ust.balanceOf(owner.address);
+    await router.withdrawByReceipt(10, ust.address, 10000);
+    let newBalance = await ust.balanceOf(owner.address);
+    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
 
-    // // simulate growth on farm
-    // await ust.transfer(farm.address, await ust.balanceOf(farm.address));
+    oldBalance = await ust.balanceOf(owner.address);
+    await router.withdrawByReceipt(11, ust.address, 10000);
+    newBalance = await ust.balanceOf(owner.address);
+    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
 
-    // let receipts = await receiptContract.walletOfOwner(owner.address);
-    // console.log(receipts);
-    // // withdraw by receipt
-    // await router.withdrawByReceipt(3, ust.address, 0);
-    // await router.withdrawByReceipt(4, ust.address, 0);
+    // unlock shares and withdraw tokens by shares
+    await router.unlockSharesFromNFT(12);
+    let sharesUnlocked = await sharesToken.balanceOf(owner.address);
+    console.log("sharesUnlocked", sharesUnlocked);
 
-    // // convert receipts to shares and withdraw using shares
-    // await router.unlockSharesFromNFT(5);
-    // let sharesUnlocked = await sharesToken.balanceOf(owner.address);
-    // console.log("sharesUnlocked", sharesUnlocked);
-    // await router.withdrawShares(sharesUnlocked, ust.address);
+    oldBalance = await ust.balanceOf(owner.address);
+    await router.withdrawShares(sharesUnlocked, ust.address);
+    newBalance = await ust.balanceOf(owner.address);
+    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
 
-    // await router.unlockSharesFromNFT(6);
-    // sharesUnlocked = await sharesToken.balanceOf(owner.address);
-    // console.log("sharesUnlocked", sharesUnlocked);
-    // await router.withdrawShares(sharesUnlocked, ust.address);
+    await router.unlockSharesFromNFT(13);
+    sharesUnlocked = await sharesToken.balanceOf(owner.address);
+    console.log("sharesUnlocked", sharesUnlocked);
+    oldBalance = await ust.balanceOf(owner.address);
+    await router.withdrawShares(sharesUnlocked, ust.address);
+    newBalance = await ust.balanceOf(owner.address);
+    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
+    // TODO: after each withdraw the admin's initial amount getting down...
+    // initially it was 99... but here its become 98!
+    // It can be seen even better by looking at output of the previous test block (with loop)
+    // as on every iteration initial balance getting down by 0.01 or so...
+    // TODO: there is 1 share left on contract... probably related to the bug described above
+    console.log("strategies balance", await router.viewStrategiesBalance());
+    console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
+    console.log("strategyAcryptos ust %s", await ust.balanceOf(strategyAcryptos.address));
 
-    // console.log("strategies balance", await router.viewStrategiesBalance());
+    receipts = await receiptContract.walletOfOwner(owner.address);
+    console.log(receipts);
 
-  //   expect(await ust.balanceOf(farm.address)).to.equal(0);
-  //   expect(await ust.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-  //   expect(await ust.balanceOf(router.address)).to.equal(0);
-  //   expect(await ust.balanceOf(router.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
+    expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
+    expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
-  //   expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-  //   expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-  //   expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-  //   expect(await ust.balanceOf(farmUnprofitable.address)).to.be.within(0, 3e3);
-  //   expect(await ust.balanceOf(farm.address)).to.be.within(0, 10);
-  // });
+  });
 
 });
 
