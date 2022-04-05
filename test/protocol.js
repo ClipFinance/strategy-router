@@ -30,6 +30,11 @@ describe("Test StrategyRouter with two real strategies", function () {
       "0x10ED43C718714eb63d5aA57B78B54704E256024E"
     );
 
+    // ~~~~~~~~~~~ GET BUSD ON MAINNET ~~~~~~~~~~~ 
+
+    BUSD = "0xe9e7cea3dedca5984780bafc599bd69add087d56";
+    busd = await ethers.getContractAt("ERC20", BUSD);
+
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
 
     UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
@@ -95,6 +100,8 @@ describe("Test StrategyRouter with two real strategies", function () {
       "Exchange",
       await router.exchange()
     );
+
+    await router.setCycleDuration(60 * 60 * 24 * 30);
     CYCLE_DURATION = Number(await router.cycleDuration());
     INITIAL_SHARES = Number(await router.INITIAL_SHARES());
 
@@ -111,11 +118,11 @@ describe("Test StrategyRouter with two real strategies", function () {
     await strategyAcryptos.deployed();
     await strategyAcryptos.transferOwnership(router.address);
 
-    // lpToken = await strategy.lpToken();
-    // lpToken = await ethers.getContractAt("ERC20", lpToken);
+    lpTokenAcryptos = await strategyAcryptos.lpToken();
+    lpTokenAcryptos = await ethers.getContractAt("ERC20", lpTokenAcryptos);
 
-    // farm = await strategy.farm();
-    // farm = await ethers.getContractAt("IACryptoSFarmV4", farm);
+    farmAcryptos = await strategyAcryptos.farm();
+    farmAcryptos = await ethers.getContractAt("IACryptoSFarmV4", farmAcryptos);
 
     // zapDepositer = await strategy.zapDepositer();
     // zapDepositer = await ethers.getContractAt("IZapDepositer", zapDepositer);
@@ -130,13 +137,13 @@ describe("Test StrategyRouter with two real strategies", function () {
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
 
-    // lpToken = await strategy.lpToken();
-    // lpToken = await ethers.getContractAt("ERC20", lpToken);
+    lpTokenBiswap = await strategyBiswap.lpToken();
+    lpTokenBiswap = await ethers.getContractAt("ERC20", lpTokenBiswap);
 
-    // farm = await strategy.farm();
-    // farm = await ethers.getContractAt("IBiswapFarm", farm);
+    farmBiswap = await strategyBiswap.farm();
+    farmBiswap = await ethers.getContractAt("IBiswapFarm", farmBiswap);
 
-    // poolId = await strategy.poolId();
+    poolIdBiswap = await strategyBiswap.poolId();
 
   });
 
@@ -147,7 +154,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.addStrategy(strategyBiswap.address, ust.address, 5000);
   });
 
-  
+
   it("Admin initial deposit", async function () {
     await ust.approve(router.address, parseUst("1000000"));
 
@@ -158,6 +165,8 @@ describe("Test StrategyRouter with two real strategies", function () {
     await skipCycleTime();
     await router.depositToStrategies();
     await skipCycleTime();
+
+    await logFarmLPs();
 
     expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
   });
@@ -277,6 +286,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     console.log("strategies balance", await router.viewStrategiesBalance());
     
+    await logFarmLPs();
 
     for (let i = 0; i < 5; i++) {
       await router.depositToBatch(ust.address, parseUst("10"));
@@ -284,11 +294,18 @@ describe("Test StrategyRouter with two real strategies", function () {
       await router.depositToStrategies();
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
-      console.log(receipts);
+      // console.log(receipts);
       await router.withdrawByReceipt(receipts[0], ust.address, 10000);
-      
-      console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
+
+      console.log("strategies balance");
+      printStruct(await router.viewStrategiesBalance());
+      await logFarmLPs();
     }
+
+    console.log("strategy router ust %s", await ust.balanceOf(router.address));
+    console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
+    console.log("strategyAcryptos ust %s", await ust.balanceOf(strategyAcryptos.address));
+    console.log("strategyBiswap busd %s", await busd.balanceOf(strategyBiswap.address));
 
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
     expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
@@ -297,6 +314,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+
   });
 
   it("Remove strategy", async function () {
@@ -308,10 +326,10 @@ describe("Test StrategyRouter with two real strategies", function () {
     await skipCycleTime();
     await router.depositToStrategies();
     console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
-    
-    // deploy new farm
+
+    // deploy new acryptos farm
     const Farm = await ethers.getContractFactory("acryptos_ust");
-    farm2 = await Farm.deploy(router.address);
+    farm2 = strategyBiswap = await Farm.deploy(router.address);
     await farm2.deployed();
     await farm2.transferOwnership(router.address);
 
@@ -346,6 +364,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Test rebalance function", async function () {
 
     // console.log("strategies balance", await router.viewStrategiesBalance());
+    await logFarmLPs();
 
     // deposit to strategies
     await router.updateStrategy(0, 1000);
@@ -353,11 +372,14 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     await router.rebalance(usdc.address);
 
-    let {balances, totalBalance} = await router.viewStrategiesBalance();
+    let { balances, totalBalance } = await router.viewStrategiesBalance();
     // strategies should be balanced as 10% and 90%
     expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
     expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
-    // console.log("strategies balance", await router.viewStrategiesBalance());
+    console.log("strategies balance");
+    printStruct(await router.viewStrategiesBalance());
+
+    await logFarmLPs();
   });
 
   it("Scenario", async function () {
@@ -380,7 +402,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToStrategies();
 
     let receipts = await receiptContract.walletOfOwner(owner.address);
-    console.log(receipts);
+    console.log("owner receipts", receipts);
     // withdraw by receipt
     let oldBalance = await ust.balanceOf(owner.address);
     await router.withdrawByReceipt(10, ust.address, 10000);
@@ -414,12 +436,16 @@ describe("Test StrategyRouter with two real strategies", function () {
     // It can be seen even better by looking at output of the previous test block (with loop)
     // as on every iteration initial balance getting down by 0.01 or so...
     // TODO: there is 1 share left on contract... probably related to the bug described above
-    console.log("strategies balance", await router.viewStrategiesBalance());
+    console.log("strategies balance");
+    printStruct(await router.viewStrategiesBalance());
     console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
     console.log("strategyAcryptos ust %s", await ust.balanceOf(strategyAcryptos.address));
+    console.log("strategyBiswap busd %s", await busd.balanceOf(strategyBiswap.address));
 
     receipts = await receiptContract.walletOfOwner(owner.address);
-    console.log(receipts);
+    console.log("owner receipts", receipts);
+
+    await logFarmLPs();
 
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
     expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
@@ -434,6 +460,12 @@ describe("Test StrategyRouter with two real strategies", function () {
 });
 
 
+async function logFarmLPs() {
+    userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
+    console.log("acryptos farm lp tokens %s", userInfo.amount);
+    userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
+    console.log("biswap farm lp tokens %s", userInfo.amount);
+}
 async function skipCycleTime() {
   await provider.send("evm_increaseTime", [CYCLE_DURATION]);
   await provider.send("evm_mine");

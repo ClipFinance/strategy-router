@@ -1,3 +1,4 @@
+TODO: in compound asci amount seem to be always 0
 --------- rebalance function --------- 
 # this algorythm should swap only necessary amounts to tempAsset instead of swapping whole balance of each strategy
  

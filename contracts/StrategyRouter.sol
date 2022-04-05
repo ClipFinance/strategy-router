@@ -70,7 +70,10 @@ contract StrategyRouter is Ownable {
 
     // Universal Functions
 
-    /// @notice Deposit money collected in the batching to strategies.
+    /// @notice Deposit money collected in the batching into strategies.
+    /// @notice Callable by anyone when `cycleDuration` seconds has been passed and 
+    ///         batch has reached `minUsdPerCycle` amount of coins.
+    /// @dev Only callable by user wallets.
     function depositToStrategies() external OnlyEOW {
         if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp)
             revert TooEarly(cycles[currentCycleId].startAt + cycleDuration);
@@ -407,12 +410,14 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice User withdraw usd from batching.
-    /// @notice On partial withdraw user amount noted in receipt is updated.
+    /// @notice On partial withdraw amount noted in receipt is updated.
     /// @notice Receipt is burned when withdrawing whole amount.
     /// @param receiptId Receipt NFT id.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param amount Amount to withdraw, put 0 to withdraw all. Must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Cycle noted in receipt must match current cycle.
+    /// @param amount Amount to withdraw. Max amount to withdraw is noted in NFT, 
+    ///        passing greater than that or 0 will choose maximum noted in NFT.
+    /// @dev Cycle noted in receipt must match current cycle (i.e. not closed).
+    /// @dev Only callable by user wallets.
     function withdrawFromBatching(
         uint256 receiptId,
         address withdrawToken,
@@ -570,10 +575,12 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Deposit stablecoin into batching.
-    /// @notice Tokens not sended to strategies immediately,
-    ///         but swapped to strategies stables according to weights.
+    /// @notice Tokens immediately swapped to stablecoins required by strategies
+    ///         according to their weights, but not deposited into strategies.
     /// @param _depositTokenAddress Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.
+    /// @dev User should approve `_amount` of `_depositTokenAddress` to this contract.
+    /// @dev Only callable by user wallets.
     function depositToBatch(address _depositTokenAddress, uint256 _amount)
         external
         OnlyEOW

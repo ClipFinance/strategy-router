@@ -434,7 +434,13 @@ describe("Test StrategyRouter with fake strategies", function () {
 async function skipCycleTime() {
   await provider.send("evm_increaseTime", [CYCLE_DURATION]);
   await provider.send("evm_mine");
+
+  // skip blocks (div by 3 coz its bsc simulation)
+  let MONTH_BLOCKS = CYCLE_DURATION / 3;
+  MONTH_BLOCKS = "0x" + MONTH_BLOCKS.toString(16);
+  await hre.network.provider.send("hardhat_mine", [MONTH_BLOCKS]);
 }
+
 function printStruct(struct) {
   let obj = struct;
   let out = {};
