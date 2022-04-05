@@ -1,81 +1,112 @@
-## Development
+### Development
 Clone this repo, rename `.env.example` file to `.env` and fill the variables inside.  
 Install dependencies via npm or pnpm `pnpm i`.  
 To run all the tests `npx hardhat test`.  
 To run specific test file `npx hardhat test test/router.js`.  
 
-## General idea
-Users deposit their stablecoins together into strategies that should generate profits. Then any user can withdraw his share of the pool at any time including his profits. User interacts with strategy router which interacts with the strategies. The strategies is a smart contracts that are implementing different farming strategies.
+### Definitions
+*Strategy* - is a smart contract that implements certain farming strategy with stablecoins, such as staking biswap LP tokens.  
+*Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
+*Batching balance* - each strategy have its own dedicated "batching" balance. This is where user funds appear after his deposit. Coins hold here before depositing them into related strategy. This is fully managed by Strategy Router.  
+*Strategy balance* - amount returned by calling `totalTokens()` on the strategy, simply saying how much stablecoin you can withdraw from that strategy.  
+*To close the cycle* - is when batching balances are deposited into related strategies, new cycle starts with 0 coins in batching. Cycle duration and minimum batching balance conditions should met to close the cycle.  
+*Share Tokens or shares* - Utility ERC20 token to denote user share in the pool.  
+*Receipt NFT or receipt* - Utility ERC721 token.
 
-### Details and user workflow
-Users deposit their stablecoins in the common batch and receive 'Receipt NFTs' that notes how much user just deposited and in which cycle.  
+### General idea
+Users depositing their stablecoins together into strategy router, collected funds are periodically deposited into strategies for profits. User can withdraw his share of the pool including his profits at anytime.
 
-Then after defined amount of time has been passed and batch has reached required amount of coins, anyone can close the cycle and deposit batch into strategies which is done by special function. Now coins in strategies should generate profit. This process repeats and thus infinite number of cycles can be.  
+### User workflow
+User choose one of the supported stablecoins to deposit in the batching and receive "Receipt NFT" that notes how much user just deposited and in which cycle.  
 
-User can use Receipt NFT to withdraw part or whole amount noted in that NFT directly from the batch if that cycle still not closed. If closed then he can convert his NFTs into ERC20 tokens called 'ST' (Shares Token) representing his share, these STs can be used to withdraw stablecoins from strategies inlcuding profits. Since strategies work with different coins, a user can choose one of the supported stablecoins to receive after withdraw.  
+Then after cycle duration has been passed and batching has reached certain amount of coins, anyone can close the cycle and deposit batch into strategies which is done by special function. Now coins in strategies should generate profit. This whole process repeats and thus infinite number of cycles can be.  
+
+User can withdraw part or whole amount noted in his Receipt NFT directly from the batching if that cycle is not closed. If closed then he can convert his NFTs into Share Tokens, these shares can be used to withdraw stablecoins from strategies inlcuding profits. User can choose one of the supported stablecoins to receive after withdraw.  
 
 There is also function to compound all the strategies which can be called anytime by anyone, and it is also called when depositing batch into strategies.
+
+## Technical description
+#### Commonly used functions and formulas  
+
+`toUniform()` is a function that transforms amount of stablecoin to have 18 decimals (which is called here *uniform*).  
+`fromUniform()` is a function that transforms amount with 18 uniform decimals to have stablecoin decimals.  
+  
+Here is example of such transformation, let's say that `100` has 2 decimals and denotes 1 token, if we transform it to 4 decimals it will become `10000` which is still 1 token.
+
+---
+`B` is sum of the batching balances with uniform decimals:  
+``` 
+B = toUniform(x₁) + toUniform(x₂) + ...
+```
+Where `xᵢ` is batching balance of the strategy `i`.
+
+---
+`S` is sum of the strategies balances with uniform decimals.  
+```
+S = toUniform(x₁) + toUniform(x₂) + ...
+```
+Where `xᵢ` is balance of the strategy `i`, which is acquired by calling `totalTokens()` on that strategy.
+
 ## Contracts
+
 ### StrategyRouter
 
 #### depositToBatch function
 
-Only callable by user wallets, not by contracts.  
-Allows user to deposit stablecoins into batch. The batch balance of the strategy is not generating profits.  
-Coins are immediately swapped into stablecoins that are required by strategies, division between strategies is done according to weights of the strategies.  
-Mints ReceiptNFT to user, that NFT holds information about amount deposited and current cycle index.  
+Only callable by user wallets.  
+Allows user to deposit stablecoin into batch.   
+Deposited stablecoin immediately swapped into stablecoins that are required by strategies.  
+Mints ReceiptNFT to user each time.
 
 __Implementation details.__   
-Deposited amount is split into multiple parts that match strategies weight and their stablecoin:  
+Amount deposited by user is split according to strategies weight:  
 ```
 xᵢ = d * wᵢ / 10000
+xᵢ = trySwap(xᵢ)
 ```
-Where `i` is strategy index,  
 `d` is amount of stablecoin deposited by user,  
-`w` is weight of the strategy in percents (in basis points where 100% is 10000),  
-`x` is amount to be deposited into the batch balance of the strategy `i`,  
+`wᵢ` is weight of the strategy `i` in percents (in basis points where 100% is 10000),  
+`xᵢ` is amount to be deposited into the batch balance of the strategy `i`,  
+`trySwap()` is a function that will swap `xᵢ` of deposited token if it doesn't match token required by the strategy.
 
-If user deposit token doesn't match token required by strategy `i`, then amount `xᵢ` is swapped to strategy's token:
-```
-xᵢ = swap(xᵢ)
-```
-Then `xᵢ` is added to the batch balance of the strategy `i`.  
+After that we increase batch balance of the strategy by amount `xᵢ`.  
 
-Now we will note sum of `xᵢ` as a single amount in the Receipt NFT:
+Now we calculate amount to store in NFT:
 ```
-y = f(x₁) + f(x₂) ...
+y = toUniform(x₁) + toUniform(x₂) + ...
 ```
-Where `f()` is function that transforms `xᵢ` to have 18 decimals instead of strategy `i` stablecoin decimals,  
-`y` is result of the summation which will be noted in the NFT.
+Where `y` is sum with uniform decimals which will be stored in the NFT.  
 
-Finally current cycle index is saved in the same NFT.
+Finally current cycle index is stored in the same NFT.
+
+We will need those values from NFT later in the withdraw functions.
 
 #### withdrawFromBatching function
 Allows user to withdraw stablecoins from the batching.  
-User chooses what stablecoin he will receive, so that different coins from batch will be swapped to that stablecoin first.  
+User chooses supported stablecoin to receive, internally other stablecoins will be swapped to chosen one.  
 On partial withdraw amount noted in receipt is updated.  
-Receipt is burned when withdrawing whole amount noted in it.  
-Cycle noted in receipt must match current cycle (i.e. not closed).  
+Receipt is burned when withdrawing whole amount.  
+Cycle id noted in receipt must match current cycle (i.e. not closed).  
 User provides Receipt NFT and amount to withdraw, max amount is what noted in NFT.  
-If amount is 0 or greater than maximum, then max amount is choosen.  
+If amount is 0 or greater than maximum, then max amount is chosen.  
 
 __Implementation details.__   
-Withdraw amount first being split into multiple parts matching balances of the batch:
+Withdraw amount first being split according to batching balances:
 ```
-yᵢ = f(w * bᵢ / t)
+yᵢ = fromUniform(w * bᵢ / B)
 ```
-Where `w` is amount provided by user to withdraw (18 decimals),  
-`bᵢ` is batching balance of the strategy `i` (18 decimals),  
-`t` is total batching balance of all strategies (18 decimals),  
-`f()` is function to transform from uniform 18 decimals to decimals of stablecoin of the strategy `i`.  
+Where `w` is amount provided by user to withdraw (uniform decimals),  
+`bᵢ` is batching balance of the strategy `i` (uniform decimals),  
+`B` is sum of the batching balances with uniform decimals,  
+`yᵢ` is amount to withdraw from batching balance of strategy `i` (stablecoin decimals)
 
-Now batching balance of strategy `i` is decreased by `yᵢ`.  
+Next, batching balance of strategy `i` is decreased by `yᵢ`.  
 
 Then we calculate final amount to transfer to user:
 ```
-x = s(y₁) + s(y₂) ...
+x = trySwap(y₁) + trySwap(y₂) ...
 ```
-Where `s()` is function that swaps coins to match user coin if they are different,  
+Where `trySwap()` is function that swaps batching coins to match stablecoin requested by user if they are different,  
 `x` is amount of token to transfer to user.
 
 
@@ -86,63 +117,44 @@ Only callable by user wallets.
 
 __Implementation details.__  
 1) We compound all the strategies by calling their `compound()` function.  
-2) Deposit batching balances into strategies via their `deposit()` function, so that funds from the batch can now generate profits.  
-	1) There is high chance that strategy will have some leftover amount, bacause for example add_liquidity functions on DEXes often not use 100% of the provided tokens. So this dust left on strategy is currently handled by strategy itself, the dust is used on next call to compound or deposit.
-3) Calculate price per share in current cycle and save result.
-	1) Current implementation requires "admin initial deposit" to spwan initial shares.
-    2) Calculation of price per share is different if its initial deposit or not.
-4) Mint new Share Tokens.
-5) Close the cycle by incrementing cycle index.
+2) Deposit batching balances into strategies via their `deposit()` function.  
+	1) There is high chance that strategy will have some leftover amount, bacause for example add_liquidity functions on uniswap often not take 100% of the provided tokens. So this dust left on strategy is currently handled by strategy itself, the dust is used on next call to compound or deposit.
+3) Calculate price per share for current cycle and store it.
+	1) Current implementation requires "initial deposit" to spwan initial shares, and it is unwithdrawable.
+    2) Calculation of price per share is different if it is initial deposit or not.
+4) Mint new shares to the strategy router itself.
+5) Increment cycles counter.
 ---
-Lets assume that we doing __initial deposit__.  
-First we deposit batching balances and get total batching balance as a single value:  
+Lets say we are doing __initial deposit__.  
+We deposit batching balances into strategies, then we mint initial amount of shares and calculate price per share:
 ```
-t = f(x₁) + f(x₂) ...
+p = B / s
 ```
-Where `xᵢ` is batching balance of the strategy `i`,  
-`f()` is function that transforms `xᵢ` to have 18 decimals instead of strategy `i` stablecoin decimals,  
-`t` is sum of batching balances.
+Where `s` is initial amount of shares,  
+`p` is price per share,  
+`B` is sum of the batching balances with uniform decimals, before deposit into strategies.  
+Price per share is stored for current cycle and cycles counter incremented.  
 
-Now we mint predefined amount of shares and calculate price per share:
-```
-p = t / s
-```
-Where `s` is total shares exists (only initial predefined amount),  
-`p` is price per share for current cycle,  
-`t` is sum of batching balances (see above).
-Price per share is saved for current cycle and that cycle is closed.  
 ---
 Lets say now we do __non-initial deposit__.  
-First we compound strategies and get total *strategies* balance after compound by calling their `totalTokens()` function.  
+The price per share is calculated this way:
 ```
-t = f(x₁) + f(x₂) ...
-```
-Where `xᵢ` is balance of the strategy `i`, which is result of calling `totalTokens()` on the strategy,  
-`f()` is function that transforms `xᵢ` to have 18 decimals instead of strategy `i` stablecoin decimals,  
-`t` is sum of strategies balances.
-
-Then price per share is calculated:
-```
-p = t / s
+p = S / s
 ```
 Where `s` is total shares exists,  
-`p` is price per share for current cycle,  
-`t` is sum of strategies balances (see above).
+`p` is price per share,  
+`S` is sum of the strategies balances with uniform decimals, after compound but before batch deposit.  
 
-To see how much new shares to mint we use total batching balance, calculation for that total value is the same as in "initial deposit":
+Calculate amount of new shares and mint them:
 ```
-b = f(x₁) + f(x₂) ...
-```
-Where `xᵢ` is batching balance of the strategy `i`,  
-`f()` is function that transforms `xᵢ` to have 18 decimals instead of strategy `i` stablecoin decimals,  
-`b` is sum of batching balances.
-
-Get amount of new shares and mint them:
-```
-n = b / p
+n = B / p
 ```
 Where `n` is amount of new shares,  
-`b` is total batching balance,
-`p` is just updated price per share.
+`B` is sum of the batching balances with uniform decimals, before deposit into strategies,  
+`p` is just calculated price per share.  
 
-Price per share is saved for current cycle, new shares minted and that cycle is closed.  
+Price per share is stored for current cycle, new shares minted and cycles counter incremented.  
+
+#### withdrawByReceipt function
+todo: need add explanation
+todo: need add explanation with formulas for each strategy
