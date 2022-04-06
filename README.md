@@ -156,5 +156,38 @@ Where `n` is amount of new shares,
 Price per share is stored for current cycle, new shares minted and cycles counter incremented.  
 
 #### withdrawByReceipt function
-todo: need add explanation
+User withdraw usd from strategies via receipt NFT.  
+User provides percent of total shares from that receipt to withdraw (this param is subject to change).   
+On partial withdraw leftover shares transfered to user.  
+Receipt is burned anyway.  
+Cycle noted in receipt must be closed.  
+Only callable by user wallets.    
+
+__Implementation details.__  
+1) Calculate user shares using amount noted in receipt and price per share from cycle id noted in receipt.
+```
+u = a / p
+```
+Where `u` is total shares unlocked from that receipt,  
+`a` is amount noted in receipt (better to remember how that amount was calculated in deposit function),  
+`p` is 	price per share of the cycle noted in receipt.
+
+2) Calculate current price per share and multiply by user shares from step 1
+```
+w = S / s
+```
+Where `w` is total amount to withdraw including profits,  
+`S` is sum of the strategies balances with uniform decimals,  
+`s` is total shares exists.  
+
+3) Split that withdraw amount between strategies
+```
+yᵢ = fromUniform(w * xᵢ / S)
+```
+Where `yᵢ` is amount to withdraw from strategy `i` (stablecoin decimals),  
+`xᵢ` is balance of strategy `i`,  
+`S` is sum of the strategies balances with uniform decimals.  
+
+4) Last step is to just swap tokens received from strategies to the token requested by user and transfer to him.
+
 todo: need add explanation with formulas for each strategy

@@ -280,6 +280,7 @@ contract StrategyRouter is Ownable {
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     /// @param percent Percent of shares from receipt to withdraw.
     /// @dev Cycle noted in receipt must be closed.
+    /// @dev Only callable by user wallets.  
     // TODO: percent param maybe need to be changed, for example to token amount or shares amount
     function withdrawByReceipt(
         uint256 receiptId,
