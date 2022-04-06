@@ -201,38 +201,43 @@ contract biswap_ust_busd is Ownable, IStrategy {
         uint256 busdAmount = busd.balanceOf(address(this));
         uint256 ustAmount = ust.balanceOf(address(this)) - amoungIgnore;
         if (busdAmount > max_leftover_busd) {
-            exchange.swapRouted(busdAmount / 2, busd, ust, address(this));
             console.log("fix_leftover busd %s", busdAmount);
+            busd.transfer(address(exchange), busdAmount);
+            exchange.swapRouted(busdAmount / 2, busd, ust, address(this));
         }
         if (ustAmount > max_leftover_ust) {
-            exchange.swapRouted(ustAmount / 2, ust, busd, address(this));
             console.log("fix_leftover ust %s", ustAmount);
+            ust.transfer(address(exchange), ustAmount);
+            exchange.swapRouted(ustAmount / 2, ust, busd, address(this));
         }
     }
 
     function totalTokens() external view override returns (uint256) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
+
+        uint256 _totalSupply = lpToken.totalSupply();
+        // this formula is from remove_liquidity -> burn of uniswapV2pair
         uint256 amountUst = (liquidity * ust.balanceOf(address(lpToken))) /
-            lpToken.totalSupply();
+            _totalSupply;
         uint256 amountBusd = (liquidity * busd.balanceOf(address(lpToken))) /
-            lpToken.totalSupply();
+            _totalSupply;
 
-        // convert amountBusd to amount of ust
-        address token0 = IUniswapV2Pair(address(lpToken)).token0();
+        if (amountBusd > 0) {
 
-        (uint112 _reserve0, uint112 _reserve1, ) = IUniswapV2Pair(
-            address(lpToken)
-        ).getReserves();
+            address token0 = IUniswapV2Pair(address(lpToken)).token0();
 
-        (_reserve0, _reserve1) = token0 == address(busd)
-            ? (_reserve0, _reserve1)
-            : (_reserve1, _reserve0);
+            (uint112 _reserve0, uint112 _reserve1, ) = IUniswapV2Pair(
+                address(lpToken)
+            ).getReserves();
 
-        // sum ust part and busd part that was converted to ust
-        // we use biswap router to quote because liquidity removal is done by it
-        if (amountBusd > 0)
+            (_reserve0, _reserve1) = token0 == address(busd)
+                ? (_reserve0, _reserve1)
+                : (_reserve1, _reserve0);
+
+            // convert amountBusd to amount of ust
             amountUst += biswapRouter.quote(amountBusd, _reserve0, _reserve1);
+        }
 
         return amountUst;
     }
