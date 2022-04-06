@@ -3,12 +3,13 @@
 * [General idea](#general-idea)
 * [User workflow](#user-workflow)
 * [Technical description](#technical-description)
-	* [Commonly used functions and formulas](#commonly-used-functions-and-formulas)
-	* [StrategyRouter](#strategyrouter)
+	* [StrategyRouter contract](#strategyrouter)
+		* [Commonly used functions and formulas](#commonly-used-functions-and-formulas)
 		* [depositToBatch function](#deposittobatch-function)
 		* [withdrawFromBatching function](#withdrawfrombatching-function)
 		* [depositToStrategies function](#deposittostrategies-function)
 		* [withdrawByReceipt function](#withdrawbyreceipt-function)
+	* [Strategies general interface](#strategies-general-interface)
 
 ---
 ### Development
@@ -39,9 +40,10 @@ User can withdraw part or whole amount noted in his Receipt NFT directly from th
 There is also function to compound all the strategies which can be called anytime by anyone, and it is also called when depositing batch into strategies.
 
 ## Technical description
+### StrategyRouter contract
 #### Commonly used functions and formulas  
 
-`toUniform()` is a function that transforms amount of stablecoin to have 18 decimals (which is called here *uniform*).  
+`toUniform()` is a function that transforms amount of stablecoin to have 18 decimals (which is called here *uniform*, can also be called *normalized*).  
 `fromUniform()` is a function that transforms amount with 18 uniform decimals to have stablecoin decimals.  
   
 Here is example of such transformation, let's say that `100` has 2 decimals and denotes 1 token, if we transform it to 4 decimals it will become `10000` which is still 1 token.
@@ -59,10 +61,6 @@ Where `xᵢ` is batching balance of the strategy `i`.
 S = toUniform(x₁) + toUniform(x₂) + ...
 ```
 Where `xᵢ` is balance of the strategy `i`, which is acquired by calling `totalTokens()` on that strategy.
-
-## Contracts
-
-### StrategyRouter
 
 #### depositToBatch function
 
@@ -203,11 +201,38 @@ Where `yᵢ` is amount to withdraw from strategy `i` (stablecoin decimals),
 
 4) Last step is to just swap tokens received from strategies to the token requested by user and transfer to him.
 
+### Strategies general interface
+That interface is subject to changes.  
+In current version of the interface its assumed that owner of the Strategies is StrategyRouter. All the functions of Strategies is only callable by the owner of the contract.  
+There is no approvals between strategies and the router, tokens transferred immediately to or from strategy when calling deposit or withdraw functions respectively.
+    
+#### function deposit(uint256 amount) external;
+Deposit amount of coins to strategy.    
+Deposited amount immediately invested according to concrete yield farming strategy.  
+
+#### function withdraw(uint256 amount) external returns (uint256 amountWithdrawn);
+
+Withdraw amount of tokens from strategy.   
+Tokens immediately transfered to StrategyRouter.  
+Returns amount withdrawn.  
+ 
+#### function compound() external;
+Harvest rewards and re-invest them according to concrete yield farming strategy.
+ 
+#### function totalTokens() external view returns (uint256);
+Returns total amount of tokens withdrawable from the strategy, you should be able to pass that amount to `withdraw` function and have no errors.    
+It shouldn't account for fees or slippage, unless there is no way in withdraw function to have calculations without accounting for fees or slippage.    
+
+#### function withdrawAll() external returns (uint256 amountWithdrawn);
+Withdraw all tokens from strategy.  
+Currently used only when removing strategy from StrategyRouter.  
+Returns amount withdrawn.  
+
 ### Strategy - ACRYPTOS ust
 Useful links:  
 
-https://app.acryptos.com/contracts/  
-https://docs.acryptos.com/  
+Acryptos dapp: https://app.acryptos.com/contracts/  
+Acryptos docs: https://docs.acryptos.com/  
 
 ACS4UST pool: https://bscscan.com/address/0x99c92765EfC472a9709Ced86310D64C4573c4b77  
 ACS4UST zap depositer: https://bscscan.com/address/0x4deb9077e49269b04fd0324461af301dd6600216  
@@ -217,66 +242,41 @@ ACSI: https://bscscan.com/address/0x5b17b4d5e4009b5c43e3e3d63a5229f794cba389
 ACryptoSFarmV4: https://bscscan.com/address/0x0c3b6058c25205345b8f22578b27065a7506671c  
 
 ---
-    - deposit -
+#### deposit function
+Its assumed that coins already transfered to Strategy before the function is called, amount transfered is passed as argument.  
+
 1) approve zap depositer contract to transfer UST
-2) call add_liquidity on depositer and receive LP tokens
-
-    function description:
-    @notice Wrap underlying coins and deposit them in the pool
-    @param amounts List of amounts of underlying coins to deposit
-    @param min_mint_amount Minimum amount of LP tokens to mint from the deposit
-    @return Amount of LP tokens received by depositing
-
+2) call add_liquidity on zap depositer and receive LP tokens
 3) approve ACryptoSFarmV4 to transfer ACS4UST LP tokens
-4) call function on ACryptoSFarmV4: deposit(address _lpToken, uint256 _amount)
+4) call deposit on ACryptoSFarmV4 farm to deposit LPs
 
-    - harvest and reinvest -
-5) harvest ACS tokens by call to harvest(address _lpToken)
-6) swap ACS to more UST
-7) go to step 1
+#### withdraw function
 
-    - withdraw -
-8) call withdraw(address _lpToken, uint256 _amount) _amount is lp tokens
-    strategy-router will provide us amount of usd to withdraw, we need to get its value in LP tokens so we can proceed. because withdraw function takes lp token amount as argument. use calc_token_amount for that.
-9) swap LP tokens to ust and transfer
+1) StrategyRouter will provide us amount of coins to withdraw. Please see explanation of the router's `withdrawByReceipt` function to understand how that amount is calculated.
+2) Convert that amount to LP tokens amount:
+```
+l = w * 1e18 / p
+```
+Where `p` is virtual price, returned by pool's `get_virtual_price()` function,  
+`l` is amount of LPs to withdraw from the farm,  
+`w` is withdraw amount of UST tokens passed by StrategyRouter,  
+`1e18` is pool's price normalization.
+3) Withdraw LPs from farm, then call pool's `remove_liquidity_one_coin` to remove liquidity and receive UST tokens.
+4) Transfer received UST back to StrategyRouter.
 
-    - totalTokens function -
-1) use calc_token_amount function, it says it accounts for slippage but not fees, which should be ok
+#### compound function
+1) Harvest ACSI tokens by call to harvest(address _lpToken)
+2) If received rewards, then swap those ACSI for more UST
+3) Reinvest in the same way that deposit function doing it.
 
-* Useful function in pool for calculation profits(as they said in the following doc-comments): 
-    def get_virtual_price() -> uint256:
-    """
-    @notice The current virtual price of the pool LP token
-    @dev Useful for calculating profits
-    @return LP token virtual price normalized to 1e18
-    """
+#### totalTokens function
 
--------
-if totalTokens uses calc_withdraw_one_coin & calc_token_amount which accounts for slippage, then for 1 LP we get number like 1.099 (and for 1.0 usd we would get 0.99 LP) but if instead we use get_virtual_price to convert LP to tokens and vice versa, then we would get amounts without slippage, the question is which method to use. 
-
-if use calc_withdraw_one_coin and calc_token_amount:
-
-user withdraw 100 tokens, 
-use calc_token_amount to convert to LP (accounts for slippage)
-withdrawAmount would be 99.9 LP
-now user got 99.9 and on farm leftover is 0.1 LP
-so from each withdraw there is small leftover ammount.
-
-
-if use get_virtual_price:
-
-user withdraw 100 tokens, 
-use get_virtual_price to convert to LP 
-withdrawAmount would be 100 LP (but can it be bigger such as 101.0? not sure, Curve pool math is quite hard)
-now user got 100 and on farm leftover is 0.0 LP
-
-test: after withdraw all tokens, only withdraw function has math based on virtual price, lefover on farm
-on farm LPs 1425101280499913967, totalTokens 1627105805945261011
-(1.4 LP and 1.6 $)
-
-test: all functions based on get_virtual_price
-on farm LPs 1, totalTokens 1
-
-looks like get_virtual_price approach works better without problems 
-
-* if users deposited 100 + 100, then in withdraw they should not pass 100, it will not work. Instead withdraw amount should rely on totalTokens. This seems to be fine since StrategyRouter is using totalTokens to calculate shares and pps. 
+1) Get amount of LPs in farm
+2) Convert that LP amount to UST amount:
+```
+u = p * l / 1e18
+```
+Where `p` is virtual price, returned by pool's `get_virtual_price()` function,  
+`l` is amount of LPs on farm,  
+`1e18` is pool's price normalization,
+`u` is total amount of UST we can receive if remove all liquidity.
