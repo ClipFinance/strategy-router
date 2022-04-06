@@ -266,6 +266,10 @@ contract StrategyRouter is Ownable {
 
         receiptContract.burn(receiptId);
 
+        receipt.amount = 
+            receipt.amount * 
+            cycles[receipt.cycleId].receivedByStrats /
+            cycles[receipt.cycleId].totalDepositUniform;
         uint256 userShares = receipt.amount /
             cycles[receipt.cycleId].pricePerShare;
         console.log(
