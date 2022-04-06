@@ -1,3 +1,16 @@
+#### Table of contents:
+* [Definitions](#definitions)
+* [General idea](#general-idea)
+* [User workflow](#user-workflow)
+* [Technical description](#technical-description)
+	* [Commonly used functions and formulas](#commonly-used-functions-and-formulas)
+	* [StrategyRouter](#strategyrouter)
+		* [depositToBatch function](#deposittobatch-function)
+		* [withdrawFromBatching function](#withdrawfrombatching-function)
+		* [depositToStrategies function](#deposittostrategies-function)
+		* [withdrawByReceipt function](#withdrawbyreceipt-function)
+
+---
 ### Development
 Clone this repo, rename `.env.example` file to `.env` and fill the variables inside.  
 Install dependencies via npm or pnpm `pnpm i`.  
@@ -8,7 +21,7 @@ To run specific test file `npx hardhat test test/router.js`.
 *Strategy* - is a smart contract that implements certain farming strategy with stablecoins, such as staking biswap LP tokens.  
 *Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
 *Batching balance* - each strategy have its own dedicated "batching" balance. This is where user funds appear after his deposit. Coins hold here before depositing them into related strategy. This is fully managed by Strategy Router.  
-*Strategy balance* - amount returned by calling `totalTokens()` on the strategy, simply saying how much stablecoin you can withdraw from that strategy.  
+*Strategy balance* - amount returned by calling `totalTokens()` on the strategy, simply saying how much stablecoin you can withdraw from that strategy. Not accounting for fee or slippage.  
 *To close the cycle* - is when batching balances are deposited into related strategies, new cycle starts with 0 coins in batching. Cycle duration and minimum batching balance conditions should met to close the cycle.  
 *Share Tokens or shares* - Utility ERC20 token to denote user share in the pool.  
 *Receipt NFT or receipt* - Utility ERC721 token.
@@ -190,4 +203,80 @@ Where `yᵢ` is amount to withdraw from strategy `i` (stablecoin decimals),
 
 4) Last step is to just swap tokens received from strategies to the token requested by user and transfer to him.
 
-todo: need add explanation with formulas for each strategy
+### Strategy - ACRYPTOS ust
+Useful links:  
+
+https://app.acryptos.com/contracts/  
+https://docs.acryptos.com/  
+
+ACS4UST pool: https://bscscan.com/address/0x99c92765EfC472a9709Ced86310D64C4573c4b77  
+ACS4UST zap depositer: https://bscscan.com/address/0x4deb9077e49269b04fd0324461af301dd6600216  
+ACS4UST LP token: https://bscscan.com/address/0xd3debe4a971e4492d0d61ab145468a5b2c23301b  
+UST: https://bscscan.com/address/0x23396cF899Ca06c4472205fC903bDB4de249D6fC  
+ACSI: https://bscscan.com/address/0x5b17b4d5e4009b5c43e3e3d63a5229f794cba389  
+ACryptoSFarmV4: https://bscscan.com/address/0x0c3b6058c25205345b8f22578b27065a7506671c  
+
+---
+    - deposit -
+1) approve zap depositer contract to transfer UST
+2) call add_liquidity on depositer and receive LP tokens
+
+    function description:
+    @notice Wrap underlying coins and deposit them in the pool
+    @param amounts List of amounts of underlying coins to deposit
+    @param min_mint_amount Minimum amount of LP tokens to mint from the deposit
+    @return Amount of LP tokens received by depositing
+
+3) approve ACryptoSFarmV4 to transfer ACS4UST LP tokens
+4) call function on ACryptoSFarmV4: deposit(address _lpToken, uint256 _amount)
+
+    - harvest and reinvest -
+5) harvest ACS tokens by call to harvest(address _lpToken)
+6) swap ACS to more UST
+7) go to step 1
+
+    - withdraw -
+8) call withdraw(address _lpToken, uint256 _amount) _amount is lp tokens
+    strategy-router will provide us amount of usd to withdraw, we need to get its value in LP tokens so we can proceed. because withdraw function takes lp token amount as argument. use calc_token_amount for that.
+9) swap LP tokens to ust and transfer
+
+    - totalTokens function -
+1) use calc_token_amount function, it says it accounts for slippage but not fees, which should be ok
+
+* Useful function in pool for calculation profits(as they said in the following doc-comments): 
+    def get_virtual_price() -> uint256:
+    """
+    @notice The current virtual price of the pool LP token
+    @dev Useful for calculating profits
+    @return LP token virtual price normalized to 1e18
+    """
+
+-------
+if totalTokens uses calc_withdraw_one_coin & calc_token_amount which accounts for slippage, then for 1 LP we get number like 1.099 (and for 1.0 usd we would get 0.99 LP) but if instead we use get_virtual_price to convert LP to tokens and vice versa, then we would get amounts without slippage, the question is which method to use. 
+
+if use calc_withdraw_one_coin and calc_token_amount:
+
+user withdraw 100 tokens, 
+use calc_token_amount to convert to LP (accounts for slippage)
+withdrawAmount would be 99.9 LP
+now user got 99.9 and on farm leftover is 0.1 LP
+so from each withdraw there is small leftover ammount.
+
+
+if use get_virtual_price:
+
+user withdraw 100 tokens, 
+use get_virtual_price to convert to LP 
+withdrawAmount would be 100 LP (but can it be bigger such as 101.0? not sure, Curve pool math is quite hard)
+now user got 100 and on farm leftover is 0.0 LP
+
+test: after withdraw all tokens, only withdraw function has math based on virtual price, lefover on farm
+on farm LPs 1425101280499913967, totalTokens 1627105805945261011
+(1.4 LP and 1.6 $)
+
+test: all functions based on get_virtual_price
+on farm LPs 1, totalTokens 1
+
+looks like get_virtual_price approach works better without problems 
+
+* if users deposited 100 + 100, then in withdraw they should not pass 100, it will not work. Instead withdraw amount should rely on totalTokens. This seems to be fine since StrategyRouter is using totalTokens to calculate shares and pps. 
