@@ -266,13 +266,13 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.withdrawByReceipt(3, ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
 
+    await logFarmLPs();
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("100"),
       parseUniform("1.0")
     );
 
     // should've withdrawn all (excpet admin), so verify that
-
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
     expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));

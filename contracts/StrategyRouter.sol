@@ -41,6 +41,8 @@ contract StrategyRouter is Ownable {
         uint256 startAt;
         uint256 pricePerShare;
         uint256 totalInBatch;
+        uint256 receivedByStrats;
+        uint256 totalDepositUniform;
     }
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -112,7 +114,8 @@ contract StrategyRouter is Ownable {
         }
 
         // get total strategies balance after deposit
-        // (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
+        (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
+        uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
 
         // console.log(
         //     "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math",
@@ -125,7 +128,7 @@ contract StrategyRouter is Ownable {
         if (totalShares == 0) {
             sharesToken.mint(DEAD_ADDRESS, INITIAL_SHARES);
             cycles[currentCycleId].pricePerShare =
-                totalDepositUniform /
+                balanceAfterDeposit /
                 sharesToken.totalSupply();
             console.log(
                 "initial pps %s, shares %s",
@@ -149,12 +152,14 @@ contract StrategyRouter is Ownable {
                 totalDepositUniform,
                 totalDepositUniform / cycles[currentCycleId].pricePerShare
             );
-            uint256 newShares = totalDepositUniform /
+            uint256 newShares = receivedByStrats /
                 cycles[currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
 
         // start new cycle
+        cycles[currentCycleId].receivedByStrats = receivedByStrats;
+        cycles[currentCycleId].totalDepositUniform = totalDepositUniform;
         currentCycleId++;
         cycles[currentCycleId].startAt = block.timestamp;
     }
@@ -303,6 +308,16 @@ contract StrategyRouter is Ownable {
             if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
             receiptContract.burn(receiptId);
 
+            receipt.amount = 
+                receipt.amount * 
+                cycles[receipt.cycleId].receivedByStrats /
+                cycles[receipt.cycleId].totalDepositUniform;
+            console.log(
+                "receipt.amount %s, receivedByStrats %s, totalDepositUniform %s",
+                receipt.amount,
+                cycles[receipt.cycleId].receivedByStrats,
+                cycles[receipt.cycleId].totalDepositUniform
+            );
             uint256 userShares = receipt.amount /
                 cycles[receipt.cycleId].pricePerShare;
             amountWithdrawShares = (userShares * percent) / 1e4;
