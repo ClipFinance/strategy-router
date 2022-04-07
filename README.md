@@ -143,7 +143,10 @@ p = B / s
 ```
 Where `s` is initial amount of shares,  
 `p` is price per share,  
-`B` is sum of the batching balances with uniform decimals, before deposit into strategies.  
+`S` is sum of the strategies balances with uniform decimals, after deposit.  
+
+Amount received by strategies after deposit is saved in cycle info, calculated as difference between strategies balance before and after deposit.  
+Batching balance before deposit is also saved in cycle info.  
 Price per share is stored for current cycle and cycles counter incremented.  
 
 ---
@@ -158,12 +161,14 @@ Where `s` is total shares exists,
 
 Calculate amount of new shares and mint them:
 ```
-n = B / p
+n = D / p
 ```
 Where `n` is amount of new shares,  
-`B` is sum of the batching balances with uniform decimals, before deposit into strategies,  
+`D` is amount received by strategies after deposit, calculated as difference between strategies balance before and after deposit,  
 `p` is just calculated price per share.  
 
+Amount received by strategies after deposit is saved in cycle info, calculated as difference between strategies balance before and after deposit.  
+Batching balance before deposit is also saved in cycle info.  
 Price per share is stored for current cycle, new shares minted and cycles counter incremented.  
 
 #### withdrawByReceipt function
@@ -175,12 +180,19 @@ Cycle noted in receipt must be closed.
 Only callable by user wallets.    
 
 __Implementation details.__  
-1) Calculate user shares using amount noted in receipt and price per share from cycle id noted in receipt.
+1) Calculate user shares using info stored for cycle id that is noted in receipt.
+First adjust amount noted in NFT:
+```
+a = a * R / D;
+```
+Where `R` and `D` are values stored in cycle info after `depositToStrategies` function.  
+`R` is amount received by strategies after deposit,  
+`D` is batching balance that was deposited.  
 ```
 u = a / p
 ```
-Where `u` is total shares unlocked from that receipt,  
-`a` is amount noted in receipt (better to remember how that amount was calculated in deposit function),  
+Where `u` is total shares 'unlocked' from that receipt,  
+`a` is amount noted in receipt (adjusted as above),  
 `p` is 	price per share of the cycle noted in receipt.
 
 2) Calculate current price per share and multiply by user shares from step 1
