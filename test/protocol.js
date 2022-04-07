@@ -447,7 +447,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     await logFarmLPs();
 
-    await router.withdrawShares(1, ust.address);
+    // await router.withdrawShares(1, ust.address);
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
     expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
