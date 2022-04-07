@@ -46,7 +46,7 @@ contract StrategyRouter is Ownable {
     }
 
     uint8 public constant UNIFORM_DECIMALS = 18;
-    uint256 public constant INITIAL_SHARES = 1e6;
+    uint256 public constant INITIAL_SHARES = 1e18;
     address private constant DEAD_ADDRESS =
         0x000000000000000000000000000000000000dEaD;
 

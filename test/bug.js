@@ -5,66 +5,62 @@ const { ethers, waffle } = require("hardhat");
 
 /*
 
-  two farms:
-  
-  1) lps after initial deposit 100 tokens:
-  acryptos farm lp tokens 43768320259730315407
-  biswap farm lp tokens 24806950931606381945
+// HELPER SCRIPT THAT SIMULATES SHARES CALCULATIONS
+// FOR DEBUG PURPOSES
 
-  2) lps after 1 user deposit 100 tokens to strategies and withdraw
-  acryptos farm lp tokens 43752193040957558585 (decreased by 16127218772762624)
-  biswap farm lp tokens 24797807988045708911 (decreased by 9142943560671232)
+var stratsBalance = 0;
+var cycles = []; // { pps, batchBal, received }
+var cycleCounter = 0;
+var shares = 0;
+var INITIAL_SHARES = 10;
+function depToStrats(receipts) {
+    // this can vary (up or down)
+    let stratsBalAfterCompound = stratsBalance;
 
-  only acryptos farm:
+    let batching = receipts.reduce((e,a) => a+e);
+    // this can vary (up or down)
+    let receivedByStrats = batching * 0.9;
+    
+    stratsBalance = stratsBalAfterCompound + receivedByStrats;
+    
+    if(shares == 0) {
+        shares = INITIAL_SHARES;
+        cycles[cycleCounter] = {};
+        cycles[cycleCounter]["pps"] = stratsBalance / shares;
+    } else {
+         cycles[cycleCounter] = {};
+        cycles[cycleCounter]["pps"] = stratsBalAfterCompound / shares;
+        shares += receivedByStrats / cycles[cycleCounter]["pps"];
+        cycles[cycleCounter]["batchBal"] = batching;
+        cycles[cycleCounter]["receivedByStrats"] = receivedByStrats;
+    }
+    cycleCounter++;
+    console.log("stratsBalance %s, stratsBalAfterCompound", stratsBalance, stratsBalAfterCompound);
+}
 
-  87536635934543611283
-  87519823099093936002 (decreased by 16812835449667584)
+function withdraw(receiptAmount, receiptCycle) {
+    let amount = 
+        receiptAmount * 
+        cycles[receiptCycle]["receivedByStrats"] /
+        cycles[receiptCycle]["batchBal"];
+    let userShares = amount / cycles[receiptCycle]["pps"];
+    let currentPps = stratsBalance / shares;
+    let withdrawAmount = userShares * currentPps;
+    // starts balance here can be reduced by slighlty different amount
+    stratsBalance -= withdrawAmount;
+    shares -= userShares;
+    return { withdrawAmount, userShares }
+}
 
-  only biswap farm, deposit 100 ust:
-  49613906905861996583
-  49586871953756275630 (decreased by 27034952105721856)
+depToStrats([100]);
+depToStrats([100, 150]);// cycle 1
+depToStrats([300, 200]);// cycle 2
 
-  only bsiwap, 10k deposit:
-  49613906905861996583
-  49559319253357642599 (decreased by 54587652504354820)
-
-  only biswap, new math:
-  49613906905861996583
-  49613908816183816938
-
-  49614854529414362410
-
-  potentially found bug:
-
-  NOT WORKING VERRSION IN BROWSER:
-  // initial deposit
-var initAmount = 100; // amount noted in nft
-var shares = 10;
-var initPps = initAmount / shares;
-var initStratsBalance = 98; // returned by call totalTokens on strategies
-
-// 2nd deposit
-var stratsBalanceAfterCompound1 = initStratsBalance * 1.5; // rely on totalTokens, so it can change up or down
-var depAmount1 = 100;  // amount noted in nft
-var pps1 = stratsBalanceAfterCompound1 / shares;
-var newShares = depAmount1 / pps1;
-shares += newShares;
-
-var receivedByStrats = 98;
-var stratsBalanceAfterDeposit1 = 
-    stratsBalanceAfterCompound1 + receivedByStrats; // returned by call totalTokens on strategies
-
-// withdraw
-var userShares1 = depAmount1 / pps1;
-var strategiesBalance = stratsBalanceAfterDeposit1;
-var curPps = strategiesBalance / shares;
-var withdrawAmount = userShares1 * curPps;
-strategiesBalance -= withdrawAmount;
-shares -= userShares1;
-
-console.log("-----------------");
-console.log("shares %s \nwithdrawAmount %s SHOULD BE %s \nstrategiesBalance %s", shares, withdrawAmount, receivedByStrats, strategiesBalance);
-console.log("-----------------");
+console.log(withdraw(100, 1), `shares ${shares}`);
+console.log(withdraw(200, 2), `shares ${shares}`);
+console.log(withdraw(150, 1), `shares ${shares}`);
+console.log(withdraw(300, 2), `shares ${shares}`);
+console.log(shares, stratsBalance, cycles);
 
 */
 
@@ -168,7 +164,7 @@ describe("Trying to find source of bug", function () {
 
     await router.setCycleDuration(60 * 60 * 24 * 30);
     CYCLE_DURATION = Number(await router.cycleDuration());
-    INITIAL_SHARES = Number(await router.INITIAL_SHARES());
+    INITIAL_SHARES = await router.INITIAL_SHARES();
 
     // console.log(await exchange.estimateGas.test(parseUst("10"), ust.address, usdc.address));
     // console.log(await exchange.test(parseUsdc("1000"), usdc.address, ust.address));
@@ -238,7 +234,8 @@ describe("Trying to find source of bug", function () {
 
   it("User deposit", async function () {
 
-    await router.depositToBatch(ust.address, parseUst("10000"))
+    await router.depositToBatch(ust.address, parseUst("2200"))
+    await router.depositToBatch(ust.address, parseUst("700"))
 
     // expect(await ust.balanceOf(router.address)).to.be.closeTo(
     //   parseUst("100"),
@@ -274,6 +271,7 @@ describe("Trying to find source of bug", function () {
     await printStruct(await receiptContract.viewReceipt(1));
     let oldBalance = await ust.balanceOf(owner.address);
     await router.withdrawByReceipt(1, ust.address, 10000);
+    await router.withdrawByReceipt(2, ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
 
     await logFarmLPs();
@@ -295,40 +293,40 @@ describe("Trying to find source of bug", function () {
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
   });
 
-  it("Farms should be empty on withdraw all multiple times", async function () {
+  // it("Farms should be empty on withdraw all multiple times", async function () {
 
-    console.log("strategies balance", await router.viewStrategiesBalance());
+  //   console.log("strategies balance", await router.viewStrategiesBalance());
     
-    await logFarmLPs();
+  //   await logFarmLPs();
 
-    for (let i = 0; i < 55; i++) {
-      await router.depositToBatch(ust.address, parseUst("10"));
-      await skipCycleTime();
-      await router.depositToStrategies();
-      let receipts = await receiptContract.walletOfOwner(owner.address);
-      receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
-      // console.log(receipts);
-      await router.withdrawByReceipt(receipts[0], ust.address, 10000);
+  //   for (let i = 0; i < 55; i++) {
+  //     await router.depositToBatch(ust.address, parseUst("10"));
+  //     await skipCycleTime();
+  //     await router.depositToStrategies();
+  //     let receipts = await receiptContract.walletOfOwner(owner.address);
+  //     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
+  //     // console.log(receipts);
+  //     await router.withdrawByReceipt(receipts[0], ust.address, 10000);
 
-      console.log("strategies balance");
-      printStruct(await router.viewStrategiesBalance());
-      await logFarmLPs();
-    }
+  //     console.log("strategies balance");
+  //     printStruct(await router.viewStrategiesBalance());
+  //     await logFarmLPs();
+  //   }
 
-    console.log("strategy router ust %s", await ust.balanceOf(router.address));
-    console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
-    console.log("strategyAcryptos ust %s", await ust.balanceOf(strategyAcryptos.address));
-    console.log("strategyBiswap busd %s", await busd.balanceOf(strategyBiswap.address));
+  //   console.log("strategy router ust %s", await ust.balanceOf(router.address));
+  //   console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
+  //   console.log("strategyAcryptos ust %s", await ust.balanceOf(strategyAcryptos.address));
+  //   console.log("strategyBiswap busd %s", await busd.balanceOf(strategyBiswap.address));
 
-    expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
-    expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
-    expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
+  //   expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
+  //   expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
+  //   expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
-    expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+  //   expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+  //   expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+  //   expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
-  });
+  // });
 
   // it("User withdraw other half from current cycle", async function () {
   //   let oldBalance = await ust.balanceOf(owner.address);
