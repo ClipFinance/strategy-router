@@ -2,67 +2,7 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-
-/*
-
-// HELPER SCRIPT THAT SIMULATES SHARES CALCULATIONS
-// FOR DEBUG PURPOSES
-
-var stratsBalance = 0;
-var cycles = []; // { pps, batchBal, received }
-var cycleCounter = 0;
-var shares = 0;
-var INITIAL_SHARES = 10;
-function depToStrats(receipts) {
-    // this can vary (up or down)
-    let stratsBalAfterCompound = stratsBalance;
-
-    let batching = receipts.reduce((e,a) => a+e);
-    // this can vary (up or down)
-    let receivedByStrats = batching * 0.9;
-    
-    stratsBalance = stratsBalAfterCompound + receivedByStrats;
-    
-    if(shares == 0) {
-        shares = INITIAL_SHARES;
-        cycles[cycleCounter] = {};
-        cycles[cycleCounter]["pps"] = stratsBalance / shares;
-    } else {
-         cycles[cycleCounter] = {};
-        cycles[cycleCounter]["pps"] = stratsBalAfterCompound / shares;
-        shares += receivedByStrats / cycles[cycleCounter]["pps"];
-        cycles[cycleCounter]["batchBal"] = batching;
-        cycles[cycleCounter]["receivedByStrats"] = receivedByStrats;
-    }
-    cycleCounter++;
-    console.log("stratsBalance %s, stratsBalAfterCompound", stratsBalance, stratsBalAfterCompound);
-}
-
-function withdraw(receiptAmount, receiptCycle) {
-    let amount = 
-        receiptAmount * 
-        cycles[receiptCycle]["receivedByStrats"] /
-        cycles[receiptCycle]["batchBal"];
-    let userShares = amount / cycles[receiptCycle]["pps"];
-    let currentPps = stratsBalance / shares;
-    let withdrawAmount = userShares * currentPps;
-    // starts balance here can be reduced by slighlty different amount
-    stratsBalance -= withdrawAmount;
-    shares -= userShares;
-    return { withdrawAmount, userShares }
-}
-
-depToStrats([100]);
-depToStrats([100, 150]);// cycle 1
-depToStrats([300, 200]);// cycle 2
-
-console.log(withdraw(100, 1), `shares ${shares}`);
-console.log(withdraw(200, 2), `shares ${shares}`);
-console.log(withdraw(150, 1), `shares ${shares}`);
-console.log(withdraw(300, 2), `shares ${shares}`);
-console.log(shares, stratsBalance, cycles);
-
-*/
+const { getTokens, skipCycleTime, printStruct, logFarmLPs, BLOCKS_MONTH, skipBlocks, BLOCKS_DAY } = require("./utils");
 
 // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
 provider = ethers.provider;
@@ -97,40 +37,17 @@ describe("Trying to find source of bug", function () {
     busd = await ethers.getContractAt("ERC20", BUSD);
 
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
-    ust = await ethers.getContractAt("ERC20", UST);
-
     ustHolder = "0x05faf555522fa3f93959f86b41a3808666093210";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [ustHolder],
-    });
-    ustHolder = await ethers.getSigner(ustHolder);
-    await network.provider.send("hardhat_setBalance", [
-      ustHolder.address.toString(),
-      "0x" + Number(parseEther("1").toHexString(2)).toString(2),
-    ]);
-    await ust.connect(ustHolder).transfer(
-      owner.address,
-      parseUst("500000")
-    );
-
+    ust = await getTokens(UST, ustHolder, parseUst("500000"), owner.address);
     // ~~~~~~~~~~~ GET USDC TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    usdc = await ethers.getContractAt("ERC20", USDC);
-
     usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [usdcHolder],
-    });
-    usdcHolder = await ethers.getSigner(usdcHolder);
-    await usdc.connect(usdcHolder).transfer(
-      owner.address,
-      parseUsdc("500000")
-    );
+    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address);
+    // ~~~~~~~~~~~ GET BSW TOKENS ON MAINNET ~~~~~~~~~~~ 
+    BSW = "0x965F527D9159dCe6288a2219DB51fc6Eef120dD1";
+    bswHolder = "0x000000000000000000000000000000000000dead";
+    bsw = await getTokens(BSW, bswHolder, parseEther("10000000"), owner.address);
 
   });
 
@@ -211,7 +128,7 @@ describe("Trying to find source of bug", function () {
   it("Add strategies and stablecoins", async function () {
     await router.setSupportedStablecoin(ust.address, true);
 
-    await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
+    // await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
     await router.addStrategy(strategyBiswap.address, ust.address, 5000);
   });
 
@@ -226,7 +143,7 @@ describe("Trying to find source of bug", function () {
     await skipCycleTime();
     await router.depositToStrategies();
     await skipCycleTime();
-
+    
     await logFarmLPs();
 
     expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
@@ -234,63 +151,73 @@ describe("Trying to find source of bug", function () {
 
   it("User deposit", async function () {
 
-    await router.depositToBatch(ust.address, parseUst("2200"))
-    await router.depositToBatch(ust.address, parseUst("700"))
-
-    // expect(await ust.balanceOf(router.address)).to.be.closeTo(
-    //   parseUst("100"),
-    //   parseUst("0.1")
-    // );
+    for (let i = 0; i < 2; i++) {
+      
+      await router.depositToBatch(ust.address, parseUst("2200"))
+      await router.depositToBatch(ust.address, parseUst("2200"))
+      await router.depositToBatch(ust.address, parseUst("700"))
+      await router.depositToBatch(ust.address, parseUst("700"))
+      
+      await skipCycleTime();
+      
+      await router.depositToStrategies();
+    }
+    console.log(await receiptContract.walletOfOwner(owner.address));
   });
 
-  it("Deposit to strategies", async function () {
-    await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-    await provider.send("evm_mine");
+  it("Skip blocks to get BSW rewards AND compound all", async function () {
+    console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
+    
+    console.log("getBlockNumber: ", await provider.getBlockNumber());
+    // await skipBlocks(BLOCKS_MONTH * 12);
+    // await skipCycleTime();
 
-    await router.depositToStrategies();
+    for (let i = 0; i < 60; i++) {
+      // await provider.send("evm_increaseTime", [100]);
+      // await provider.send("evm_mine");
+      await skipBlocks(BLOCKS_DAY/2);
+      await router.compoundAll();
+    }
+    console.log("getBlockNumber: ", await provider.getBlockNumber());
 
-    // expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
-    //   parseUniform("200"),
-    //   parseUniform("0.5")
-    // );
+    console.log(formatEther((await router.viewStrategiesBalance()).totalBalance));
   });
-
-  // it("User withdraw half from current cycle", async function () {
-  //   let receipt = await receiptContract.viewReceipt(1);
-  //   let oldBalance = await ust.balanceOf(owner.address);
-  //   await router.withdrawFromBatching(1, ust.address, receipt.amount.div(2));
-  //   let newBalance = await ust.balanceOf(owner.address);
-
-  //   expect(newBalance.sub(oldBalance)).to.be.closeTo(
-  //     parseUsdc("50"),
-  //     parseUsdc("0.2")
-  //   );
-  // });
 
   it("Withdraw from strategies", async function () {
-    await printStruct(await receiptContract.viewReceipt(1));
-    let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(1, ust.address, 10000);
-    await router.withdrawByReceipt(2, ust.address, 10000);
-    let newBalance = await ust.balanceOf(owner.address);
 
-    await logFarmLPs();
-    // expect(newBalance.sub(oldBalance)).to.be.closeTo(
-    //   parseUsdc("100"),
-    //   parseUniform("1.0")
-    // );
+    let receipts = await receiptContract.walletOfOwner(owner.address);
+    receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
+    for (; 0 < receipts.length; ) {
+      
+      let receiptData = await receiptContract.viewReceipt(receipts[0]);
+      let oldBalance = await ust.balanceOf(owner.address);
+      await router.withdrawByReceipt(receipts[0], ust.address, 10000);
+      let newBalance = await ust.balanceOf(owner.address);
+
+      // console.log("RECEIPT", receiptData)
+      // expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      //   (receiptData.amount).mul(parseUst("1")).div(parseEther("1")),
+      //   parseUst("5")
+      // );
+
+      receipts = receipts.filter(id => id != receipts[0]); 
+      // await logFarmLPs();
+    }
+
+    console.log(await receiptContract.walletOfOwner(owner.address));
 
     console.log("strategies balance");
     printStruct(await router.viewStrategiesBalance());
 
     // should've withdrawn all (excpet admin), so verify that
+    // expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+    // expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+    // expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+
     expect(await ust.balanceOf(strategyAcryptos.address)).to.equal(0);
     expect(await ust.balanceOf(strategyBiswap.address)).to.be.lt(parseUst("1"));
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
-    expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
   });
 
   // it("Farms should be empty on withdraw all multiple times", async function () {
@@ -593,25 +520,3 @@ describe("Trying to find source of bug", function () {
   // });
 
 });
-
-
-async function logFarmLPs() {
-    userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
-    console.log("acryptos farm lp tokens %s", userInfo.amount);
-    userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
-    console.log("biswap farm lp tokens %s", userInfo.amount);
-}
-async function skipCycleTime() {
-  await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  await provider.send("evm_mine");
-}
-function printStruct(struct) {
-  let obj = struct;
-  let out = {};
-  for (let key in obj) {
-    if (!Number.isInteger(Number(key))) {
-      out[key] = obj[key];
-    }
-  }
-  console.log(out);
-}

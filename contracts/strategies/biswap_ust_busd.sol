@@ -37,19 +37,21 @@ contract biswap_ust_busd is Ownable, IStrategy {
     {
         console.log("block.number", block.number);
 
-        // TODO: maybe there is a better way to swap tokens so that liquidity will be added at (almost) perfect ratio
+        // TODO: Is there a way to swap ust to busd so that we'll get perfect ratio to addLiquidity?
+        //       If so, we could get rid of that helper function.
         fix_leftover(amount);
 
-        uint256 busdAmount = amount / 2;
+        // swap a bit more to reduce consequences of slippage and fees (0.06% on acryptos for ust-busd)
+        uint256 busdAmount = amount * 5002 / 10000;
         Exchange exchange = strategyRouter.exchange();
         ust.transfer(address(exchange), busdAmount);
         console.log("busdAmount", busdAmount);
         busdAmount = exchange.swapRouted(busdAmount, ust, busd, address(this));
-        console.log(
-            "ust %s busd %s",
-            ust.balanceOf(address(this)),
-            busd.balanceOf(address(this))
-        );
+        // console.log(
+        //     "ust %s busd %s",
+        //     ust.balanceOf(address(this)),
+        //     busd.balanceOf(address(this))
+        // );
 
         uint256 ustAmount = ust.balanceOf(address(this));
         busdAmount = busd.balanceOf(address(this));
@@ -68,6 +70,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
                 block.timestamp
             );
 
+        console.log("addLiquidity leftover", ustAmount - amountA, busdAmount - amountB);
         lpToken.approve(address(farm), liquidity);
         //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
         farm.deposit(poolId, liquidity);
@@ -195,7 +198,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
         }
     }
 
-    /// @dev Once leftover amounts reach predefined value they'll be reinvested.
+    /// @dev Swaps half of ust to busd once leftover amounts reach predefined limit.
+    ///      Half of busd is also swapped if it reaches limit.
     function fix_leftover(uint256 amoungIgnore) public {
         Exchange exchange = strategyRouter.exchange();
         uint256 busdAmount = busd.balanceOf(address(this));
