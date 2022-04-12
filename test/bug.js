@@ -79,7 +79,7 @@ describe("Trying to find source of bug", function () {
       await router.exchange()
     );
 
-    await router.setCycleDuration(60 * 60 * 24 * 30);
+    await router.setCycleDuration(1);
     CYCLE_DURATION = Number(await router.cycleDuration());
     INITIAL_SHARES = await router.INITIAL_SHARES();
 
@@ -166,21 +166,21 @@ describe("Trying to find source of bug", function () {
   });
 
   it("Skip blocks to get BSW rewards AND compound all", async function () {
-    console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
+    // console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
     
-    console.log("getBlockNumber: ", await provider.getBlockNumber());
-    // await skipBlocks(BLOCKS_MONTH * 12);
-    // await skipCycleTime();
+    // console.log("getBlockNumber: ", await provider.getBlockNumber());
+    // // await skipBlocks(BLOCKS_MONTH * 12);
+    // // await skipCycleTime();
 
-    for (let i = 0; i < 60; i++) {
-      // await provider.send("evm_increaseTime", [100]);
-      // await provider.send("evm_mine");
-      await skipBlocks(BLOCKS_DAY/2);
-      await router.compoundAll();
-    }
-    console.log("getBlockNumber: ", await provider.getBlockNumber());
+    // for (let i = 0; i < 60; i++) {
+    //   // await provider.send("evm_increaseTime", [100]);
+    //   // await provider.send("evm_mine");
+    //   await skipBlocks(BLOCKS_DAY/2);
+    //   await router.compoundAll();
+    // }
+    // console.log("getBlockNumber: ", await provider.getBlockNumber());
 
-    console.log(formatEther((await router.viewStrategiesBalance()).totalBalance));
+    // console.log(formatEther((await router.viewStrategiesBalance()).totalBalance));
   });
 
   it("Withdraw from strategies", async function () {

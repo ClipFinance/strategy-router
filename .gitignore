@@ -3,7 +3,7 @@ node_modules
 coverage
 coverage.json
 typechain
-
+remix-compiler.config.js
 #Hardhat files
 cache
 artifacts

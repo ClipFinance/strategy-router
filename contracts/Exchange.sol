@@ -20,9 +20,9 @@ enum DexType {
 }
 
 contract Exchange is Ownable {
-    // id zero corresponds to different coins based on pool
+    
+    // acryptos ACS meta pool token ids
     int128 public constant UST_ID = 0;
-    // base coins should stay the same across acryptos ACS pools
     int128 public constant BUSD_ID = 1;
     int128 public constant BUSDT_ID = 2;
     int128 public constant DAI_ID = 3;

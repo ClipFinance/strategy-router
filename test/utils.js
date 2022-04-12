@@ -8,6 +8,9 @@ BLOCKS_DAY = 60 * 60 * 24 / 3;
 
 module.exports = { logFarmLPs, getTokens, skipBlocks, skipCycleTime, printStruct, BLOCKS_MONTH, BLOCKS_DAY}
 
+
+// await network.provider.send("hardhat_setBalance", [ ((await ethers.getSigners())[0]).address.toString(), "0x" + Number(ethers.utils.parseEther("10000").toHexString(2)).toString(2), ]);
+
 async function logFarmLPs() {
   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
   console.log("acryptos farm lp tokens %s", userInfo.amount);

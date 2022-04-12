@@ -21,9 +21,11 @@ contract StrategyRouter is Ownable {
     error InsufficientShares();
     error DuplicateStrategy();
     error NotCallableByContracts();
-    error TooEarly(uint256 cycleEndAt);
-    error NotEnoughInBatching(uint256 amountInBatching);
+    error TooEarly();
+    error NotEnoughInBatching();
+    error DepositUnderMinimum();
     error BadPercent();
+    error InitialSharesAreUnwithdrawable();
 
     modifier OnlyEOW() {
         if (msg.sender != tx.origin) revert NotCallableByContracts();
@@ -46,13 +48,14 @@ contract StrategyRouter is Ownable {
     }
 
     uint8 public constant UNIFORM_DECIMALS = 18;
-    uint256 public constant INITIAL_SHARES = 1e6;
+    uint256 public constant INITIAL_SHARES = 1e12;
     address private constant DEAD_ADDRESS =
         0x000000000000000000000000000000000000dEaD;
 
     uint256 public cycleDuration = 1 days;
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
+    uint256 public minDeposit;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -78,9 +81,9 @@ contract StrategyRouter is Ownable {
     /// @dev Only callable by user wallets.
     function depositToStrategies() external OnlyEOW {
         if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp)
-            revert TooEarly(cycles[currentCycleId].startAt + cycleDuration);
+            revert TooEarly();
         if (cycles[currentCycleId].totalInBatch < minUsdPerCycle)
-            revert NotEnoughInBatching(cycles[currentCycleId].totalInBatch);
+            revert NotEnoughInBatching();
 
         console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
 
@@ -254,6 +257,7 @@ contract StrategyRouter is Ownable {
         OnlyEOW
         returns (uint256 receivedShares)
     {
+        if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
         if (receiptContract.ownerOf(receiptId) != msg.sender)
             revert NotReceiptOwner();
 
@@ -296,6 +300,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 percent
     ) external OnlyEOW {
+        if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
         if (receiptContract.ownerOf(receiptId) != msg.sender)
             revert NotReceiptOwner();
         if (supportsCoin(withdrawToken) == false)
@@ -607,6 +612,7 @@ contract StrategyRouter is Ownable {
         OnlyEOW
     {
         if (!supportsCoin(_depositTokenAddress)) revert UnsupportedStablecoin();
+        if (fromUniform(minDeposit, _depositTokenAddress) > _amount) revert DepositUnderMinimum();
 
         console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
         IERC20(_depositTokenAddress).transferFrom(
@@ -674,10 +680,17 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Minimum usd needed to be able to close the cycle.
-    /// @param amount Amount of usd must have `UNIFORM_DECIMALS` decimals.
+    /// @param amount Amount of usd must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
     function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
+    }
+
+    /// @notice Minimum usd allowed to be deposited in the batching.
+    /// @param amount Amount of usd must be `UNIFORM_DECIMALS` decimals.
+    /// @dev Admin function.
+    function setMinDeposit(uint256 amount) external onlyOwner {
+        minDeposit = amount;
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
