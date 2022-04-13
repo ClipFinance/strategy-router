@@ -14,12 +14,7 @@ async function main() {
 
   // save deployment args in runtime, to simplify verification in deploy.js
   // for some reason this snippet breaks gas-reporter, so need to find a better way to do it
-  let oldDeploy = hre.ethers.ContractFactory.prototype.deploy;
-  hre.ethers.ContractFactory.prototype.deploy = async function (...args) {
-    let contract = await oldDeploy.call(this, ...args);
-    contract.constructorArgs = args;
-    return contract;
-  }
+  setupVerificationHelper();
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   provider = ethers.provider;
   parseUsdc = (args) => parseUnits(args, 18);
@@ -118,6 +113,15 @@ async function main() {
     }
   }
 
+}
+
+function setupVerificationHelper() {
+  let oldDeploy = hre.ethers.ContractFactory.prototype.deploy;
+  hre.ethers.ContractFactory.prototype.deploy = async function (...args) {
+    let contract = await oldDeploy.call(this, ...args);
+    contract.constructorArgs = args;
+    return contract;
+  }
 }
 
 main()
