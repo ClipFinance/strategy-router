@@ -12,7 +12,34 @@ import "./SharesToken.sol";
 
 import "hardhat/console.sol";
 
+
 contract StrategyRouter is Ownable {
+
+    /* EVENTS */
+
+    /// @notice Fires when user deposits in batching.
+    /// @param token Supported token that user want to deposit.
+    /// @param amount Amount of `token` transferred from user.
+    event Deposit(address indexed user, address token, uint256 amount);
+    /// @notice Fires when batching is deposited into strategies.
+    /// @param closedCycleId Index of the cycle that is closed.
+    /// @param amount Sum of different tokens deposited into strategies.
+    event DepositToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    /// @notice Fires when user withdraw from batching.
+    /// @param token Supported token that user requested to receive after withdraw.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromBatching(address indexed user, address token, uint256 amount);
+    /// @notice Fires when user withdraw from strategies.
+    /// @param token Supported token that user requested to receive after withdraw.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromStrategies(address indexed user, address token, uint256 amount);
+    /// @notice Fires when user converts his receipt into shares token.
+    /// @param receiptId Index of the receipt to burn.
+    /// @param shares Amount of shares received by user.
+    event UnlockSharesFromNFT(address indexed user, uint256 receiptId, uint256 shares);
+
+    /* ERRORS */
+
     error AlreadyAddedStablecoin();
     error UnsupportedStablecoin();
     error NotReceiptOwner();
@@ -161,6 +188,7 @@ contract StrategyRouter is Ownable {
         // start new cycle
         cycles[currentCycleId].receivedByStrats = receivedByStrats;
         cycles[currentCycleId].totalDepositUniform = totalDepositUniform;
+        emit DepositToStrategies(currentCycleId, receivedByStrats);
         currentCycleId++;
         cycles[currentCycleId].startAt = block.timestamp;
     }
@@ -281,6 +309,7 @@ contract StrategyRouter is Ownable {
             userShares
         );
         sharesToken.transfer(msg.sender, userShares);
+        emit UnlockSharesFromNFT(msg.sender, receiptId, userShares);
         return userShares;
     }
 
@@ -342,7 +371,11 @@ contract StrategyRouter is Ownable {
             );
             // all shares are minted to this contract, transfer to user his part
             // because he had only NFT, not shares token
-            sharesToken.transfer(msg.sender, userShares - amountWithdrawShares);
+            uint256 unlocked = userShares - amountWithdrawShares;
+            if(unlocked > 0) {
+                sharesToken.transfer(msg.sender, unlocked);
+                emit UnlockSharesFromNFT(msg.sender, receiptId, unlocked);
+            }
         }
 
         (
@@ -384,6 +417,7 @@ contract StrategyRouter is Ownable {
             amountToTransfer
         );
         IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
+        emit WithdrawFromStrategies(msg.sender, withdrawToken, amountToTransfer);
     }
 
     // this function is needed to avoid 'stack too deep' error
@@ -510,6 +544,7 @@ contract StrategyRouter is Ownable {
             amountToTransfer
         );
         IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
+        emit WithdrawFromBatching(msg.sender, withdrawToken, amountToTransfer);
     }
 
     /// @notice User withdraw usd from strategies using his shares.
@@ -596,6 +631,7 @@ contract StrategyRouter is Ownable {
             amountToTransfer
         );
         IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
+        emit WithdrawFromStrategies(msg.sender, withdrawToken, amountToTransfer);
     }
 
     /// @notice Deposit stablecoin into batching.
@@ -666,6 +702,7 @@ contract StrategyRouter is Ownable {
         console.log("totalDepositAmount: %s", totalDepositAmount);
         cycles[currentCycleId].totalInBatch += totalDepositAmount;
 
+        emit Deposit(msg.sender, _depositTokenAddress, _amount);
         receiptContract.mint(currentCycleId, totalDepositAmount, msg.sender);
     }
 
