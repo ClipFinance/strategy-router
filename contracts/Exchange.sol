@@ -8,7 +8,7 @@ import "./interfaces/IExchangeRegistry.sol";
 import "./interfaces/IAcryptoSPool.sol";
 import "./StrategyRouter.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 enum DexType {
     // pancakeswap with WETH as intermediary, default option
@@ -200,7 +200,7 @@ contract Exchange is Ownable {
         int128 _tokenAIndex = coinIds[address(poolACS4UST)][address(tokenA)];
         int128 _tokenBIndex = coinIds[address(poolACS4UST)][address(tokenB)];
 
-        console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
+        // console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
         uint256 received = poolACS4UST.exchange_underlying(
             _tokenAIndex,
             _tokenBIndex,

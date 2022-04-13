@@ -5,12 +5,16 @@ const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib
 const { ethers, waffle } = require("hardhat");
 const { getTokens, skipCycleTime, printStruct, logFarmLPs, BLOCKS_MONTH, skipBlocks, BLOCKS_DAY } = require("../test/utils");
 
-
 // deploy script for testing on mainnet
+// to test on hardhat network:
+//   remove block pinning from config and uncomment 'accounts'
+//   in .env set account with bnb and at least 0.1 ust
 
 async function main() {
 
   // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
+
+  [owner] = await ethers.getSigners();
 
   // save deployment args in runtime, to simplify verification in deploy.js
   // for some reason this snippet breaks gas-reporter, so need to find a better way to do it
@@ -76,12 +80,14 @@ async function main() {
   // admin initial deposit seems to be fix for a problem, 
   // if you deposit and withdraw multiple times (without initial deposit)
   // then pps and shares become broken (they increasing because of dust always left on farms)
-  console.log("Approve ust for initial deposit...");
-  // if((await ust.allowance()))
-  await ust.approve(router.address, parseUst("0.1"));
+  console.log("Approving ust for initial deposit...");
+  if((await ust.allowance(owner.address, router.address)).lt(parseUst("0.1"))) {
+    await ust.approve(router.address, parseUst("0.1"));
+    console.log("UST is approved...");
+  }
   console.log("Initial deposit to batch...");
   await router.depositToBatch(ust.address, parseUst("0.1"));
-  console.log("Initial deposit to strategies");
+  console.log("Initial deposit to strategies...");
   await router.depositToStrategies();
 
 

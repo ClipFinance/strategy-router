@@ -11,7 +11,7 @@ import "../interfaces/IAcryptoSPool.sol";
 // import "./StrategyRouter.sol";
 import "../Exchange.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract acryptos_ust is Ownable, IStrategy {
     IZapDepositer public zapDepositer =
@@ -35,7 +35,7 @@ contract acryptos_ust is Ownable, IStrategy {
         override
         onlyOwner
     {
-        console.log("--- deposit call, block: %s", block.number);
+        // console.log("--- deposit call, block: %s", block.number);
 
         ust.approve(address(zapDepositer), amount);
         uint256[5] memory amounts;
@@ -61,13 +61,13 @@ contract acryptos_ust is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        console.log("--- withdraw call");
+        // console.log("--- withdraw call");
 
         // get LP amount from ust amount
         uint256 withdrawAmount = (amount * 1e18) /
             IAcryptoSPool(zapDepositer.pool()).get_virtual_price();
 
-        console.log("withdrawAmount LPs", withdrawAmount);
+        // console.log("withdrawAmount LPs", withdrawAmount);
         farm.withdraw(address(lpToken), withdrawAmount);
         uint256 lpAmount = lpToken.balanceOf(address(this));
         lpToken.approve(address(zapDepositer), lpAmount);
@@ -84,11 +84,11 @@ contract acryptos_ust is Ownable, IStrategy {
         override
         onlyOwner
     {
-        console.log("--- compound call");
+        // console.log("--- compound call");
         farm.harvest(address(lpToken));
         uint256 acsiAmount = acsi.balanceOf(address(this));
-        console.log("acsiAmount", acsiAmount);
-        console.log("block.number", block.number);
+        // console.log("acsiAmount", acsiAmount);
+        // console.log("block.number", block.number);
         if (acsiAmount > 0) {
             // swap ACSI to UST
             Exchange exchange = strategyRouter.exchange();
@@ -117,7 +117,7 @@ contract acryptos_ust is Ownable, IStrategy {
     }
 
     function totalTokens() external view override returns (uint256) {
-        console.log("--- totalTokens call");
+        // console.log("--- totalTokens call");
 
         (uint256 amountOnFarm, , , ) = farm.userInfo(
             address(lpToken),
@@ -126,13 +126,13 @@ contract acryptos_ust is Ownable, IStrategy {
         uint256 withdrawableAmount = (IAcryptoSPool(zapDepositer.pool())
             .get_virtual_price() * amountOnFarm) / 1e18;
 
-        console.log(
-            "amountOnFarm %s, lp to tokens %s, withdrawableAmount %s",
-            amountOnFarm,
-            (IAcryptoSPool(zapDepositer.pool()).get_virtual_price() *
-                amountOnFarm) / 1e18,
-            withdrawableAmount
-        );
+        // console.log(
+        //     "amountOnFarm %s, lp to tokens %s, withdrawableAmount %s",
+        //     amountOnFarm,
+        //     (IAcryptoSPool(zapDepositer.pool()).get_virtual_price() *
+        //         amountOnFarm) / 1e18,
+        //     withdrawableAmount
+        // );
         // notice: if withdraw all then actual received amount could possibly be slighlty different
         return withdrawableAmount;
     }
@@ -143,10 +143,10 @@ contract acryptos_ust is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        console.log("--- withdrawAll call");
+        // console.log("--- withdrawAll call");
 
         (uint256 amount, , , ) = farm.userInfo(address(lpToken), address(this));
-        console.log("withdraw amount LPs %s", amount);
+        // console.log("withdraw amount LPs %s", amount);
         if(amount > 0) {
             farm.withdraw(address(lpToken), amount);
             uint256 lpAmount = lpToken.balanceOf(address(this));
