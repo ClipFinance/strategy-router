@@ -35,6 +35,10 @@ describe("Trying to find source of bug", function () {
 
     BUSD = "0xe9e7cea3dedca5984780bafc599bd69add087d56";
     busd = await ethers.getContractAt("ERC20", BUSD);
+    
+    // ~~~~~~~~~~~ GET IAcryptoSPool ON MAINNET ~~~~~~~~~~~ 
+    ACS4UST = "0x99c92765EfC472a9709Ced86310D64C4573c4b77";
+    acsUst = await ethers.getContractAt("IAcryptoSPool", ACS4UST);
 
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
     UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
@@ -128,8 +132,8 @@ describe("Trying to find source of bug", function () {
   it("Add strategies and stablecoins", async function () {
     await router.setSupportedStablecoin(ust.address, true);
 
-    // await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
-    await router.addStrategy(strategyBiswap.address, ust.address, 5000);
+    await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
+    // await router.addStrategy(strategyBiswap.address, ust.address, 5000);
   });
 
 
@@ -166,21 +170,65 @@ describe("Trying to find source of bug", function () {
   });
 
   it("Skip blocks to get BSW rewards AND compound all", async function () {
-    // console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
-    
-    // console.log("getBlockNumber: ", await provider.getBlockNumber());
-    // // await skipBlocks(BLOCKS_MONTH * 12);
-    // // await skipCycleTime();
+    // compounding biswap twice per 24h not gives profit!
+    // compounding acryptos twice per 24h gives even less profits!
 
-    // for (let i = 0; i < 60; i++) {
-    //   // await provider.send("evm_increaseTime", [100]);
-    //   // await provider.send("evm_mine");
-    //   await skipBlocks(BLOCKS_DAY/2);
-    //   await router.compoundAll();
-    // }
-    // console.log("getBlockNumber: ", await provider.getBlockNumber());
+    // only biswap strategy, 1 compound per 24h:
+    // 11691.634549579642837847
+    // 12647.927610114806310755 (gain 7.5%)
+    // once in 2 month compound 12642.637221809520289322
 
-    // console.log(formatEther((await router.viewStrategiesBalance()).totalBalance));
+    // only acrypts strategy, 1 compound per 24h:
+    // 11695.36963410516658027
+    // 11785.875757304756469757 (gain 0.77%)
+    // compound once a month 11831.92601472858452229 (+1.14 %)
+
+    console.log("before year of compounding", formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
+    console.log("getBlockNumber: ", await provider.getBlockNumber());
+    // await skipBlocks(BLOCKS_MONTH * 12);
+    // await skipCycleTime();
+
+    let yearCompounds = 30*12;
+    for (let i = 0; i < yearCompounds; i++) {
+      // await provider.send("evm_increaseTime", [100]);
+      // await provider.send("evm_mine");
+
+
+      // tokenA.approve(address(poolACS4UST), amountA);
+
+      //   int128 _tokenAIndex = coinIds[address(poolACS4UST)][address(tokenA)];
+      //   int128 _tokenBIndex = coinIds[address(poolACS4UST)][address(tokenB)];
+
+        // console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
+        // uint256 received = poolACS4UST.exchange_underlying(
+        //     _tokenAIndex,
+        //     _tokenBIndex,
+        //     amountA,
+        //     0
+        // );
+
+      // ~~~~~~~~~~~ Simulate ust <-> busd swaps ~~~~~~~~~~~ 
+      await ust.approve(acsUst.address, parseEther("100000000"));
+      await busd.approve(acsUst.address, parseEther("1000000000"));
+      await acsUst.exchange_underlying(
+        0, //ust
+        1, // busd
+        parseUst("200000"),
+        0
+      );
+      await acsUst.exchange_underlying(
+        1, // busd
+        0, //ust
+        await busd.balanceOf(owner.address),
+        0
+      );
+
+      await skipBlocks(BLOCKS_DAY);
+      await router.compoundAll();
+    }
+    console.log("getBlockNumber: ", await provider.getBlockNumber());
+
+    console.log("after year of compounding", formatEther((await router.viewStrategiesBalance()).totalBalance));
   });
 
   it("Withdraw from strategies", async function () {

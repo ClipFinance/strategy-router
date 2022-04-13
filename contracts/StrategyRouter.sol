@@ -21,8 +21,7 @@ contract StrategyRouter is Ownable {
     error InsufficientShares();
     error DuplicateStrategy();
     error NotCallableByContracts();
-    error TooEarly();
-    error NotEnoughInBatching();
+    error CycleNotClosableYet();
     error DepositUnderMinimum();
     error BadPercent();
     error InitialSharesAreUnwithdrawable();
@@ -76,14 +75,13 @@ contract StrategyRouter is Ownable {
     // Universal Functions
 
     /// @notice Deposit money collected in the batching into strategies.
-    /// @notice Callable by anyone when `cycleDuration` seconds has been passed and 
+    /// @notice Callable by anyone when `cycleDuration` seconds has been passed or 
     ///         batch has reached `minUsdPerCycle` amount of coins.
     /// @dev Only callable by user wallets.
     function depositToStrategies() external OnlyEOW {
-        if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp)
-            revert TooEarly();
-        if (cycles[currentCycleId].totalInBatch < minUsdPerCycle)
-            revert NotEnoughInBatching();
+        if (cycles[currentCycleId].startAt + cycleDuration > block.timestamp
+            && cycles[currentCycleId].totalInBatch < minUsdPerCycle)
+            revert CycleNotClosableYet();
 
         console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
 
