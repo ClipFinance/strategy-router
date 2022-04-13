@@ -64,8 +64,11 @@ async function main() {
   console.log("strategyBiswap", strategyBiswap.address);
 
 
+  // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
+  console.log("Setting supported stablecoin...");
   await router.setSupportedStablecoin(ust.address, true);
 
+  console.log("Adding strategies...");
   await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
   await router.addStrategy(strategyBiswap.address, ust.address, 5000);
 
@@ -73,8 +76,12 @@ async function main() {
   // admin initial deposit seems to be fix for a problem, 
   // if you deposit and withdraw multiple times (without initial deposit)
   // then pps and shares become broken (they increasing because of dust always left on farms)
-  await ust.approve(router.address, parseUst("1"));
+  console.log("Approve ust for initial deposit...");
+  // if((await ust.allowance()))
+  await ust.approve(router.address, parseUst("0.1"));
+  console.log("Initial deposit to batch...");
   await router.depositToBatch(ust.address, parseUst("0.1"));
+  console.log("Initial deposit to strategies");
   await router.depositToStrategies();
 
 
