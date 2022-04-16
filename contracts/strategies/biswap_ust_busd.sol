@@ -32,6 +32,11 @@ contract biswap_ust_busd is Ownable, IStrategy {
         strategyRouter = _strategyRouter;
     }
 
+    function depositToken() external pure override returns (address)
+    {
+        return address(ust);
+    }
+
     function deposit(uint256 amount) external override onlyOwner {
         // console.log("block.number", block.number);
 

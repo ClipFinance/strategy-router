@@ -4,6 +4,7 @@ require("dotenv").config();
 require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
+require('hardhat-contract-sizer');
 
 /**
  * @type import('hardhat/config').HardhatUserConfig
@@ -16,6 +17,7 @@ module.exports = {
         blockNumber: 14250342, // use this only with archival node
         enabled: true
       },
+      // loggingEnabled: false
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
     },
     bnb: {

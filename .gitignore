@@ -4,6 +4,8 @@ coverage
 coverage.json
 typechain
 remix-compiler.config.js
+tenderly.yaml
 #Hardhat files
 cache
 artifacts
+.vscode/

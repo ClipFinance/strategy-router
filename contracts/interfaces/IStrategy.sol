@@ -5,6 +5,9 @@ pragma solidity ^0.8.0;
 interface IStrategy {
 
 
+    /// @notice Token used to deposit to strategy.
+    function depositToken() external view returns (address);
+
     /// @notice Deposit token to strategy.
     function deposit(uint256 amount) external;
 

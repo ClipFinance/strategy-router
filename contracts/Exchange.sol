@@ -20,6 +20,7 @@ enum DexType {
 }
 
 contract Exchange is Ownable {
+    error RoutedSwapFailed();
     
     // acryptos ACS meta pool token ids
     int128 public constant UST_ID = 0;
@@ -115,9 +116,10 @@ contract Exchange is Ownable {
         IERC20 tokenA,
         IERC20 tokenB,
         address to
-    ) public returns (uint256 amountReceivedTokenB) {
+    ) public returns (uint256 amountReceived) {
         DexType _dexType = getDexType(address(tokenA), address(tokenB));
-        return swap(amountA, tokenA, tokenB, _dexType, to);
+        amountReceived = swap(amountA, tokenA, tokenB, _dexType, to);
+        if(amountReceived == 0) revert RoutedSwapFailed();
     }
 
     function swap(

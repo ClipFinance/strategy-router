@@ -14,20 +14,26 @@ import "../Exchange.sol";
 // import "hardhat/console.sol";
 
 contract acryptos_ust is Ownable, IStrategy {
-    IZapDepositer public zapDepositer =
+
+    IZapDepositer public constant zapDepositer =
         IZapDepositer(0x4deb9077E49269B04Fd0324461aF301dD6600216);
-    IERC20 public ust = IERC20(0x23396cF899Ca06c4472205fC903bDB4de249D6fC);
-    IERC20 public acsi = IERC20(0x5b17b4d5e4009B5C43e3e3d63A5229F794cBA389);
-    IERC20 public lpToken = IERC20(0xD3DEBe4a971e4492d0D61aB145468A5B2c23301b);
-    IACryptoSFarmV4 public farm =
+    IERC20 public constant ust = IERC20(0x23396cF899Ca06c4472205fC903bDB4de249D6fC);
+    IERC20 public constant acsi = IERC20(0x5b17b4d5e4009B5C43e3e3d63A5229F794cBA389);
+    IERC20 public constant lpToken = IERC20(0xD3DEBe4a971e4492d0D61aB145468A5B2c23301b);
+    IACryptoSFarmV4 public constant farm =
         IACryptoSFarmV4(0x0C3B6058c25205345b8f22578B27065a7506671C);
 
-    uint256 private UST_ID = 0;
+    uint256 private constant UST_ID = 0;
 
-    StrategyRouter public strategyRouter;
+    StrategyRouter public immutable strategyRouter;
 
     constructor(StrategyRouter _strategyRouter) {
         strategyRouter = _strategyRouter;
+    }
+
+    function depositToken() external pure override returns (address)
+    {
+        return address(ust);
     }
 
     function deposit(uint256 amount)
