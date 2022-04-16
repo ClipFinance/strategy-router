@@ -170,7 +170,7 @@ describe("Trying to find source of bug", function () {
     // console.log(shares);
 
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(receiptId, UST, shares, 0);
+    await router.withdrawFromStrategies(receiptId, UST, shares, 0);
     let newBalance = await ust.balanceOf(owner.address);
     // console.log(newBalance.sub(oldBalance));
     console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
@@ -197,7 +197,7 @@ describe("Trying to find source of bug", function () {
 
     oldBalance = await ust.balanceOf(owner.address);
     // strategist withdraw from strategies
-    await router.withdrawByReceipt(receiptId, UST, shares, 0);
+    await router.withdrawFromStrategies(receiptId, UST, shares, 0);
     newBalance = await ust.balanceOf(owner.address);
     console.log(newBalance.sub(oldBalance));
 
@@ -232,7 +232,7 @@ describe("Trying to find source of bug", function () {
       console.log(await router.sharesToAmount(shares));
 
       oldBalance = await ust.balanceOf(owner.address);
-      await router.withdrawByReceipt(receiptId, UST, shares, 0);
+      await router.withdrawFromStrategies(receiptId, UST, shares, 0);
       newBalance = await ust.balanceOf(owner.address);
       console.log(newBalance.sub(oldBalance));
     }
@@ -331,7 +331,7 @@ describe("Trying to find source of bug", function () {
 
   //     let receiptData = await receiptContract.viewReceipt(receipts[0]);
   //     let oldBalance = await ust.balanceOf(owner.address);
-  //     await router.withdrawByReceipt(receipts[0], ust.address, 10000);
+  //     await router.withdrawFromStrategies(receipts[0], ust.address, 10000);
   //     let newBalance = await ust.balanceOf(owner.address);
 
   //     // console.log("RECEIPT", receiptData)

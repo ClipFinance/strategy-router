@@ -211,7 +211,7 @@ describe("Test StrategyRouter with fake strategies", function () {
   it("Withdraw half from strategies", async function () {
     let receipt = await receiptContract.viewReceipt(2);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawByReceipt(2, usdc.address, 5000);
+    await router.withdrawFromStrategies(2, usdc.address, 5000);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -235,7 +235,7 @@ describe("Test StrategyRouter with fake strategies", function () {
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(3));
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawByReceipt(3, usdc.address, 10000);
+    await router.withdrawFromStrategies(3, usdc.address, 10000);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -277,7 +277,7 @@ describe("Test StrategyRouter with fake strategies", function () {
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       console.log(receipts);
-      await router.withdrawByReceipt(receipts[0], usdc.address, 10000);
+      await router.withdrawFromStrategies(receipts[0], usdc.address, 10000);
       
       console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
     }
@@ -333,7 +333,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     console.log('1', receipts);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawByReceipt(receipts[0], usdc.address, 10000);
+    await router.withdrawFromStrategies(receipts[0], usdc.address, 10000);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("21"),
@@ -400,8 +400,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     // let receipts = await receiptContract.walletOfOwner(owner.address);
     // console.log(receipts);
     // // withdraw by receipt
-    // await router.withdrawByReceipt(3, usdc.address, 10000);
-    // await router.withdrawByReceipt(4, ust.address, 10000);
+    // await router.withdrawFromStrategies(3, usdc.address, 10000);
+    // await router.withdrawFromStrategies(4, ust.address, 10000);
 
     // // convert receipts to shares and withdraw using shares
     // await router.unlockSharesFromNFT(5);

@@ -8,7 +8,7 @@
 		* [depositToBatch function](#deposittobatch-function)
 		* [withdrawFromBatching function](#withdrawfrombatching-function)
 		* [depositToStrategies function](#deposittostrategies-function)
-		* [withdrawByReceipt function](#withdrawbyreceipt-function)
+		* [withdrawFromStrategies function](#withdrawFromStrategies-function)
 	* [Strategies general interface](#strategies-general-interface)
 
 ---
@@ -171,7 +171,7 @@ Amount received by strategies after deposit is saved in cycle info, calculated a
 Batching balance before deposit is also saved in cycle info.  
 Price per share is stored for current cycle, new shares minted and cycles counter incremented.  
 
-#### withdrawByReceipt function
+#### withdrawFromStrategies function
 User withdraw usd from strategies via receipt NFT.  
 User provides percent of total shares from that receipt to withdraw (this param is subject to change).   
 On partial withdraw leftover shares transfered to user.  
@@ -264,7 +264,7 @@ Its assumed that coins already transfered to Strategy before the function is cal
 
 #### withdraw function
 
-1) StrategyRouter will provide us amount of coins to withdraw. Please see explanation of the router's `withdrawByReceipt` function to understand how that amount is calculated.
+1) StrategyRouter will provide us amount of coins to withdraw. Please see explanation of the router's `withdrawFromStrategies` function to understand how that amount is calculated.
 2) Convert that amount to LP tokens amount:
 ```
 l = w * 1e18 / p

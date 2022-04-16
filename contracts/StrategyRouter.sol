@@ -373,13 +373,13 @@ contract StrategyRouter is Ownable {
     /// @param shares Amount of shares from receipt to withdraw.
     /// @param amount Uniform amount from receipt to withdraw, only for current cycle.
     /// @dev Only callable by user wallets.
-    function withdrawByReceipt(
+    function withdrawFromStrategies(
         uint256 receiptId,
         address withdrawToken,
         uint256 shares,
         uint256 amount
     ) external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ withdrawByReceipt ~~~~~~~~~~~~~");
+        console.log("~~~~~~~~~~~~~ withdrawFromStrategies ~~~~~~~~~~~~~");
         // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
         if (receiptContract.ownerOf(receiptId) != msg.sender)
             revert NotReceiptOwner();

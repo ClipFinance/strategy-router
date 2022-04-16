@@ -239,7 +239,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     let receipt = await receiptContract.viewReceipt(2);
     let oldBalance = await ust.balanceOf(owner.address);
     // console.log(receipt.amount.div(2));
-    await router.withdrawByReceipt(2, ust.address, 5000);
+    await router.withdrawFromStrategies(2, ust.address, 5000);
     let newBalance = await ust.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -263,7 +263,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(3));
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(3, ust.address, 10000);
+    await router.withdrawFromStrategies(3, ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
 
     await logFarmLPs();
@@ -295,7 +295,7 @@ describe("Test StrategyRouter with two real strategies", function () {
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       // console.log(receipts);
-      await router.withdrawByReceipt(receipts[0], ust.address, 10000);
+      await router.withdrawFromStrategies(receipts[0], ust.address, 10000);
 
       console.log("strategies balance");
       printStruct(await router.viewStrategiesBalance());
@@ -344,7 +344,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log(receipts);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(receipts[0], ust.address, 10000);
+    await router.withdrawFromStrategies(receipts[0], ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("10"),
@@ -405,14 +405,14 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log("owner receipts", receipts);
     // withdraw by receipt
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(10, ust.address, 10000);
+    await router.withdrawFromStrategies(10, ust.address, 10000);
     let newBalance = await ust.balanceOf(owner.address);
-    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
+    console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawByReceipt(11, ust.address, 10000);
+    await router.withdrawFromStrategies(11, ust.address, 10000);
     newBalance = await ust.balanceOf(owner.address);
-    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
+    console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     // unlock shares and withdraw tokens by shares
     await router.unlockSharesFromNFT(12);
@@ -422,7 +422,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     oldBalance = await ust.balanceOf(owner.address);
     await router.withdrawShares(sharesUnlocked, ust.address);
     newBalance = await ust.balanceOf(owner.address);
-    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
+    console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     await router.unlockSharesFromNFT(13);
     sharesUnlocked = await sharesToken.balanceOf(owner.address);
@@ -430,7 +430,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     oldBalance = await ust.balanceOf(owner.address);
     await router.withdrawShares(sharesUnlocked, ust.address);
     newBalance = await ust.balanceOf(owner.address);
-    console.log("withdrawByReceipt %s", newBalance.sub(oldBalance));
+    console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
     // TODO: after each withdraw the admin's initial amount getting down...
     // initially it was 99... but here its become 98!
     // It can be seen even better by looking at output of the previous test block (with loop)
