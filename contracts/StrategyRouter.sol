@@ -297,15 +297,12 @@ contract StrategyRouter is Ownable {
         returns (uint256 totalBalance, uint256[] memory balances)
     {
         balances = new uint256[](stablecoins.length);
-        for (uint256 i; i < balances.length; ) {
+        for (uint256 i; i < balances.length; i++) {
             address token = stablecoins[i];
             uint256 balance = ERC20(token).balanceOf(address(this));
             balance = toUniform(balance, token);
             balances[i] = balance;
             totalBalance += balance;
-            unchecked {
-                i++;
-            }
         }
     }
 
@@ -549,7 +546,7 @@ contract StrategyRouter is Ownable {
 
         uint256 amountToTransfer;
         // uint256 len = strategies.length;
-        for (uint256 i; i < balances.length; ) {
+        for (uint256 i; i < balances.length; i++) {
             address strategyAssetAddress = IStrategy(
                 strategies[i].strategyAddress
             ).depositToken();
@@ -564,9 +561,6 @@ contract StrategyRouter is Ownable {
                 withdrawToken
             );
             amountToTransfer += amountWithdraw;
-            unchecked {
-                i++;
-            }
         }
         cycles[currentCycleId].totalInBatch -= amount;
 
@@ -642,12 +636,9 @@ contract StrategyRouter is Ownable {
         onlyOwner
     {
         uint256 len = strategies.length;
-        for (uint256 i = 0; i < len; ) {
+        for (uint256 i = 0; i < len; i++) {
             if (strategies[i].strategyAddress == _strategyAddress)
                 revert DuplicateStrategy();
-            unchecked {
-                i++;
-            }
         }
         strategies.push(
             StrategyInfo({strategyAddress: _strategyAddress, weight: _weight})
@@ -693,15 +684,12 @@ contract StrategyRouter is Ownable {
         uint256 withdrawnAmount = removedStrategy.withdrawAll();
 
         // compound all strategies
-        for (uint256 i; i < len; ) {
+        for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
-            unchecked {
-                i++;
-            }
         }
 
         // deposit withdrawn funds into other strategies
-        for (uint256 i; i < len; ) {
+        for (uint256 i; i < len; i++) {
             uint256 depositAmount = (withdrawnAmount *
                 viewStrategyPercentWeight(i)) / 10000;
             address strategyAssetAddress = IStrategy(
@@ -719,9 +707,6 @@ contract StrategyRouter is Ownable {
                 depositAmount
             );
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
-            unchecked {
-                i++;
-            }
         }
     }
 
@@ -741,32 +726,23 @@ contract StrategyRouter is Ownable {
         address[] memory _tokens = new address[](lenStables);
         uint256[] memory _balances = new uint256[](lenStables);
 
-        for (uint256 i; i < lenStables; ) {
+        for (uint256 i; i < lenStables; i++) {
             _tokens[i] = stablecoins[i];
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
             totalInBatch += toUniform(_balances[i], _tokens[i]);
             console.log(_balances[i]);
-            unchecked {
-                i++;
-            }
         }
 
         uint256 len = strategies.length;
         uint256[] memory _strategiesBalances = new uint256[](len);
-        for (uint256 i; i < len; ) {
-            for (uint256 j; j < lenStables; ) {
+        for (uint256 i; i < len; i++) {
+            for (uint256 j; j < lenStables; j++) {
                 address depositToken = IStrategy(strategies[i].strategyAddress)
                     .depositToken();
                 if (_balances[j] > 0 && depositToken == _tokens[j]) {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
                 }
-                unchecked {
-                    j++;
-                }
-            }
-            unchecked {
-                i++;
             }
         }
 
@@ -790,8 +766,8 @@ contract StrategyRouter is Ownable {
             }
         }
 
-        for (uint256 i; i < len; ) {
-            for (uint256 j; j < len; ) {
+        for (uint256 i; i < len; i++) {
+            for (uint256 j; j < len; j++) {
                 if (toSell[i] == 0) break;
                 if (toAdd[j] > 0) {
                     uint256 curSell = toSell[i] > toAdd[j]
@@ -816,12 +792,6 @@ contract StrategyRouter is Ownable {
                         toAdd[j] -= curSell;
                     }
                 }
-                unchecked {
-                    j++;
-                }
-            }
-            unchecked {
-                i++;
             }
         }
         return (totalInBatch, _strategiesBalances);
@@ -840,28 +810,22 @@ contract StrategyRouter is Ownable {
         } else if (!isAddStrategy) {
             // if stablecoin still used by unremoved strategies just exit
             uint256 len = strategies.length;
-            for (uint256 i = 0; i < len; ) {
+            for (uint256 i = 0; i < len; i++) {
                 address strategyToken = IStrategy(strategies[i].strategyAddress)
                     .depositToken();
                 if (strategyToken == stablecoinAddress) {
                     return;
-                }
-                unchecked {
-                    i++;
                 }
             }
 
             // if stablecoin unused by strategies anymore, then delete it
             stablecoinsMap[stablecoinAddress] = false;
             uint256 lenS = stablecoins.length;
-            for (uint256 i = 0; i < lenS; ) {
+            for (uint256 i = 0; i < lenS; i++) {
                 if (stablecoins[i] == stablecoinAddress) {
                     stablecoins[i] = stablecoins[stablecoins.length - 1];
                     stablecoins.pop();
                     break;
-                }
-                unchecked {
-                    i++;
                 }
             }
         }
