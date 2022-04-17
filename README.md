@@ -1,6 +1,6 @@
 #### Table of contents:
 * [Definitions](#definitions)
-* [General idea](#general-idea)
+* [General overview](#general-idea)
 * [User workflow](#user-workflow)
 * [Technical description](#technical-description)
 	* [StrategyRouter contract](#strategyrouter)
@@ -27,7 +27,7 @@ To run specific test file `npx hardhat test test/router.js`.
 *Share Tokens or shares* - Utility ERC20 token to denote user share in the pool.  
 *Receipt NFT or receipt* - Utility ERC721 token.
 
-### General idea
+### General overview
 Users depositing their stablecoins together into strategy router, collected funds are periodically deposited into strategies for profits. User can withdraw his share of the pool including his profits at anytime.
 
 ### User workflow

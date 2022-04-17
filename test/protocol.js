@@ -431,11 +431,6 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.withdrawShares(sharesUnlocked, ust.address);
     newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
-    // TODO: after each withdraw the admin's initial amount getting down...
-    // initially it was 99... but here its become 98!
-    // It can be seen even better by looking at output of the previous test block (with loop)
-    // as on every iteration initial balance getting down by 0.01 or so...
-    // TODO: there is 1 share left on contract... probably related to the bug described above
     console.log("strategies balance");
     printStruct(await router.viewStrategiesBalance());
     console.log("strategyBiswap ust %s", await ust.balanceOf(strategyBiswap.address));
