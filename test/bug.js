@@ -132,8 +132,8 @@ describe("Trying to find source of bug", function () {
   it("Add strategies and stablecoins", async function () {
     // await router.setSupportedStablecoin(ust.address, true);
 
-    await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
-    await router.addStrategy(strategyBiswap.address, ust.address, 5000);
+    await router.addStrategy(strategyAcryptos.address, 5000);
+    await router.addStrategy(strategyBiswap.address, 5000);
   });
 
 

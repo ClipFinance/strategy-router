@@ -135,7 +135,10 @@ contract StrategyRouter is Ownable {
 
         // get total strategies balance after compound
         (uint256 balanceAfterCompound, ) = viewStrategiesBalance();
-        (uint256 totalDepositUniform, uint256[] memory depositAmounts) = rebalanceBatching();
+        (
+            uint256 totalDepositUniform,
+            uint256[] memory depositAmounts
+        ) = rebalanceBatching();
 
         for (uint256 i; i < len; i++) {
             // deposit to strategy
@@ -273,8 +276,9 @@ contract StrategyRouter is Ownable {
     {
         balances = new uint256[](strategies.length);
         for (uint256 i; i < balances.length; i++) {
-            address strategyAssetAddress = 
-                IStrategy(strategies[i].strategyAddress).depositToken();
+            address strategyAssetAddress = IStrategy(
+                strategies[i].strategyAddress
+            ).depositToken();
             uint256 balance = IStrategy(strategies[i].strategyAddress)
                 .totalTokens();
             balance = toUniform(balance, strategyAssetAddress);
@@ -295,9 +299,7 @@ contract StrategyRouter is Ownable {
         balances = new uint256[](stablecoins.length);
         for (uint256 i; i < balances.length; ) {
             address token = stablecoins[i];
-            uint256 balance = ERC20(token).balanceOf(
-                address(this)
-            );
+            uint256 balance = ERC20(token).balanceOf(address(this));
             balance = toUniform(balance, token);
             balances[i] = balance;
             totalBalance += balance;
@@ -457,8 +459,9 @@ contract StrategyRouter is Ownable {
         uint256 amountToTransfer;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
-            address strategyAssetAddress =
-                IStrategy(strategies[i].strategyAddress).depositToken();
+            address strategyAssetAddress = IStrategy(
+                strategies[i].strategyAddress
+            ).depositToken();
             uint256 withdrawAmount = (withdrawAmountTotal * balances[i]) /
                 strategiesBalance;
             withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
@@ -547,8 +550,9 @@ contract StrategyRouter is Ownable {
         uint256 amountToTransfer;
         // uint256 len = strategies.length;
         for (uint256 i; i < balances.length; ) {
-            address strategyAssetAddress =
-                IStrategy(strategies[i].strategyAddress).depositToken();
+            address strategyAssetAddress = IStrategy(
+                strategies[i].strategyAddress
+            ).depositToken();
             // split withdraw amount proportionally between strategies
             uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
@@ -591,16 +595,9 @@ contract StrategyRouter is Ownable {
             revert DepositUnderMinimum();
 
         // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
-        IERC20(depositToken).transferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        IERC20(depositToken).transferFrom(msg.sender, address(this), _amount);
 
-        uint256 amountUniform = toUniform(
-            _amount,
-           depositToken 
-        );
+        uint256 amountUniform = toUniform(_amount, depositToken);
         cycles[currentCycleId].totalInBatch += amountUniform;
 
         emit Deposit(msg.sender, depositToken, _amount);
@@ -640,10 +637,10 @@ contract StrategyRouter is Ownable {
     /// @param _strategyAddress Address of the strategy.
     /// @param _weight Weight of the strategy.
     /// @dev Admin function.
-    function addStrategy(
-        address _strategyAddress,
-        uint256 _weight
-    ) external onlyOwner {
+    function addStrategy(address _strategyAddress, uint256 _weight)
+        external
+        onlyOwner
+    {
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; ) {
             if (strategies[i].strategyAddress == _strategyAddress)
@@ -653,10 +650,7 @@ contract StrategyRouter is Ownable {
             }
         }
         strategies.push(
-            StrategyInfo({
-                strategyAddress: _strategyAddress,
-                weight: _weight
-            })
+            StrategyInfo({strategyAddress: _strategyAddress, weight: _weight})
         );
         updateStablecoinMap(IStrategy(_strategyAddress).depositToken(), true);
     }
@@ -677,13 +671,15 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function removeStrategy(uint256 _strategyId) external onlyOwner {
         // console.log("~~~~~~~~~~~~~ removeStrategy ~~~~~~~~~~~~~");
-        if(strategies.length < 2) revert CantRemoveLastStrategy();
+        if (strategies.length < 2) revert CantRemoveLastStrategy();
         StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
         IStrategy removedStrategy = IStrategy(
             removedStrategyInfo.strategyAddress
         );
-        address removedDepositToken = IStrategy(removedStrategyInfo.strategyAddress).depositToken();
-                
+        address removedDepositToken = IStrategy(
+            removedStrategyInfo.strategyAddress
+        ).depositToken();
+
         uint256 len = strategies.length - 1;
         strategies[_strategyId] = strategies[len];
         strategies.pop();
@@ -708,8 +704,9 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; ) {
             uint256 depositAmount = (withdrawnAmount *
                 viewStrategyPercentWeight(i)) / 10000;
-            address strategyAssetAddress =
-                IStrategy(strategies[i].strategyAddress).depositToken();
+            address strategyAssetAddress = IStrategy(
+                strategies[i].strategyAddress
+            ).depositToken();
 
             depositAmount = _trySwap(
                 depositAmount,
@@ -738,7 +735,7 @@ contract StrategyRouter is Ownable {
         // TODO: NEED to make the same function but for strategies
         console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
 
-        uint256 totalInBatch; 
+        uint256 totalInBatch;
 
         uint256 lenStables = stablecoins.length;
         address[] memory _tokens = new address[](lenStables);
@@ -749,25 +746,28 @@ contract StrategyRouter is Ownable {
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
             totalInBatch += toUniform(_balances[i], _tokens[i]);
             console.log(_balances[i]);
-            unchecked { i++; }
+            unchecked {
+                i++;
+            }
         }
 
         uint256 len = strategies.length;
         uint256[] memory _strategiesBalances = new uint256[](len);
         for (uint256 i; i < len; ) {
             for (uint256 j; j < lenStables; ) {
-                address depositToken = 
-                    IStrategy(strategies[i].strategyAddress).depositToken();
-                if (
-                    _balances[j] > 0 &&
-                    depositToken == _tokens[j]
-                ) {
+                address depositToken = IStrategy(strategies[i].strategyAddress)
+                    .depositToken();
+                if (_balances[j] > 0 && depositToken == _tokens[j]) {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
                 }
-                unchecked { j++; }
+                unchecked {
+                    j++;
+                }
             }
-            unchecked { i++; }
+            unchecked {
+                i++;
+            }
         }
 
         uint256[] memory toAdd = new uint256[](len);
@@ -776,7 +776,7 @@ contract StrategyRouter is Ownable {
             uint256 desiredBalance = (totalInBatch *
                 viewStrategyPercentWeight(i)) / 10000;
             desiredBalance = fromUniform(
-                desiredBalance, 
+                desiredBalance,
                 IStrategy(strategies[i].strategyAddress).depositToken()
             );
             unchecked {
@@ -785,11 +785,10 @@ contract StrategyRouter is Ownable {
                 } else if (desiredBalance < _strategiesBalances[i]) {
                     toSell[i] = _strategiesBalances[i] - desiredBalance;
                 }
-            console.log(toAdd[i], toSell[i]);
-                i++; 
+                console.log(toAdd[i], toSell[i]);
+                i++;
             }
         }
-
 
         for (uint256 i; i < len; ) {
             for (uint256 j; j < len; ) {
@@ -799,15 +798,14 @@ contract StrategyRouter is Ownable {
                         ? toAdd[j]
                         : toSell[i];
                     console.log("sell add", toSell[i], toAdd[j]);
-                    address sellToken = IStrategy(strategies[i].strategyAddress).depositToken();
-                    address buyToken = IStrategy(strategies[j].strategyAddress).depositToken();
-                    uint256 received = _trySwap(
-                        curSell,
-                        sellToken,
-                        buyToken
-                    );
+                    address sellToken = IStrategy(strategies[i].strategyAddress)
+                        .depositToken();
+                    address buyToken = IStrategy(strategies[j].strategyAddress)
+                        .depositToken();
+                    uint256 received = _trySwap(curSell, sellToken, buyToken);
 
-                    totalInBatch = totalInBatch - 
+                    totalInBatch =
+                        totalInBatch -
                         toUniform(curSell, sellToken) +
                         toUniform(received, buyToken);
 
@@ -818,9 +816,13 @@ contract StrategyRouter is Ownable {
                         toAdd[j] -= curSell;
                     }
                 }
-                unchecked { j++; }
+                unchecked {
+                    j++;
+                }
             }
-            unchecked { i++; }
+            unchecked {
+                i++;
+            }
         }
         return (totalInBatch, _strategiesBalances);
     }
@@ -832,17 +834,21 @@ contract StrategyRouter is Ownable {
     function updateStablecoinMap(address stablecoinAddress, bool isAddStrategy)
         private
     {
-        if(isAddStrategy && !stablecoinsMap[stablecoinAddress]) {
+        if (isAddStrategy && !stablecoinsMap[stablecoinAddress]) {
             stablecoinsMap[stablecoinAddress] = true;
             stablecoins.push(stablecoinAddress);
         } else if (!isAddStrategy) {
-
             // if stablecoin still used by unremoved strategies just exit
             uint256 len = strategies.length;
             for (uint256 i = 0; i < len; ) {
-                address strategyToken = IStrategy(strategies[i].strategyAddress).depositToken();
-                if(strategyToken == stablecoinAddress) { return; }
-                unchecked { i++; }
+                address strategyToken = IStrategy(strategies[i].strategyAddress)
+                    .depositToken();
+                if (strategyToken == stablecoinAddress) {
+                    return;
+                }
+                unchecked {
+                    i++;
+                }
             }
 
             // if stablecoin unused by strategies anymore, then delete it
@@ -854,7 +860,9 @@ contract StrategyRouter is Ownable {
                     stablecoins.pop();
                     break;
                 }
-                unchecked { i++; }
+                unchecked {
+                    i++;
+                }
             }
         }
     }
