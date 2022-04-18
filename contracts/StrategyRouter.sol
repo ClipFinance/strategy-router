@@ -710,9 +710,80 @@ contract StrategyRouter is Ownable {
         }
     }
 
+    /// @notice Rebalance strategies so that their balances will match their weight.
+    /// @return totalInStrategies Total strategies balance with uniform decimals.
+    /// @return balances Balances of the strategies.
+    function rebalanceStrategies()
+        external
+        onlyOwner
+        returns (uint256 totalInStrategies, uint256[] memory balances)
+    {
+        console.log("~~~~~~~~~~~~~ rebalance strategies ~~~~~~~~~~~~~");
+
+        uint256 totalBalance;
+
+        uint256 len = strategies.length;
+        uint256[] memory _strategiesBalances = new uint256[](len);
+        for (uint256 i; i < len; i++) {
+            address depositToken = IStrategy(strategies[i].strategyAddress).depositToken();
+            _strategiesBalances[i] = ERC20(depositToken).balanceOf(address(this));
+            totalBalance += toUniform(_strategiesBalances[i], depositToken);
+        }
+
+        uint256[] memory toAdd = new uint256[](len);
+        uint256[] memory toSell = new uint256[](len);
+        for (uint256 i; i < len; ) {
+            uint256 desiredBalance = (totalBalance *
+                viewStrategyPercentWeight(i)) / 10000;
+            desiredBalance = fromUniform(
+                desiredBalance,
+                IStrategy(strategies[i].strategyAddress).depositToken()
+            );
+            unchecked {
+                if (desiredBalance > _strategiesBalances[i]) {
+                    toAdd[i] = desiredBalance - _strategiesBalances[i];
+                } else if (desiredBalance < _strategiesBalances[i]) {
+                    toSell[i] = _strategiesBalances[i] - desiredBalance;
+                }
+                console.log(toAdd[i], toSell[i]);
+                i++;
+            }
+        }
+
+        for (uint256 i; i < len; i++) {
+            for (uint256 j; j < len; j++) {
+                if (toSell[i] == 0) break;
+                if (toAdd[j] > 0) {
+                    uint256 curSell = toSell[i] > toAdd[j]
+                        ? toAdd[j]
+                        : toSell[i];
+                    console.log("sell add", toSell[i], toAdd[j]);
+                    address sellToken = IStrategy(strategies[i].strategyAddress)
+                        .depositToken();
+                    address buyToken = IStrategy(strategies[j].strategyAddress)
+                        .depositToken();
+                    uint256 received = _trySwap(curSell, sellToken, buyToken);
+
+                    totalBalance =
+                        totalBalance -
+                        toUniform(curSell, sellToken) +
+                        toUniform(received, buyToken);
+
+                    _strategiesBalances[i] -= curSell;
+                    _strategiesBalances[j] += received;
+                    unchecked {
+                        toSell[i] -= curSell;
+                        toAdd[j] -= curSell;
+                    }
+                }
+            }
+        }
+        return (totalBalance, _strategiesBalances);
+    }
+
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return totalInBatching Total batching balance with uniform decimals.
-    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
+    /// @return balances Balances of the strategies deposit tokens.
     function rebalanceBatching()
         private
         returns (uint256 totalInBatching, uint256[] memory balances)
