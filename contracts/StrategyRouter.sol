@@ -93,7 +93,7 @@ contract StrategyRouter is Ownable {
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function
-    uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e14; // UNIFORM_DECIMALS, so 1e14 == 0.0001
+    uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17; // UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant INITIAL_SHARES = 1e12;
     address private constant DEAD_ADDRESS =
         0x000000000000000000000000000000000000dEaD;
@@ -149,7 +149,6 @@ contract StrategyRouter is Ownable {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositToken);
 
-            console.log("depositAmounts[i]", depositAmounts[i]);
             console.log("depositAmounts[i]", depositAmounts[i]);
             strategyAssetAddress.transfer(
                 strategies[i].strategyAddress,
@@ -266,6 +265,11 @@ contract StrategyRouter is Ownable {
     /// @notice Returns count of strategies.
     function viewStrategiesCount() public view returns (uint256 count) {
         return strategies.length;
+    }
+
+    /// @notice Returns array of strategies.
+    function viewStrategies() public view returns (StrategyInfo[] memory) {
+        return strategies;
     }
 
     /// @notice Returns amount of tokens in strategies.
@@ -721,23 +725,25 @@ contract StrategyRouter is Ownable {
         uint256 totalBalance;
 
         uint256 len = strategies.length;
+        if(len < 2) revert NothingToRebalance();
         uint256[] memory _strategiesBalances = new uint256[](len);
+        address[] memory _strategiesTokens = new address[](len);
+        address[] memory _strategies = new address[](len);
         for (uint256 i; i < len; i++) {
-            address depositToken = strategies[i].depositToken;
-            _strategiesBalances[i] = ERC20(depositToken).balanceOf(
-                address(this)
-            );
-            totalBalance += toUniform(_strategiesBalances[i], depositToken);
+            _strategiesTokens[i] = strategies[i].depositToken;
+            _strategies[i] = strategies[i].strategyAddress;
+            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
+            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
         }
 
         uint256[] memory toAdd = new uint256[](len);
         uint256[] memory toSell = new uint256[](len);
-        for (uint256 i; i < len; ) {
+        for (uint256 i; i < len; i++) {
             uint256 desiredBalance = (totalBalance *
                 viewStrategyPercentWeight(i)) / 1e18;
             desiredBalance = fromUniform(
                 desiredBalance,
-                strategies[i].depositToken
+                _strategiesTokens[i]
             );
             unchecked {
                 if (desiredBalance > _strategiesBalances[i]) {
@@ -746,7 +752,6 @@ contract StrategyRouter is Ownable {
                     toSell[i] = _strategiesBalances[i] - desiredBalance;
                 }
                 console.log(toAdd[i], toSell[i]);
-                i++;
             }
         }
 
@@ -758,17 +763,27 @@ contract StrategyRouter is Ownable {
                         ? toAdd[j]
                         : toSell[i];
                     console.log("sell add", toSell[i], toAdd[j]);
-                    address sellToken = strategies[i].depositToken;
-                    address buyToken = strategies[j].depositToken;
-                    uint256 received = _trySwap(curSell, sellToken, buyToken);
 
-                    totalBalance =
-                        totalBalance -
-                        toUniform(curSell, sellToken) +
-                        toUniform(received, buyToken);
+                    address sellToken = _strategiesTokens[i];
+                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
+                        console.log(
+                            "swap threshold reached",
+                            toUniform(curSell, sellToken),
+                            REBALANCE_SWAP_THRESHOLD
+                        );
+                        unchecked {
+                            toSell[i] = 0;
+                            toAdd[j] -= curSell;
+                        }
+                        break;
+                    }
+                    address buyToken = _strategiesTokens[j];
 
-                    _strategiesBalances[i] -= curSell;
-                    _strategiesBalances[j] += received;
+                    uint256 received = IStrategy(_strategies[i]).withdraw(curSell);
+                    received = _trySwap(received, sellToken, buyToken);
+                    ERC20(buyToken).transfer(_strategies[j], received);
+                    IStrategy(_strategies[j]).deposit(received);
+
                     unchecked {
                         toSell[i] -= curSell;
                         toAdd[j] -= curSell;
@@ -776,6 +791,12 @@ contract StrategyRouter is Ownable {
                 }
             }
         }
+
+        for (uint256 i; i < len; i++) {
+            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
+            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
+        }
+
         return (totalBalance, _strategiesBalances);
     }
 
@@ -883,7 +904,6 @@ contract StrategyRouter is Ownable {
                         ? _tokens[i - lenStrats]
                         : strategies[i].depositToken;
 
-                    // TODO: need more test this
                     // its not worth to swap too small amounts
                     if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
                         console.log(
