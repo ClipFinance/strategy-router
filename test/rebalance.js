@@ -284,43 +284,200 @@ describe("Test rebalance functions", function () {
 
     });
   });
-  // it("rebalanceStrategies", async function () {
-  //     await router.depositToStrategies();
 
-  //     let ret = await router.callStatic.rebalanceStrategies();
-  //     let gas = (await (await router.rebalanceStrategies()).wait()).gasUsed;
-  //     console.log("ret", ret);
-  //     console.log("gasUsed %s", gas);
-  //     console.log("viewStrategiesBalance", await router.viewStrategiesBalance());
+  // describe("Test rebalanceStrategies function", function () {
+  //   beforeEach(async () => {
+  //     // console.log("bef each");
+  //     await provider.send("evm_revert", [snapshotId]);
+  //     snapshotId = await provider.send("evm_snapshot");
+  //   });
+
+  //   it("ust strategy, router supports only ust, should revert", async function () {
+
+  //     await router.setSupportedStablecoin(ust.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+
+  //     await expect(router.rebalanceBatching()).to.be.revertedWith("NothingToRebalance()");
+  //   });
+
+  //   it("ust strategy, router supports multiple arbitrary tokens", async function () {
+
+  //     await router.setSupportedStablecoin(ust.address, true);
+  //     await router.setSupportedStablecoin(busd.address, true);
+  //     await router.setSupportedStablecoin(usdc.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, parseUst("1"));
+  //     await router.depositToBatch(busd.address, parseUst("1"));
+  //     await router.depositToBatch(usdc.address, parseUst("1"));
+
+  //     await verifyTokensRatio([1, 1, 1]);
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+  //     await verifyTokensRatio([1, 0, 0]);
+
+  //   });
+
+  //   it("two ust strategies, router supports only ust", async function () {
+
+  //     await router.setSupportedStablecoin(ust.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     let farm2 = await createMockFarm(ust.address, 10000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+  //     await router.addStrategy(farm2.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, parseUst("1"));
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     await verifyRatioOfReturnedData([1, 1], ret);
+
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+
+  //   });
+
+  //   it("two ust strategies, router supports ust,busd,usdc", async function () {
+
+  //     await router.setSupportedStablecoin(ust.address, true);
+  //     await router.setSupportedStablecoin(busd.address, true);
+  //     await router.setSupportedStablecoin(usdc.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     let farm2 = await createMockFarm(ust.address, 10000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+  //     await router.addStrategy(farm2.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, parseUst("1"));
+  //     await router.depositToBatch(busd.address, parseUst("1"));
+  //     await router.depositToBatch(usdc.address, parseUst("1"));
+
+  //     await verifyTokensRatio([1, 1, 1]);
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     console.log(ret);
+  //     await verifyRatioOfReturnedData([1, 1], ret);
+
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+  //     await verifyTokensRatio([1, 0, 0]);
+
+  //   });
+
+  //   it("ust and busd strategies, router supports ust,busd", async function () {
+
+  //     await router.setSupportedStablecoin(ust.address, true);
+  //     await router.setSupportedStablecoin(busd.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     let farm2 = await createMockFarm(busd.address, 10000);
+  //     await router.addStrategy(farm2.address, busd.address, 5000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, parseUst("2"));
+  //     await router.depositToBatch(busd.address, parseUst("1"));
+
+  //     await verifyTokensRatio([2, 1]);
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     console.log(ret);
+  //     await verifyRatioOfReturnedData([1, 1], ret);
+
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+  //     await verifyTokensRatio([1, 1]);
+
+  //   });
+
+  //   it("ust and busd strategies, router supports ust,busd,usdc", async function () {
+
+  //     await router.setSupportedStablecoin(busd.address, true);
+  //     await router.setSupportedStablecoin(usdc.address, true);
+  //     await router.setSupportedStablecoin(ust.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     let farm2 = await createMockFarm(busd.address, 10000);
+  //     await router.addStrategy(farm2.address, busd.address, 5000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, parseUst("2"));
+  //     await router.depositToBatch(busd.address, parseUst("1"));
+  //     await router.depositToBatch(usdc.address, parseUst("5"));
+
+  //     await verifyTokensRatio([1, 5, 2]);
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     console.log(ret);
+  //     await verifyRatioOfReturnedData([1, 1], ret);
+
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+  //     await verifyTokensRatio([1, 0, 1]);
+
+  //   });
+
+  //   it("'dust' token balances should not be swapped on dexes", async function () {
+
+  //     await router.setSupportedStablecoin(busd.address, true);
+  //     await router.setSupportedStablecoin(usdc.address, true);
+  //     await router.setSupportedStablecoin(ust.address, true);
+
+  //     let farm = await createMockFarm(ust.address, 10000);
+  //     await router.addStrategy(farm.address, ust.address, 5000);
+
+  //     await router.depositToBatch(ust.address, 2);
+  //     await router.depositToBatch(busd.address, 2);
+  //     await router.depositToBatch(usdc.address, parseUsdc("1"));
+
+  //     let ret = await router.callStatic.rebalanceBatching();
+  //     // console.log(ret);
+  //     await expect(ret.balances[0]).to.be.closeTo(
+  //       parseUst("1"),
+  //       parseUst("0.01")
+  //     );
+
+  //     let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+  //     console.log("gasUsed", gas);
+  //     // console.log("ret", ret);
+  //     // console.log("getTokenBalances", await getTokenBalances());
+
+  //     await verifyTokensRatio([0, 0, 1]);
+
+  //   });
   // });
 
-
-  // it("User deposit", async function () {
-
-  //   for (let i = 0; i < 2; i++) {
-
-  //     await router.depositToBatch(ust.address, parseUst("2200"))
-  //     await router.depositToBatch(ust.address, parseUst("2200"))
-  //     await router.depositToBatch(ust.address, parseUst("700"))
-  //     await router.depositToBatch(ust.address, parseUst("700"))
-
-  //     await skipCycleTime();
-
-  //     await router.depositToStrategies();
-  //   }
-  //   console.log(await receiptContract.walletOfOwner(owner.address));
-  // });
 
 });
 
 async function verifyRatioOfReturnedData(weights, data) {
   assert(Number(await router.viewStrategiesCount()) == weights.length);
-  const { totalInBatching, balances } = data;
+  const { totalDeposit, balances } = data;
   let totalWeight = weights.reduce((e, acc) => acc + e);
   const ERROR_THRESHOLD = 0.3;
   for (let i = 0; i < weights.length; i++) {
     const percentWeight = weights[i] * 100 / totalWeight;
-    const percentBalance = balances[i] * 100 / totalInBatching;
+    const percentBalance = balances[i] * 100 / totalDeposit;
     console.log(percentBalance, percentWeight);
     expect(percentBalance).to.be.closeTo(percentWeight, ERROR_THRESHOLD);
   }

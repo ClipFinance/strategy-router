@@ -289,7 +289,9 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Returns token balances and their sum in the batching.
-    /// @notice All returned numbers have `UNIFORM_DECIMALS` decimals.
+    /// @notice Shows total batching balance, possibly not total to be deposited into strategies.
+    ///         because strategies might not take all token supported by router.
+    /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total tokens in the batching.
     /// @return balances Array of token balances in the batching.
     function viewBatchingBalance()
@@ -778,25 +780,19 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
-    /// @return totalInBatching Total batching balance with uniform decimals.
+    /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-
-    /*
-        TODO: add limit for 'toSell' because we can't swap leftover 2 wei
-        TODO: add better tests, this shit is so complex
-    */
-
     function rebalanceBatching()
         external
         onlyOwner
-        returns (uint256 totalInBatching, uint256[] memory balances)
+        returns (uint256 totalDeposit, uint256[] memory balances)
     {
         return _rebalanceBatching();
     }
 
     function _rebalanceBatching()
         private
-        returns (uint256 totalInBatching, uint256[] memory balances)
+        returns (uint256 totalDeposit, uint256[] memory balances)
     {
         console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
 
@@ -887,6 +883,7 @@ contract StrategyRouter is Ownable {
                         ? _tokens[i - lenStrats]
                         : strategies[i].depositToken;
 
+                    // TODO: need more test this
                     // its not worth to swap too small amounts
                     if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
                         console.log(
@@ -903,11 +900,6 @@ contract StrategyRouter is Ownable {
                     address buyToken = strategies[j].depositToken;
                     uint256 received = _trySwap(curSell, sellToken, buyToken);
 
-                    totalInBatch =
-                        totalInBatch -
-                        toUniform(curSell, sellToken) +
-                        toUniform(received, buyToken);
-
                     _strategiesBalances[i] -= curSell;
                     _strategiesBalances[j] += received;
                     unchecked {
@@ -921,10 +913,11 @@ contract StrategyRouter is Ownable {
         _balances = new uint256[](lenStrats);
         for (uint256 i; i < lenStrats; i++) {
             _balances[i] = _strategiesBalances[i];
+            totalDeposit += _balances[i];
             // console.log("_strategiesBalances[i] %s", _strategiesBalances[i]);
         }
 
-        return (totalInBatch, _balances);
+        return (totalDeposit, _balances);
     }
 
     // function withdrawFromStrategy(uint256 _strategyId) external onlyOwner {}
