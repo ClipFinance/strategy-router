@@ -832,7 +832,6 @@ contract StrategyRouter is Ownable {
         }
 
         uint256 lenStrats = strategies.length;
-        if (lenStrats < 2 && lenStables < 2) revert NothingToRebalance();
 
         uint256[] memory _strategiesBalances = new uint256[](
             lenStrats + lenStables
