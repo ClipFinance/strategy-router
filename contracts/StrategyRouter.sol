@@ -714,7 +714,6 @@ contract StrategyRouter is Ownable {
         }
     }
 
-    // TODO: missing withdraw and deposit calls to strategies...
     function rebalanceStrategies()
         external
         onlyOwner
@@ -933,7 +932,7 @@ contract StrategyRouter is Ownable {
         _balances = new uint256[](lenStrats);
         for (uint256 i; i < lenStrats; i++) {
             _balances[i] = _strategiesBalances[i];
-            totalDeposit += _balances[i];
+            totalDeposit += toUniform(_balances[i], strategies[i].depositToken);
             // console.log("_strategiesBalances[i] %s", _strategiesBalances[i]);
         }
 
