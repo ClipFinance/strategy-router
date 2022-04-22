@@ -5,6 +5,7 @@ require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
+require('solidity-docgen');
 
 /**
  * @type import('hardhat/config').HardhatUserConfig
@@ -37,6 +38,9 @@ module.exports = {
     apiKey: {
       bsc: process.env.BSCSCAN_API_KEY
     }
+  },
+  docgen: {
+    pages: "files"
   },
   solidity: {
     compilers: [

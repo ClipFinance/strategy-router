@@ -109,7 +109,7 @@ contract StrategyRouter is Ownable {
 
     StrategyInfo[] public strategies;
     address[] private stablecoins;
-    mapping(address => bool) private stablecoinsMap;
+    mapping(address => bool) public stablecoinsMap;
     mapping(uint256 => Cycle) public cycles;
 
     constructor() {
@@ -154,7 +154,8 @@ contract StrategyRouter is Ownable {
                 strategies[i].strategyAddress,
                 depositAmounts[i]
             );
-            IStrategy(strategies[i].strategyAddress).deposit(depositAmounts[i]);
+            if(depositAmounts[i] > 0)
+                IStrategy(strategies[i].strategyAddress).deposit(depositAmounts[i]);
 
             // console.log("depositAmount %s leftoverAmount %s", depositAmount);
         }
@@ -162,14 +163,15 @@ contract StrategyRouter is Ownable {
         // get total strategies balance after deposit
         (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
+        uint256 totalWithdrawnUniform = cycles[currentCycleId].totalWithdrawnUniform;
         console.log(
             "receivedByStrats %s, withdrawFromBatch %s, sum %s",
             receivedByStrats,
-            cycles[currentCycleId].totalWithdrawnUniform,
-            receivedByStrats + cycles[currentCycleId].totalWithdrawnUniform
+            totalWithdrawnUniform,
+            receivedByStrats + totalWithdrawnUniform
         );
-        receivedByStrats += cycles[currentCycleId].totalWithdrawnUniform;
-        balanceAfterCompound -= cycles[currentCycleId].totalWithdrawnUniform;
+        receivedByStrats += totalWithdrawnUniform;
+        balanceAfterCompound -= totalWithdrawnUniform;
 
         // console.log(
         //     "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math",
@@ -215,10 +217,10 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].receivedByStrats = receivedByStrats;
         cycles[currentCycleId].totalDepositUniform =
             totalDepositUniform +
-            cycles[currentCycleId].totalWithdrawnUniform;
+            totalWithdrawnUniform;
         console.log(
             "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
-            cycles[currentCycleId].totalWithdrawnUniform,
+            totalWithdrawnUniform,
             totalDepositUniform,
             receivedByStrats
         );
@@ -333,7 +335,7 @@ contract StrategyRouter is Ownable {
         shares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
     }
 
-    /// @notice Converts shares to uniform amount using current price per share.
+    /// @notice Calculate how much usd shares representing using current price per share.
     /// @dev Returns amount with uniform decimals
     function sharesToAmount(uint256 shares)
         public
@@ -355,7 +357,7 @@ contract StrategyRouter is Ownable {
 
     // User Functions
 
-    /// @notice Convert receipt NFT into share tokens.
+    /// @notice Convert receipt NFT into share tokens, withdraw functions do it internally.
     /// @notice Cycle noted in receipt should be closed.
     function unlockSharesFromNFT(uint256 receiptId)
         public
@@ -375,6 +377,7 @@ contract StrategyRouter is Ownable {
     /// @notice User withdraw usd from strategies via receipt NFT.
     /// @notice On partial withdraw leftover shares transfered to user.
     /// @notice Receipt is burned.
+    /// @notice Internally all receipt's shares unlocked from that NFT.
     /// @param receiptId Receipt NFT id.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     /// @param shares Amount of shares from receipt to withdraw.
@@ -427,12 +430,14 @@ contract StrategyRouter is Ownable {
 
             if (cycles[currentCycleId].totalWithdrawnUniform < amount)
                 revert PleaseWithdrawFromBatching();
-            cycles[currentCycleId].totalWithdrawnUniform -= amount;
-            _withdrawFromStrategies(amount, withdrawToken);
+            // cycles[currentCycleId].totalWithdrawnUniform -= amount;
+            uint256 withdrawAmount = _withdrawFromStrategies(amount, withdrawToken);
+            cycles[currentCycleId].totalWithdrawnUniform -= withdrawAmount;
         }
     }
 
     /// @notice User withdraw stablecoins from strategies via shares.
+    /// @notice Receipts should be converted to shares prior to call this.
     /// @param shares Amount of shares to withdraw.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     function withdrawShares(uint256 shares, address withdrawToken)
@@ -452,6 +457,7 @@ contract StrategyRouter is Ownable {
 
     function _withdrawFromStrategies(uint256 amount, address withdrawToken)
         private
+        returns (uint256)
     {
         (
             uint256 strategiesBalance,
@@ -461,6 +467,7 @@ contract StrategyRouter is Ownable {
 
         // convert uniform amount to amount of withdraw token
         uint256 amountToTransfer;
+        uint256 totalWithdrawnUniform;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             address strategyAssetAddress = strategies[i].depositToken;
@@ -470,6 +477,7 @@ contract StrategyRouter is Ownable {
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
             );
+            totalWithdrawnUniform += toUniform(withdrawAmount, strategyAssetAddress);
 
             withdrawAmount = _trySwap(
                 withdrawAmount,
@@ -484,6 +492,7 @@ contract StrategyRouter is Ownable {
             withdrawToken,
             amountToTransfer
         );
+        return totalWithdrawnUniform;
     }
 
     /// @notice User withdraw tokens from batching.
@@ -491,9 +500,8 @@ contract StrategyRouter is Ownable {
     /// @notice Receipt is burned when withdrawing whole amount.
     /// @param receiptId Receipt NFT id.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param amount Amount to withdraw. Max amount to withdraw is noted in NFT,
-    ///        passing greater than that or 0 will choose maximum noted in NFT.
-    /// @dev Cycle noted in receipt must match current cycle (i.e. not closed).
+    /// @param shares Amount of shares to withdraw, specify this if money of receipt were deposited into strategies.
+    /// @param amount Amount to withdraw, specify this if money of receipt isn't deposited into strategies yet.
     /// @dev Only callable by user wallets.
     function withdrawFromBatching(
         uint256 receiptId,
@@ -520,7 +528,7 @@ contract StrategyRouter is Ownable {
             amount = sharesToAmount(shares);
             sharesToken.burn(address(this), shares);
             _withdrawFromBatching(amount, withdrawToken);
-            cycles[currentCycleId].totalWithdrawnUniform += amount;
+            // cycles[currentCycleId].totalWithdrawnUniform += amount;
             emit UnlockSharesFromNFT(msg.sender, receiptId, unlocked);
         } else {
             // receipt in batching withdraws from batching
@@ -542,6 +550,7 @@ contract StrategyRouter is Ownable {
     function _withdrawFromBatching(uint256 amount, address withdrawToken)
         private
     {
+        // TODO: should withdraw from all available stablecoins?
         (
             uint256 totalBalance,
             uint256[] memory balances
@@ -555,6 +564,7 @@ contract StrategyRouter is Ownable {
             address strategyAssetAddress = strategies[i].depositToken;
             // split withdraw amount proportionally between strategies
             uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
+            cycles[currentCycleId].totalWithdrawnUniform += amountWithdraw;
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
             // swap strategies tokens to withdraw token
@@ -577,8 +587,7 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Deposit stablecoin into batching.
-    /// @notice Tokens immediately swapped to stablecoins required by strategies
-    ///         according to their weights, but not deposited into strategies.
+    /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
@@ -714,6 +723,10 @@ contract StrategyRouter is Ownable {
         }
     }
 
+    /// @notice Rebalance strategies, so that their balances will match their weights.
+    /// @return totalInStrategies Total balance of the strategies with uniform decimals.
+    /// @return balances Balances of the strategies after rebalancing.
+    /// @dev Admin function.
     function rebalanceStrategies()
         external
         onlyOwner
