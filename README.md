@@ -1,4 +1,6 @@
-* [Documantion is here](./docs/docs.md)  
+* [Documantion](./docs/docs.md)  
+* [StrategyRouter API](./docs/StrategyRouter.md)  
+* [ReceiptNFT API](./docs/ReceiptNFT.md)  
 
 ---
 
