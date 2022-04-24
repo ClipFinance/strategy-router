@@ -149,7 +149,7 @@ contract StrategyRouter is Ownable {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositToken);
 
-            console.log("depositAmounts[i]", depositAmounts[i]);
+            // console.log("depositAmounts[i]", depositAmounts[i]);
             strategyAssetAddress.transfer(
                 strategies[i].strategyAddress,
                 depositAmounts[i]
@@ -165,7 +165,7 @@ contract StrategyRouter is Ownable {
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
         uint256 totalWithdrawnUniform = cycles[currentCycleId].totalWithdrawnUniform;
         console.log(
-            "receivedByStrats %s, withdrawFromBatch %s, sum %s",
+            "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
             receivedByStrats,
             totalWithdrawnUniform,
             receivedByStrats + totalWithdrawnUniform
@@ -407,7 +407,6 @@ contract StrategyRouter is Ownable {
             if (unlocked > 0) {
                 sharesToken.transfer(msg.sender, unlocked);
             }
-            // shares was locked in router
             amount = sharesToAmount(shares);
             sharesToken.burn(address(this), shares);
             console.log("shares %s, amount %s", shares, amount);
@@ -431,8 +430,9 @@ contract StrategyRouter is Ownable {
             if (cycles[currentCycleId].totalWithdrawnUniform < amount)
                 revert PleaseWithdrawFromBatching();
             // cycles[currentCycleId].totalWithdrawnUniform -= amount;
-            uint256 withdrawAmount = _withdrawFromStrategies(amount, withdrawToken);
-            cycles[currentCycleId].totalWithdrawnUniform -= withdrawAmount;
+            // uint256 withdrawAmount = _withdrawFromStrategies(amount, withdrawToken);
+            _withdrawFromStrategies(amount, withdrawToken);
+            cycles[currentCycleId].totalWithdrawnUniform -= amount;
         }
     }
 
@@ -457,7 +457,7 @@ contract StrategyRouter is Ownable {
 
     function _withdrawFromStrategies(uint256 amount, address withdrawToken)
         private
-        returns (uint256)
+        // returns (uint256)
     {
         (
             uint256 strategiesBalance,
@@ -467,7 +467,7 @@ contract StrategyRouter is Ownable {
 
         // convert uniform amount to amount of withdraw token
         uint256 amountToTransfer;
-        uint256 totalWithdrawnUniform;
+        // uint256 totalWithdrawnUniform;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             address strategyAssetAddress = strategies[i].depositToken;
@@ -477,7 +477,7 @@ contract StrategyRouter is Ownable {
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
             );
-            totalWithdrawnUniform += toUniform(withdrawAmount, strategyAssetAddress);
+            // totalWithdrawnUniform += toUniform(withdrawAmount, strategyAssetAddress);
 
             withdrawAmount = _trySwap(
                 withdrawAmount,
@@ -492,7 +492,7 @@ contract StrategyRouter is Ownable {
             withdrawToken,
             amountToTransfer
         );
-        return totalWithdrawnUniform;
+        // return totalWithdrawnUniform;
     }
 
     /// @notice User withdraw tokens from batching.
@@ -528,7 +528,7 @@ contract StrategyRouter is Ownable {
             amount = sharesToAmount(shares);
             sharesToken.burn(address(this), shares);
             _withdrawFromBatching(amount, withdrawToken);
-            // cycles[currentCycleId].totalWithdrawnUniform += amount;
+            cycles[currentCycleId].totalWithdrawnUniform += amount;
             emit UnlockSharesFromNFT(msg.sender, receiptId, unlocked);
         } else {
             // receipt in batching withdraws from batching
@@ -564,7 +564,6 @@ contract StrategyRouter is Ownable {
             address strategyAssetAddress = strategies[i].depositToken;
             // split withdraw amount proportionally between strategies
             uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-            cycles[currentCycleId].totalWithdrawnUniform += amountWithdraw;
             amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
 
             // swap strategies tokens to withdraw token

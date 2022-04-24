@@ -202,7 +202,10 @@ describe("Trying to find source of bug", function () {
     console.log(newBalance.sub(oldBalance));
 
 
-    for (let i = 0; i < 2; i++) {
+    await router.depositToBatch(ust.address, parseUst("10000"))
+    await router.depositToStrategies();
+
+    for (let i = 0; i < 20; i++) {
       await router.depositToBatch(ust.address, parseUst("10000"))
 
       let receipts = await receiptContract.walletOfOwner(owner.address);
@@ -236,11 +239,18 @@ describe("Trying to find source of bug", function () {
       newBalance = await ust.balanceOf(owner.address);
       console.log(newBalance.sub(oldBalance));
     }
+      receipts = await receiptContract.walletOfOwner(owner.address);
+      receipts = receipts.filter(id => id != 0); // ignore initial deposit
+      receiptId = receipts[0];
+      oldBalance = await ust.balanceOf(owner.address);
+      await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+      newBalance = await ust.balanceOf(owner.address);
+      console.log(newBalance.sub(oldBalance));
 
-    let receipts = await receiptContract.walletOfOwner(owner.address);
+    receipts = await receiptContract.walletOfOwner(owner.address);
     console.log("receipts", receipts);
     console.log("batch balance", formatEther((await router.viewBatchingBalance()).totalBalance.toString()));
-    console.log("viewStrategiesBalance", formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
+    console.log("viewStrategiesBalance", ((await router.viewStrategiesBalance())));
     console.log("sharesToken.totalSupply", await sharesToken.totalSupply());
 
   });
