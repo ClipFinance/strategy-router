@@ -112,7 +112,7 @@ describe("Trying to find source of bug", function () {
   });
 
   it("Deploy biswap_ust_busd", async function () {
-
+    
     // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
     strategyBiswap = await ethers.getContractFactory("biswap_ust_busd");
     strategyBiswap = await strategyBiswap.deploy(router.address);
@@ -127,6 +127,7 @@ describe("Trying to find source of bug", function () {
 
     poolIdBiswap = await strategyBiswap.poolId();
 
+
   });
 
   it("Add strategies and stablecoins", async function () {
@@ -138,7 +139,7 @@ describe("Trying to find source of bug", function () {
 
 
   it("Admin initial deposit", async function () {
-    await ust.approve(router.address, parseUst("1000000"));
+    await ust.approve(router.address, parseUst("10000000000"));
 
     // admin initial deposit seems to be fix for a problem, 
     // if you deposit and withdraw multiple times (without initial deposit)
@@ -150,10 +151,11 @@ describe("Trying to find source of bug", function () {
 
     await logFarmLPs();
 
+
     expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
   });
 
-  it("bug test", async function () {
+  it("cross withdraw from batching (by strategist)", async function () {
 
     // await router.depositToBatch(ust.address, parseUst("1"))
     // await skipCycleTime();
@@ -167,12 +169,10 @@ describe("Trying to find source of bug", function () {
 
     let receiptId = 1;
     let shares = await router.receiptToShares(receiptId);
-    // console.log(shares);
 
     let oldBalance = await ust.balanceOf(owner.address);
     await router.withdrawFromStrategies(receiptId, UST, shares, 0);
     let newBalance = await ust.balanceOf(owner.address);
-    // console.log(newBalance.sub(oldBalance));
     console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
 
 
@@ -205,39 +205,53 @@ describe("Trying to find source of bug", function () {
     await router.depositToBatch(ust.address, parseUst("10000"))
     await router.depositToStrategies();
 
-    for (let i = 0; i < 20; i++) {
-      await router.depositToBatch(ust.address, parseUst("10000"))
+
+    console.log("START LOOP");
+
+    async function withdrawSharesFromBatching(receiptId) {
+      
+      shares = await router.receiptToShares(receiptId);
+
+      oldBalance = await ust.balanceOf(owner.address);
+      await router.withdrawFromBatching(receiptId, UST, shares, 0);
+      newBalance = await ust.balanceOf(owner.address);
+      // console.log(newBalance.sub(oldBalance));
+    }
+    async function withdrawSharesFromStrategies(receiptId) {
+      shares = await router.receiptToShares(receiptId);
+      oldBalance = await ust.balanceOf(owner.address);
+      await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+      newBalance = await ust.balanceOf(owner.address);
+      // console.log(newBalance.sub(oldBalance));
+    }
+    for (let i = 0; i < 100; i++) {
+      
+
+      await router.depositToBatch(ust.address, parseUst("100000"))
 
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore initial deposit
       receiptId = receipts[0];
       console.log("receipts", receipts);
 
+      // 10k bsw should be taken by this partly
+      await router.depositToBatch(ust.address, parseUst("100000"))
+
       await router.depositToStrategies();
+
       // deposit in batching so previeous strategist can withdraw
-      await router.depositToBatch(ust.address, parseUst("10000"))
+      await router.depositToBatch(ust.address, parseUst("100000"))
 
       // strategist withdraw from batching
-      shares = await router.receiptToShares(receiptId);
+      await withdrawSharesFromBatching(receiptId);
 
-      oldBalance = await ust.balanceOf(owner.address);
-      await router.withdrawFromBatching(receiptId, UST, shares, 0);
-      newBalance = await ust.balanceOf(owner.address);
-      console.log(newBalance.sub(oldBalance));
-
+      await bsw.transfer(strategyBiswap.address, parseEther("10000"));
       // batching has ~0 but still should deposit as if non zero
       console.log("batch balance should be ~0", formatEther((await router.viewBatchingBalance()).totalBalance.toString()));
       await router.depositToStrategies();
 
-      receiptId = receiptId.add(1);
-      shares = await router.receiptToShares(receiptId);
-      console.log(shares);
-      console.log(await router.sharesToAmount(shares));
-
-      oldBalance = await ust.balanceOf(owner.address);
-      await router.withdrawFromStrategies(receiptId, UST, shares, 0);
-      newBalance = await ust.balanceOf(owner.address);
-      console.log(newBalance.sub(oldBalance));
+      await withdrawSharesFromStrategies(receiptId.add(1));
+      await withdrawSharesFromStrategies(receiptId.add(2));
     }
       receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore initial deposit
@@ -251,9 +265,131 @@ describe("Trying to find source of bug", function () {
     console.log("receipts", receipts);
     console.log("batch balance", formatEther((await router.viewBatchingBalance()).totalBalance.toString()));
     console.log("viewStrategiesBalance", ((await router.viewStrategiesBalance())));
+    console.log("farms token balances", await ust.balanceOf(strategyBiswap.address), await busd.balanceOf(strategyBiswap.address), await ust.balanceOf(strategyAcryptos.address));
     console.log("sharesToken.totalSupply", await sharesToken.totalSupply());
+    console.log("bsw balance on strategy", await bsw.balanceOf(strategyBiswap.address));
 
   });
+
+  // it("cross withdraw both directions", async function () {
+
+  //   // await router.depositToBatch(ust.address, parseUst("1"))
+  //   // await skipCycleTime();
+  //   // await router.depositToStrategies();
+
+  //   await router.depositToBatch(ust.address, parseUst("1")) // 1
+  //   await router.depositToBatch(ust.address, parseUst("3")) // 2
+  //   await skipCycleTime();
+  //   await router.depositToStrategies(); // cycle 1
+
+
+  //   let receiptId = 1;
+  //   let shares = await router.receiptToShares(receiptId);
+
+  //   let oldBalance = await ust.balanceOf(owner.address);
+  //   await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+  //   let newBalance = await ust.balanceOf(owner.address);
+  //   console.log(formatEther((await router.viewStrategiesBalance()).totalBalance.toString()));
+
+
+  //   // deposit in batching so that strategist can withdraw
+  //   await router.depositToBatch(ust.address, parseUst("3")) // 3
+
+  //   receiptId = 2;
+  //   shares = await router.receiptToShares(receiptId);
+
+  //   oldBalance = await ust.balanceOf(owner.address);
+  //   // strategist withdraw from batching
+  //   await router.withdrawFromBatching(receiptId, UST, shares, 0);
+  //   newBalance = await ust.balanceOf(owner.address);
+  //   console.log(newBalance.sub(oldBalance));
+
+  //   await router.depositToStrategies(); // cycle 2
+
+  //   receiptId = 3;
+  //   shares = await router.receiptToShares(receiptId);
+  //   console.log(shares);
+  //   console.log(await router.sharesToAmount(shares));
+
+  //   oldBalance = await ust.balanceOf(owner.address);
+  //   // strategist withdraw from strategies
+  //   await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+  //   newBalance = await ust.balanceOf(owner.address);
+  //   console.log(newBalance.sub(oldBalance));
+
+
+  //   await router.depositToBatch(ust.address, parseUst("10000"))
+  //   await router.depositToStrategies();
+
+
+
+  //   for (let i = 0; i < 10; i++) {
+  //     await router.depositToBatch(ust.address, parseUst("100000"))
+
+  //     let receipts = await receiptContract.walletOfOwner(owner.address);
+  //     receipts = receipts.filter(id => id != 0); // ignore initial deposit
+  //     receiptId = receipts[0];
+  //     console.log("receipts", receipts);
+
+  //     await router.depositToBatch(ust.address, parseUst("10000"))
+  //     await router.depositToStrategies();
+  //     // deposit in batching so previeous strategist can withdraw
+  //     await router.depositToBatch(ust.address, parseUst("10000"))
+  //     await router.depositToBatch(ust.address, parseUst("100000"))
+
+  //     // strategist withdraw from batching
+  //     shares = await router.receiptToShares(receiptId);
+
+  //     oldBalance = await ust.balanceOf(owner.address);
+  //     await router.withdrawFromBatching(receiptId, UST, shares, 0);
+  //     newBalance = await ust.balanceOf(owner.address);
+  //     console.log(newBalance.sub(oldBalance));
+      
+  //     await bsw.transfer(strategyBiswap.address, parseEther("100000"));
+  //     // for (let i = 0; i < 12; i++) {
+  //     //   await skipBlocks(BLOCKS_DAY*30);
+  //     //   await router.compoundAll();
+  //     // }
+
+  //     // batching has ~0 but still should deposit as if non zero
+  //     console.log("batch balance should be ~0", formatEther((await router.viewBatchingBalance()).totalBalance.toString()));
+  //     await router.withdrawFromStrategies(receiptId.add(2), UST, 0, parseEther("10000000"));
+  //     await router.depositToStrategies();
+
+  //     // for (let i = 0; i < 12; i++) {
+  //     //   await skipBlocks(BLOCKS_DAY*30);
+  //     //   await router.compoundAll();
+  //     // }
+
+  //     receiptId = receiptId.add(1);
+  //     shares = await router.receiptToShares(receiptId);
+  //     console.log(shares);
+  //     console.log(await router.sharesToAmount(shares));
+
+  //     oldBalance = await ust.balanceOf(owner.address);
+  //     await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+
+  //     shares = await router.receiptToShares(receiptId.add(2));
+  //     await router.withdrawFromStrategies(receiptId.add(2), UST, shares, 0);
+  //     newBalance = await ust.balanceOf(owner.address);
+  //     console.log(newBalance.sub(oldBalance));
+  //   }
+  //     receipts = await receiptContract.walletOfOwner(owner.address);
+  //     receipts = receipts.filter(id => id != 0); // ignore initial deposit
+  //     receiptId = receipts[0];
+  //     oldBalance = await ust.balanceOf(owner.address);
+  //     await router.withdrawFromStrategies(receiptId, UST, shares, 0);
+  //     newBalance = await ust.balanceOf(owner.address);
+  //     console.log(newBalance.sub(oldBalance));
+
+  //   receipts = await receiptContract.walletOfOwner(owner.address);
+  //   console.log("receipts", receipts);
+  //   console.log("batch balance", formatEther((await router.viewBatchingBalance()).totalBalance.toString()));
+  //   console.log("viewStrategiesBalance", ((await router.viewStrategiesBalance())));
+  //   console.log("farms token balances", await ust.balanceOf(strategyBiswap.address), await busd.balanceOf(strategyBiswap.address), await ust.balanceOf(strategyAcryptos.address));
+  //   console.log("sharesToken.totalSupply", await sharesToken.totalSupply());
+
+  // });
 
   // it("User deposit", async function () {
 

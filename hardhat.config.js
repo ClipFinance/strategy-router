@@ -32,7 +32,7 @@ module.exports = {
   },
   mocha: {
     // bail: true,
-    timeout: 600000
+    timeout: 6000000
   },
   etherscan: {
     apiKey: {

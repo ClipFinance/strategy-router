@@ -4,6 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IZapDepositer.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
@@ -12,12 +13,16 @@ import "../StrategyRouter.sol";
 
 // import "hardhat/console.sol";
 
+// TODO: do something with leftover amounts
 contract biswap_ust_busd is Ownable, IStrategy {
-
-    ERC20 public constant ust = ERC20(0x23396cF899Ca06c4472205fC903bDB4de249D6fC);
-    ERC20 public constant busd = ERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
-    ERC20 public constant bsw = ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
-    ERC20 public constant lpToken = ERC20(0x9E78183dD68cC81bc330CAF3eF84D354a58303B5);
+    ERC20 public constant ust =
+        ERC20(0x23396cF899Ca06c4472205fC903bDB4de249D6fC);
+    ERC20 public constant busd =
+        ERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    ERC20 public constant bsw =
+        ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
+    ERC20 public constant lpToken =
+        ERC20(0x9E78183dD68cC81bc330CAF3eF84D354a58303B5);
     IBiswapFarm public constant farm =
         IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
     IUniswapV2Router02 public constant biswapRouter =
@@ -32,8 +37,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         strategyRouter = _strategyRouter;
     }
 
-    function depositToken() external pure override returns (address)
-    {
+    function depositToken() external pure override returns (address) {
         return address(ust);
     }
 
@@ -42,10 +46,14 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         // TODO: Is there a way to swap ust to busd so that we'll get perfect ratio to addLiquidity?
         //       If so, we could get rid of that helper function.
-        fix_leftover(amount);
+        // fix_leftover(amount);
 
-        // swap a bit more to reduce consequences of slippage and fees (0.06% on acryptos for ust-busd)
-        uint256 busdAmount = (amount * 5002) / 10000;
+        // the closer amount to 500k UST the higher slippage factor
+        uint256 slippageFactor = calcSlippageFactor(amount);
+        // swap a bit more to account for swap fee (0.06% on acryptos)
+        uint256 busdAmount = (amount * (50030 + slippageFactor)) / 100000;
+        uint256 ustAmount = amount - busdAmount;
+
         Exchange exchange = strategyRouter.exchange();
         ust.transfer(address(exchange), busdAmount);
         // console.log("busdAmount", busdAmount);
@@ -55,9 +63,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
         //     ust.balanceOf(address(this)),
         //     busd.balanceOf(address(this))
         // );
-
-        uint256 ustAmount = ust.balanceOf(address(this));
-        busdAmount = busd.balanceOf(address(this));
 
         ust.approve(address(biswapRouter), ustAmount);
         busd.approve(address(biswapRouter), busdAmount);
@@ -209,7 +214,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         ) {
             console.log("~~~~~~~~~~ fix_leftover ~~~~~~~~~~~");
             console.log("toSwap %s", toSwap);
-            toSwap = (toSwap * 5001) / 1e4;
+            toSwap = (toSwap * 5003) / 1e4;
             console.log("toSwap/2 %s", toSwap);
             busd.transfer(address(exchange), toSwap);
             exchange.swapRouted(toSwap, busd, ust, address(this));
@@ -219,7 +224,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         ) {
             console.log("~~~~~~~~~~ fix_leftover ~~~~~~~~~~~");
             console.log("ust toSwap %s", toSwap);
-            toSwap = (toSwap * 5001) / 1e4;
+            toSwap = (toSwap * 5003) / 1e4;
             console.log("ust toSwap/2 %s", toSwap);
             // console.log("fix_leftover ust %s", ustAmount);
             ust.transfer(address(exchange), toSwap);
@@ -317,5 +322,24 @@ contract biswap_ust_busd is Ownable, IStrategy {
             ust.transfer(msg.sender, amountUst);
             amountWithdrawn = amountUst;
         }
+    }
+
+    function calcSlippageFactor(uint256 amount) public view returns (uint256) {
+        uint256 approxSwapAmount = amount / 2 / 10**ERC20(ust).decimals();
+
+        uint256 slippageFactor;
+        uint256 max_slippage_factor;
+        if (approxSwapAmount > 100_000) {
+            max_slippage_factor = 40;
+            slippageFactor = (max_slippage_factor * approxSwapAmount) / 500_000;
+        } else if (approxSwapAmount > 10_000) {
+            max_slippage_factor = 20;
+            slippageFactor = (max_slippage_factor * approxSwapAmount) / 100_000;
+        }
+
+        slippageFactor = slippageFactor > max_slippage_factor
+            ? max_slippage_factor
+            : slippageFactor;
+        return slippageFactor;
     }
 }

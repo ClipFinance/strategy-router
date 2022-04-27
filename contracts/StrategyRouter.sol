@@ -88,7 +88,7 @@ contract StrategyRouter is Ownable {
         uint256 receivedByStrats;
         uint256 totalDepositUniform;
         // cross withdrawn amount from batching by strategy receipt
-        uint256 withdrawnShares;
+        uint256 totalWithdrawnUniform;
     }
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -130,7 +130,7 @@ contract StrategyRouter is Ownable {
             cycles[currentCycleId].totalInBatch < minUsdPerCycle
         ) revert CycleNotClosableYet();
 
-        // console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
+        console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
 
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
@@ -163,18 +163,22 @@ contract StrategyRouter is Ownable {
         // get total strategies balance after deposit
         (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
-
+        uint256 totalWithdrawnUniform = cycles[currentCycleId].totalWithdrawnUniform;
         console.log(
             "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
-            receivedByStrats
+            receivedByStrats,
+            totalWithdrawnUniform,
+            receivedByStrats + totalWithdrawnUniform
         );
+        receivedByStrats += totalWithdrawnUniform;
+        balanceAfterCompound -= totalWithdrawnUniform;
 
-        // console.log(
-        //     "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math",
-        //     balanceAfterDeposit,
-        //     balanceAfterCompound,
-        //     cycles[currentCycleId].pricePerShare
-        // );
+        console.log(
+            "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math %s",
+            balanceAfterDeposit,
+            balanceAfterCompound,
+            cycles[currentCycleId].pricePerShare
+        );
 
         uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
@@ -190,7 +194,7 @@ contract StrategyRouter is Ownable {
         } else {
             cycles[currentCycleId].pricePerShare =
                 balanceAfterCompound /
-                (totalShares + cycles[currentCycleId].withdrawnShares);
+                totalShares;
 
             console.log(
                 "cycle %s, pps %s, shares %s",
@@ -204,27 +208,23 @@ contract StrategyRouter is Ownable {
                 totalDepositUniform,
                 totalDepositUniform / cycles[currentCycleId].pricePerShare
             );
-            uint256 _rec = cycles[currentCycleId].withdrawnShares * 
+            uint256 newShares = receivedByStrats /
                 cycles[currentCycleId].pricePerShare;
-            totalDepositUniform += _rec;
-            console.log("_rec", _rec);
-            uint256 newShares = (receivedByStrats) /
-                cycles[currentCycleId].pricePerShare + 
-                cycles[currentCycleId].withdrawnShares;
-            receivedByStrats += _rec;
             sharesToken.mint(address(this), newShares);
         }
 
         // start new cycle
         cycles[currentCycleId].receivedByStrats = receivedByStrats;
         cycles[currentCycleId].totalDepositUniform =
-            totalDepositUniform;
-            
+            totalDepositUniform +
+            totalWithdrawnUniform;
         console.log(
-            "totalDepositUniform %s, receivedByStrats %s",
+            "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
+            totalWithdrawnUniform,
             totalDepositUniform,
             receivedByStrats
         );
+        // cycles[currentCycleId].totalWithdrawnUniform = 0;
         emit DepositToStrategies(currentCycleId, receivedByStrats);
         currentCycleId++;
         cycles[currentCycleId].startAt = block.timestamp;
@@ -343,13 +343,14 @@ contract StrategyRouter is Ownable {
         returns (uint256 amount)
     {
         (uint256 strategiesBalance, ) = viewStrategiesBalance();
-        uint256 currentPricePerShare = (strategiesBalance /
-            sharesToken.totalSupply());
+        uint256 currentPricePerShare = (strategiesBalance -
+            cycles[currentCycleId].totalWithdrawnUniform) /
+            sharesToken.totalSupply();
         console.log(
             "currentPricePerShare %s, totalShares %s, strategiesBalance-w %s",
             currentPricePerShare,
-            sharesToken.totalSupply()
-            
+            sharesToken.totalSupply(),
+            (strategiesBalance - cycles[currentCycleId].totalWithdrawnUniform)
         );
         amount = shares * currentPricePerShare;
     }
@@ -426,10 +427,13 @@ contract StrategyRouter is Ownable {
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
             }
 
-            // if (cycles[currentCycleId].totalWithdrawnUniform < amount)
-            //     revert PleaseWithdrawFromBatching();
-            // cycles[currentCycleId].withdrawnShares += 
+            console.log(cycles[currentCycleId].totalWithdrawnUniform, amount);
+            if (cycles[currentCycleId].totalWithdrawnUniform < amount)
+                revert PleaseWithdrawFromBatching();
+            // cycles[currentCycleId].totalWithdrawnUniform -= amount;
+            // uint256 withdrawAmount = _withdrawFromStrategies(amount, withdrawToken);
             _withdrawFromStrategies(amount, withdrawToken);
+            cycles[currentCycleId].totalWithdrawnUniform -= amount;
         }
     }
 
@@ -464,6 +468,7 @@ contract StrategyRouter is Ownable {
 
         // convert uniform amount to amount of withdraw token
         uint256 amountToTransfer;
+        // uint256 totalWithdrawnUniform;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             address strategyAssetAddress = strategies[i].depositToken;
@@ -473,6 +478,7 @@ contract StrategyRouter is Ownable {
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
             );
+            // totalWithdrawnUniform += toUniform(withdrawAmount, strategyAssetAddress);
 
             withdrawAmount = _trySwap(
                 withdrawAmount,
@@ -487,6 +493,7 @@ contract StrategyRouter is Ownable {
             withdrawToken,
             amountToTransfer
         );
+        // return totalWithdrawnUniform;
     }
 
     /// @notice User withdraw tokens from batching.
@@ -503,7 +510,7 @@ contract StrategyRouter is Ownable {
         uint256 shares,
         uint256 amount
     ) external OnlyEOW {
-        // console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
+        console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
         if (receiptContract.ownerOf(receiptId) != msg.sender)
             revert NotReceiptOwner();
         if (supportsCoin(withdrawToken) == false)
@@ -522,8 +529,7 @@ contract StrategyRouter is Ownable {
             amount = sharesToAmount(shares);
             sharesToken.burn(address(this), shares);
             _withdrawFromBatching(amount, withdrawToken);
-            // cycles[currentCycleId].totalWithdrawnUniform += amount;
-            cycles[currentCycleId].withdrawnShares += shares;
+            cycles[currentCycleId].totalWithdrawnUniform += amount;
             emit UnlockSharesFromNFT(msg.sender, receiptId, unlocked);
         } else {
             // receipt in batching withdraws from batching
@@ -594,7 +600,7 @@ contract StrategyRouter is Ownable {
         if (fromUniform(minDeposit, depositToken) > _amount)
             revert DepositUnderMinimum();
 
-        // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
+        console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
         IERC20(depositToken).transferFrom(msg.sender, address(this), _amount);
 
         uint256 amountUniform = toUniform(_amount, depositToken);
@@ -715,6 +721,7 @@ contract StrategyRouter is Ownable {
             );
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
         }
+        Ownable(address(removedStrategy)).transferOwnership(msg.sender);
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.

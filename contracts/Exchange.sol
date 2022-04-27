@@ -38,7 +38,7 @@ contract Exchange is Ownable {
     // in dexTypes tokens addresses should be sorted in ascending order
     // tokenA -> tokenB -> DexType
     mapping(address => mapping(address => DexType)) dexTypes;
-    // poolACS4UST -> token -> coin id from pool
+    // curve-like pool -> token -> coin id from pool
     mapping(address => mapping(address => int128)) coinIds;
 
     IUniswapV2Router02 public pancakeRouter =
