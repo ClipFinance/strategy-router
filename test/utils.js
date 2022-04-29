@@ -3,13 +3,12 @@ const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 
-BLOCKS_MONTH = 60 * 60 * 24 * 30 / 3;
+MONTH_SECONDS = 60 * 60 * 24 * 30;
+BLOCKS_MONTH = MONTH_SECONDS / 3;
 BLOCKS_DAY = 60 * 60 * 24 / 3;
+MaxUint256 = ethers.constants.MaxUint256;
+module.exports = { logFarmLPs, getTokens, skipBlocks, skipCycleAndBlocks, printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256}
 
-module.exports = { logFarmLPs, getTokens, skipBlocks, skipCycleTime, printStruct, BLOCKS_MONTH, BLOCKS_DAY}
-
-
-// await network.provider.send("hardhat_setBalance", [ ((await ethers.getSigners())[0]).address.toString(), "0x" + Number(ethers.utils.parseEther("10000").toHexString(2)).toString(2), ]);
 
 async function logFarmLPs() {
   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
@@ -44,9 +43,10 @@ async function skipBlocks(blocksNum) {
   await hre.network.provider.send("hardhat_mine", [blocksNum]);
 }
 
-async function skipCycleTime() {
+async function skipCycleAndBlocks() {
   await provider.send("evm_increaseTime", [CYCLE_DURATION]);
   await provider.send("evm_mine");
+  skipBlocks(CYCLE_DURATION/3);
 }
 
 // Usually tuples returned by solidity (or ethers.js) contain duplicated data

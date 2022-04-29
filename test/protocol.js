@@ -2,6 +2,7 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
+const { getTokens, MONTH_SECONDS, logFarmLPs, printStruct, skipCycleAndBlocks, MaxUint256 } = require("./utils");
 
 // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
 provider = ethers.provider;
@@ -30,46 +31,24 @@ describe("Test StrategyRouter with two real strategies", function () {
       "0x10ED43C718714eb63d5aA57B78B54704E256024E"
     );
 
-    // ~~~~~~~~~~~ GET BUSD ON MAINNET ~~~~~~~~~~~ 
-
+        // ~~~~~~~~~~~ GET BUSD ON MAINNET ~~~~~~~~~~~ 
     BUSD = "0xe9e7cea3dedca5984780bafc599bd69add087d56";
     busd = await ethers.getContractAt("ERC20", BUSD);
-
+    // ~~~~~~~~~~~ GET IAcryptoSPool ON MAINNET ~~~~~~~~~~~ 
+    ACS4UST = "0x99c92765EfC472a9709Ced86310D64C4573c4b77";
+    acsUst = await ethers.getContractAt("IAcryptoSPool", ACS4UST);
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
-    ust = await ethers.getContractAt("ERC20", UST);
-
     ustHolder = "0x05faf555522fa3f93959f86b41a3808666093210";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [ustHolder],
-    });
-    ustHolder = await ethers.getSigner(ustHolder);
-    await network.provider.send("hardhat_setBalance", [
-      ustHolder.address.toString(),
-      "0x" + Number(parseEther("1").toHexString(2)).toString(2),
-    ]);
-    await ust.connect(ustHolder).transfer(
-      owner.address,
-      parseUst("500000")
-    );
-
+    ust = await getTokens(UST, ustHolder, parseUst("500000"), owner.address);
     // ~~~~~~~~~~~ GET USDC TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    usdc = await ethers.getContractAt("ERC20", USDC);
-
     usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [usdcHolder],
-    });
-    usdcHolder = await ethers.getSigner(usdcHolder);
-    await usdc.connect(usdcHolder).transfer(
-      owner.address,
-      parseUsdc("500000")
-    );
+    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address);
+    // ~~~~~~~~~~~ GET BSW TOKENS ON MAINNET ~~~~~~~~~~~ 
+    BSW = "0x965F527D9159dCe6288a2219DB51fc6Eef120dD1";
+    bswHolder = "0x000000000000000000000000000000000000dead";
+    bsw = await getTokens(BSW, bswHolder, parseEther("10000000"), owner.address);
 
   });
 
@@ -101,7 +80,7 @@ describe("Test StrategyRouter with two real strategies", function () {
       await router.exchange()
     );
 
-    await router.setCycleDuration(60 * 60 * 24 * 30);
+    await router.setCycleDuration(MONTH_SECONDS);
     CYCLE_DURATION = Number(await router.cycleDuration());
     INITIAL_SHARES = Number(await router.INITIAL_SHARES());
 
@@ -158,13 +137,10 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Admin initial deposit", async function () {
     await ust.approve(router.address, parseUst("1000000"));
 
-    // admin initial deposit seems to be fix for a problem, 
-    // if you deposit and withdraw multiple times (without initial deposit)
-    // then pps and shares become broken (they increasing because of dust always left on farms)
     await router.depositToBatch(ust.address, parseUst("100"));
-    await skipCycleTime();
+    await skipCycleAndBlocks();
     await router.depositToStrategies();
-    await skipCycleTime();
+    await skipCycleAndBlocks();
 
     await logFarmLPs();
 
@@ -184,7 +160,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.viewReceipt(1);
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromBatching(1, ust.address, receipt.amount.div(2));
+    await router.withdrawFromBatching([1], ust.address, receipt.amount.div(2));
     let newBalance = await ust.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -195,7 +171,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
   it("User withdraw other half from current cycle", async function () {
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromBatching(1, ust.address, 0);
+    await router.withdrawFromBatching([1], ust.address, MaxUint256);
     let newBalance = await ust.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -236,10 +212,9 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Withdraw half from strategies", async function () {
-    let receipt = await receiptContract.viewReceipt(2);
     let oldBalance = await ust.balanceOf(owner.address);
-    // console.log(receipt.amount.div(2));
-    await router.withdrawFromStrategies(2, ust.address, 5000);
+    let shares = await router.receiptToShares(2);
+    await router.withdrawFromStrategies([2], ust.address, shares.div(2));
     let newBalance = await ust.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -263,7 +238,8 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(3));
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromStrategies(3, ust.address, 10000);
+    let shares = await router.receiptToShares(3);
+    await router.withdrawFromStrategies([3], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
 
     await logFarmLPs();
@@ -290,12 +266,13 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     for (let i = 0; i < 5; i++) {
       await router.depositToBatch(ust.address, parseUst("10"));
-      await skipCycleTime();
+      await skipCycleAndBlocks();
       await router.depositToStrategies();
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       // console.log(receipts);
-      await router.withdrawFromStrategies(receipts[0], ust.address, 10000);
+      let shares = await router.receiptToShares(receipts[0]);
+      await router.withdrawFromStrategies([receipts[0]], ust.address, shares);
 
       console.log("strategies balance");
       printStruct(await router.viewStrategiesBalance());
@@ -323,7 +300,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     // deposit to strategies
     await router.depositToBatch(ust.address, parseUst("10"));
-    await skipCycleTime();
+    await skipCycleAndBlocks();
     await router.depositToStrategies();
     console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
 
@@ -344,7 +321,8 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log(receipts);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromStrategies(receipts[0], ust.address, 10000);
+    let shares = await router.receiptToShares(receipts[0]);
+    await router.withdrawFromStrategies([receipts[0]], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("10"),
@@ -370,7 +348,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.updateStrategy(0, 1000);
     await router.updateStrategy(1, 9000);
 
-    await router.rebalance(usdc.address);
+    await router.rebalanceStrategies();
 
     let { balances, totalBalance } = await router.viewStrategiesBalance();
     // strategies should be balanced as 10% and 90%
@@ -389,7 +367,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToBatch(ust.address, parseUst("100000"));
     await router.depositToBatch(ust.address, parseUst("100000"));
     // deposit to strategies
-    await skipCycleTime();
+    await skipCycleAndBlocks();
     // await provider.send("evm_increaseTime", [CYCLE_DURATION]);
     // await provider.send("evm_mine");
     await router.depositToStrategies();
@@ -398,24 +376,26 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToBatch(ust.address, parseUst("100"));
     await router.depositToBatch(ust.address, parseUsdc("100"));
     // // deposit to strategies
-    await skipCycleTime();
+    await skipCycleAndBlocks();
     await router.depositToStrategies();
 
     let receipts = await receiptContract.walletOfOwner(owner.address);
     console.log("owner receipts", receipts);
     // withdraw by receipt
     let oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromStrategies(10, ust.address, 10000);
+    let shares = await router.receiptToShares(10);
+    await router.withdrawFromStrategies([10], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     oldBalance = await ust.balanceOf(owner.address);
-    await router.withdrawFromStrategies(11, ust.address, 10000);
+    shares = await router.receiptToShares(11);
+    await router.withdrawFromStrategies([11], ust.address, shares);
     newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     // unlock shares and withdraw tokens by shares
-    await router.unlockSharesFromNFT(12);
+    await router.unlockSharesFromNFT([12]);
     let sharesUnlocked = await sharesToken.balanceOf(owner.address);
     console.log("sharesUnlocked", sharesUnlocked);
 
@@ -424,7 +404,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
-    await router.unlockSharesFromNFT(13);
+    await router.unlockSharesFromNFT([13]);
     sharesUnlocked = await sharesToken.balanceOf(owner.address);
     console.log("sharesUnlocked", sharesUnlocked);
     oldBalance = await ust.balanceOf(owner.address);
@@ -448,31 +428,10 @@ describe("Test StrategyRouter with two real strategies", function () {
     expect(await ust.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.within(0, 10);
     expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
   });
 
 });
 
-
-async function logFarmLPs() {
-    userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
-    console.log("acryptos farm lp tokens %s", userInfo.amount);
-    userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
-    console.log("biswap farm lp tokens %s", userInfo.amount);
-}
-async function skipCycleTime() {
-  await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  await provider.send("evm_mine");
-}
-function printStruct(struct) {
-  let obj = struct;
-  let out = {};
-  for (let key in obj) {
-    if (!Number.isInteger(Number(key))) {
-      out[key] = obj[key];
-    }
-  }
-  console.log(out);
-}

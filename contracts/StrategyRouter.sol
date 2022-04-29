@@ -62,7 +62,7 @@ contract StrategyRouter is Ownable {
     error CycleNotClosableYet();
     error DepositUnderMinimum();
     error BadPercent();
-    error SpecifyOnlySharesOrAmount();
+    error AmountNotSpecified();
     error PleaseWithdrawFromBatching();
     error NotEnoughInBatching();
     error CantRemoveLastStrategy();
@@ -130,7 +130,7 @@ contract StrategyRouter is Ownable {
             cycles[currentCycleId].totalInBatch < minUsdPerCycle
         ) revert CycleNotClosableYet();
 
-        console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
 
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
@@ -164,21 +164,21 @@ contract StrategyRouter is Ownable {
         (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
         uint256 totalWithdrawnUniform = cycles[currentCycleId].totalWithdrawnUniform;
-        console.log(
-            "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
-            receivedByStrats,
-            totalWithdrawnUniform,
-            receivedByStrats + totalWithdrawnUniform
-        );
+        // console.log(
+        //     "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
+        //     receivedByStrats,
+        //     totalWithdrawnUniform,
+        //     receivedByStrats + totalWithdrawnUniform
+        // );
         receivedByStrats += totalWithdrawnUniform;
         balanceAfterCompound -= totalWithdrawnUniform;
 
-        console.log(
-            "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math %s",
-            balanceAfterDeposit,
-            balanceAfterCompound,
-            cycles[currentCycleId].pricePerShare
-        );
+        // console.log(
+        //     "balanceAfterDeposit %s, balanceAfterCompound %s, pps before math %s",
+        //     balanceAfterDeposit,
+        //     balanceAfterCompound,
+        //     cycles[currentCycleId].pricePerShare
+        // );
 
         uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
@@ -186,28 +186,28 @@ contract StrategyRouter is Ownable {
             cycles[currentCycleId].pricePerShare =
                 balanceAfterDeposit /
                 sharesToken.totalSupply();
-            console.log(
-                "initial pps %s, shares %s",
-                cycles[currentCycleId].pricePerShare,
-                sharesToken.totalSupply()
-            );
+            // console.log(
+            //     "initial pps %s, shares %s",
+            //     cycles[currentCycleId].pricePerShare,
+            //     sharesToken.totalSupply()
+            // );
         } else {
             cycles[currentCycleId].pricePerShare =
                 balanceAfterCompound /
                 totalShares;
 
-            console.log(
-                "cycle %s, pps %s, shares %s",
-                currentCycleId,
-                cycles[currentCycleId].pricePerShare,
-                sharesToken.totalSupply()
-            );
+            // console.log(
+            //     "cycle %s, pps %s, shares %s",
+            //     currentCycleId,
+            //     cycles[currentCycleId].pricePerShare,
+            //     sharesToken.totalSupply()
+            // );
 
-            console.log(
-                "totalDepositUniform %s totalDepositUniform/pps %s",
-                totalDepositUniform,
-                totalDepositUniform / cycles[currentCycleId].pricePerShare
-            );
+            // console.log(
+            //     "totalDepositUniform %s totalDepositUniform/pps %s",
+            //     totalDepositUniform,
+            //     totalDepositUniform / cycles[currentCycleId].pricePerShare
+            // );
             uint256 newShares = receivedByStrats /
                 cycles[currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
@@ -218,12 +218,12 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].totalDepositUniform =
             totalDepositUniform +
             totalWithdrawnUniform;
-        console.log(
-            "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
-            totalWithdrawnUniform,
-            totalDepositUniform,
-            receivedByStrats
-        );
+        // console.log(
+        //     "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
+        //     totalWithdrawnUniform,
+        //     totalDepositUniform,
+        //     receivedByStrats
+        // );
         // cycles[currentCycleId].totalWithdrawnUniform = 0;
         emit DepositToStrategies(currentCycleId, receivedByStrats);
         currentCycleId++;
@@ -357,95 +357,121 @@ contract StrategyRouter is Ownable {
 
     // User Functions
 
-    /// @notice Convert receipt NFT into share tokens, withdraw functions do it internally.
+    /// @notice Convert receipts into share tokens. Withdraw functions doing it internally.
     /// @notice Cycle noted in receipt should be closed.
-    function unlockSharesFromNFT(uint256 receiptId)
+    function unlockSharesFromNFT(uint256[] calldata receiptIds)
         public
         OnlyEOW
         returns (uint256 shares)
     {
-        // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
-        if (receiptContract.ownerOf(receiptId) != msg.sender)
-            revert NotReceiptOwner();
-
-        shares = receiptToShares(receiptId);
-        receiptContract.burn(receiptId);
+        shares = _unlockSharesFromNFT(receiptIds);
         sharesToken.transfer(msg.sender, shares);
-        emit UnlockSharesFromNFT(msg.sender, receiptId, shares);
     }
 
-    /// @notice User withdraw usd from strategies via receipt NFT.
-    /// @notice On partial withdraw leftover shares transfered to user.
-    /// @notice Receipt is burned.
-    /// @notice Internally all receipt's shares unlocked from that NFT.
-    /// @param receiptId Receipt NFT id.
+    function _unlockSharesFromNFT(uint256[] calldata receiptIds)
+        private
+        returns (uint256 shares)
+    {
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (receiptContract.ownerOf(receiptId) != msg.sender)
+                revert NotReceiptOwner();
+            shares += receiptToShares(receiptId);
+            receiptContract.burn(receiptId);
+            emit UnlockSharesFromNFT(msg.sender, receiptId, shares);
+        }
+    }
+
+    /// @notice Withdraw from strategies while receipts are in strategies.
+    /// @notice On partial withdraw leftover shares transferred to user.
+    /// @notice Receipts are burned.
+    /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param shares Amount of shares from receipt to withdraw.
-    /// @param amount Uniform amount from receipt to withdraw, only for current cycle.
+    /// @param shares Amount of shares from receipts to withdraw. Put max uint to withdraw all.
     /// @dev Only callable by user wallets.
     function withdrawFromStrategies(
-        uint256 receiptId,
+        uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256 shares,
-        uint256 amount
+        uint256 shares
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ withdrawFromStrategies ~~~~~~~~~~~~~");
-        // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
-        if (receiptContract.ownerOf(receiptId) != msg.sender)
-            revert NotReceiptOwner();
+
+        if (shares == 0)
+            revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
-        if (shares > 0 && amount > 0) revert SpecifyOnlySharesOrAmount();
 
-        if (shares > 0) {
-            // receipt in strategies withdraw from strategies
-            uint256 unlockedShares = receiptToShares(receiptId);
-            receiptContract.burn(receiptId);
-            if (shares > unlockedShares) shares = unlockedShares;
-            // all shares are minted to this contract, so transfer leftover shares to user
-            uint256 unlocked = unlockedShares - shares;
-            if (unlocked > 0) {
-                sharesToken.transfer(msg.sender, unlocked);
-            }
-            amount = sharesToAmount(shares);
-            sharesToken.burn(address(this), shares);
-            console.log("shares %s, amount %s", shares, amount);
+        uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
+        uint256 leftoverShares; 
+        if (unlcokedShares > shares) {
+            leftoverShares = unlcokedShares - shares;
+            unlcokedShares = shares;
+            sharesToken.transfer(msg.sender, leftoverShares);
+        }
 
-            emit UnlockSharesFromNFT(msg.sender, receiptId, unlockedShares);
-            _withdrawFromStrategies(amount, withdrawToken);
-        } else {
-            // receipt in batching withdraws from strategies
+        uint256 amountWithdraw = sharesToAmount(unlcokedShares);
+        sharesToken.burn(address(this), unlcokedShares);
+        _withdrawFromStrategies(amountWithdraw, withdrawToken);
+    }
+
+    /// @notice Withdraw from strategies while receipts are in batching.
+    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
+    /// @notice Receipt is burned if withdraw whole amount noted in it.
+    /// @param receiptIds Receipt NFTs ids.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param amount Uniform amount from receipt to withdraw, only for current cycle. Put max uint to withdraw all.
+    /// @dev Only callable by user wallets.
+    function crossWithdrawFromStrategies(
+        uint256[] calldata receiptIds,
+        address withdrawToken,
+        uint256 amount
+    ) external OnlyEOW {
+        console.log("~~~~~~~~~~~~~ crossWithdrawFromStrategies ~~~~~~~~~~~~~");
+        // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
+        if (amount == 0)
+            revert AmountNotSpecified();
+        if (supportsCoin(withdrawToken) == false)
+            revert UnsupportedStablecoin();
+
+        // receipt in batching withdraws from strategies
+        uint256 toWithdraw;
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (receiptContract.ownerOf(receiptId) != msg.sender)
+                revert NotReceiptOwner();
+            
             ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
                 receiptId
             );
             // only for receipts in batching
             if (receipt.cycleId != currentCycleId) revert CycleClosed();
             if (amount >= receipt.amount) {
-                amount = receipt.amount;
+                toWithdraw += receipt.amount;
+                amount -= receipt.amount;
                 receiptContract.burn(receiptId);
             } else {
+                toWithdraw += amount;
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
+                amount = 0;
             }
-
-            console.log(cycles[currentCycleId].totalWithdrawnUniform, amount);
-            if (cycles[currentCycleId].totalWithdrawnUniform < amount)
-                revert PleaseWithdrawFromBatching();
-            // cycles[currentCycleId].totalWithdrawnUniform -= amount;
-            // uint256 withdrawAmount = _withdrawFromStrategies(amount, withdrawToken);
-            _withdrawFromStrategies(amount, withdrawToken);
-            cycles[currentCycleId].totalWithdrawnUniform -= amount;
+            if(amount == 0) break;
         }
+
+        console.log(cycles[currentCycleId].totalWithdrawnUniform, toWithdraw);
+        if (cycles[currentCycleId].totalWithdrawnUniform < toWithdraw)
+            revert PleaseWithdrawFromBatching();
+        _withdrawFromStrategies(toWithdraw, withdrawToken);
+        cycles[currentCycleId].totalWithdrawnUniform -= toWithdraw;
+        
     }
 
-    /// @notice User withdraw stablecoins from strategies via shares.
-    /// @notice Receipts should be converted to shares prior to call this.
+    /// @notice Withdraw from strategies by shares.
     /// @param shares Amount of shares to withdraw.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     function withdrawShares(uint256 shares, address withdrawToken)
         external
         OnlyEOW
     {
-        // TODO: if succeed with new cross-withdraw optimization, then should also adjust this function
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
         if (supportsCoin(withdrawToken) == false)
@@ -456,29 +482,43 @@ contract StrategyRouter is Ownable {
         _withdrawFromStrategies(amount, withdrawToken);
     }
 
+    /// @notice Withdraw from batching by shares.
+    /// @param shares Amount of shares to withdraw.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    function crossWithdrawShares(uint256 shares, address withdrawToken)
+        external
+        OnlyEOW
+    {
+        if (sharesToken.balanceOf(msg.sender) < shares)
+            revert InsufficientShares();
+        if (supportsCoin(withdrawToken) == false)
+            revert UnsupportedStablecoin();
+
+        uint256 amount = sharesToAmount(shares);
+        sharesToken.burn(msg.sender, shares);
+        _withdrawFromBatching(amount, withdrawToken);
+        cycles[currentCycleId].totalWithdrawnUniform += amount;
+    }
+
     function _withdrawFromStrategies(uint256 amount, address withdrawToken)
         private
-        // returns (uint256)
     {
         (
             uint256 strategiesBalance,
             uint256[] memory balances
         ) = viewStrategiesBalance();
-        uint256 withdrawAmountTotal = amount;
 
         // convert uniform amount to amount of withdraw token
         uint256 amountToTransfer;
-        // uint256 totalWithdrawnUniform;
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             address strategyAssetAddress = strategies[i].depositToken;
-            uint256 withdrawAmount = (withdrawAmountTotal * balances[i]) /
+            uint256 withdrawAmount = (amount * balances[i]) /
                 strategiesBalance;
             withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
             );
-            // totalWithdrawnUniform += toUniform(withdrawAmount, strategyAssetAddress);
 
             withdrawAmount = _trySwap(
                 withdrawAmount,
@@ -493,65 +533,89 @@ contract StrategyRouter is Ownable {
             withdrawToken,
             amountToTransfer
         );
-        // return totalWithdrawnUniform;
     }
 
-    /// @notice User withdraw tokens from batching.
-    /// @notice On partial withdraw amount noted in receipt is updated.
-    /// @notice Receipt is burned when withdrawing whole amount.
-    /// @param receiptId Receipt NFT id.
+    /// @notice Withdraw from batching while receipts are in batching.
+    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
+    /// @notice Receipt is burned if withdraw whole amount noted in it.
+    /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param shares Amount of shares to withdraw, specify this if money of receipt were deposited into strategies.
-    /// @param amount Amount to withdraw, specify this if money of receipt isn't deposited into strategies yet.
+    /// @param amount Uniform amount from receipt to withdraw, only for current cycle. Put max uint to withdraw all.
     /// @dev Only callable by user wallets.
     function withdrawFromBatching(
-        uint256 receiptId,
+        uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256 shares,
         uint256 amount
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
-        if (receiptContract.ownerOf(receiptId) != msg.sender)
-            revert NotReceiptOwner();
+
+        if (amount == 0)
+            revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
-        if (shares > 0 && amount > 0) revert SpecifyOnlySharesOrAmount();
 
-        if (shares > 0) {
-            // receipt in strategies withdraw from batching
-            uint256 unlockedShares = receiptToShares(receiptId);
-            receiptContract.burn(receiptId);
-            if (shares > unlockedShares) shares = unlockedShares;
-            uint256 unlocked = unlockedShares - shares;
-            if (unlocked > 0) {
-                sharesToken.transfer(msg.sender, unlocked);
-            }
-            amount = sharesToAmount(shares);
-            sharesToken.burn(address(this), shares);
-            _withdrawFromBatching(amount, withdrawToken);
-            cycles[currentCycleId].totalWithdrawnUniform += amount;
-            emit UnlockSharesFromNFT(msg.sender, receiptId, unlocked);
-        } else {
-            // receipt in batching withdraws from batching
+        uint256 toWithdraw;
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (receiptContract.ownerOf(receiptId) != msg.sender)
+                revert NotReceiptOwner();
+            
             ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
                 receiptId
             );
-            // receipt in strategies should not pass this check
+            // only for receipts in batching
             if (receipt.cycleId != currentCycleId) revert CycleClosed();
             if (amount >= receipt.amount) {
-                amount = receipt.amount;
+                toWithdraw += receipt.amount;
+                amount -= receipt.amount;
                 receiptContract.burn(receiptId);
             } else {
+                toWithdraw += amount;
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
+                amount = 0;
             }
-            _withdrawFromBatching(amount, withdrawToken);
+            if(amount == 0) break;
         }
+        console.log("toWithdraw", toWithdraw);
+        _withdrawFromBatching(toWithdraw, withdrawToken);
+    }
+
+    /// @notice Withdraw from batching while receipts are in strategies.
+    /// @notice On partial withdraw leftover shares transferred to user.
+    /// @notice Receipts are burned.
+    /// @param receiptIds Receipt NFTs ids.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param shares Amount of shares from receipts to withdraw. Put max uint to withdraw all.
+    /// @dev Only callable by user wallets.
+    function crossWithdrawFromBatching(
+        uint256[] calldata receiptIds,
+        address withdrawToken,
+        uint256 shares
+    ) external OnlyEOW {
+        console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
+        if (shares == 0)
+            revert AmountNotSpecified();
+        if (supportsCoin(withdrawToken) == false)
+            revert UnsupportedStablecoin();
+
+        uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
+        uint256 leftoverShares; 
+        if (unlcokedShares > shares) {
+            leftoverShares = unlcokedShares - shares;
+            unlcokedShares = shares;
+            sharesToken.transfer(msg.sender, leftoverShares);
+        }
+
+        uint256 amountWithdraw = sharesToAmount(unlcokedShares);
+        sharesToken.burn(address(this), unlcokedShares);
+
+        _withdrawFromBatching(amountWithdraw, withdrawToken);
+        cycles[currentCycleId].totalWithdrawnUniform += amountWithdraw;
     }
 
     function _withdrawFromBatching(uint256 amount, address withdrawToken)
         private
     {
-        // TODO: should withdraw from all available stablecoins?
         (
             uint256 totalBalance,
             uint256[] memory balances
