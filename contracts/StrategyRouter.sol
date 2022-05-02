@@ -154,8 +154,10 @@ contract StrategyRouter is Ownable {
                 strategies[i].strategyAddress,
                 depositAmounts[i]
             );
-            if(depositAmounts[i] > 0)
-                IStrategy(strategies[i].strategyAddress).deposit(depositAmounts[i]);
+            if (depositAmounts[i] > 0)
+                IStrategy(strategies[i].strategyAddress).deposit(
+                    depositAmounts[i]
+                );
 
             // console.log("depositAmount %s leftoverAmount %s", depositAmount);
         }
@@ -163,7 +165,8 @@ contract StrategyRouter is Ownable {
         // get total strategies balance after deposit
         (uint256 balanceAfterDeposit, ) = viewStrategiesBalance();
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
-        uint256 totalWithdrawnUniform = cycles[currentCycleId].totalWithdrawnUniform;
+        uint256 totalWithdrawnUniform = cycles[currentCycleId]
+            .totalWithdrawnUniform;
         // console.log(
         //     "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
         //     receivedByStrats,
@@ -396,13 +399,12 @@ contract StrategyRouter is Ownable {
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ withdrawFromStrategies ~~~~~~~~~~~~~");
 
-        if (shares == 0)
-            revert AmountNotSpecified();
+        if (shares == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
         uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
-        uint256 leftoverShares; 
+        uint256 leftoverShares;
         if (unlcokedShares > shares) {
             leftoverShares = unlcokedShares - shares;
             unlcokedShares = shares;
@@ -428,8 +430,7 @@ contract StrategyRouter is Ownable {
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ crossWithdrawFromStrategies ~~~~~~~~~~~~~");
         // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
-        if (amount == 0)
-            revert AmountNotSpecified();
+        if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
@@ -439,7 +440,7 @@ contract StrategyRouter is Ownable {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != msg.sender)
                 revert NotReceiptOwner();
-            
+
             ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
                 receiptId
             );
@@ -454,7 +455,7 @@ contract StrategyRouter is Ownable {
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
                 amount = 0;
             }
-            if(amount == 0) break;
+            if (amount == 0) break;
         }
 
         console.log(cycles[currentCycleId].totalWithdrawnUniform, toWithdraw);
@@ -462,7 +463,6 @@ contract StrategyRouter is Ownable {
             revert PleaseWithdrawFromBatching();
         _withdrawFromStrategies(toWithdraw, withdrawToken);
         cycles[currentCycleId].totalWithdrawnUniform -= toWithdraw;
-        
     }
 
     /// @notice Withdraw from strategies by shares.
@@ -513,8 +513,7 @@ contract StrategyRouter is Ownable {
         uint256 len = strategies.length;
         for (uint256 i; i < len; i++) {
             address strategyAssetAddress = strategies[i].depositToken;
-            uint256 withdrawAmount = (amount * balances[i]) /
-                strategiesBalance;
+            uint256 withdrawAmount = (amount * balances[i]) / strategiesBalance;
             withdrawAmount = fromUniform(withdrawAmount, strategyAssetAddress);
             withdrawAmount = IStrategy(strategies[i].strategyAddress).withdraw(
                 withdrawAmount
@@ -549,8 +548,7 @@ contract StrategyRouter is Ownable {
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
 
-        if (amount == 0)
-            revert AmountNotSpecified();
+        if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
@@ -559,7 +557,7 @@ contract StrategyRouter is Ownable {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != msg.sender)
                 revert NotReceiptOwner();
-            
+
             ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
                 receiptId
             );
@@ -574,7 +572,7 @@ contract StrategyRouter is Ownable {
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
                 amount = 0;
             }
-            if(amount == 0) break;
+            if (amount == 0) break;
         }
         console.log("toWithdraw", toWithdraw);
         _withdrawFromBatching(toWithdraw, withdrawToken);
@@ -593,13 +591,12 @@ contract StrategyRouter is Ownable {
         uint256 shares
     ) external OnlyEOW {
         console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
-        if (shares == 0)
-            revert AmountNotSpecified();
+        if (shares == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
         uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
-        uint256 leftoverShares; 
+        uint256 leftoverShares;
         if (unlcokedShares > shares) {
             leftoverShares = unlcokedShares - shares;
             unlcokedShares = shares;
@@ -624,28 +621,39 @@ contract StrategyRouter is Ownable {
         if (totalBalance < amount) revert NotEnoughInBatching();
 
         uint256 amountToTransfer;
-        // uint256 len = strategies.length;
-        for (uint256 i; i < balances.length; i++) {
-            address strategyAssetAddress = strategies[i].depositToken;
-            // split withdraw amount proportionally between strategies
-            uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-            amountWithdraw = fromUniform(amountWithdraw, strategyAssetAddress);
+        uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
+            address(this)
+        );
+        if (withdrawTokenBalance >= amount) {
+            amountToTransfer = amount;
+        } else {
+            // uint256 len = strategies.length;
+            for (uint256 i; i < balances.length; i++) {
+                address token = stablecoins[i];
+                if(balances[i] < 10**ERC20(token).decimals()) continue; 
+                // split withdraw amount proportionally between strategies
+                uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
+                amountWithdraw = fromUniform(
+                    amountWithdraw,
+                    token
+                );
 
-            // swap strategies tokens to withdraw token
-            amountWithdraw = _trySwap(
-                amountWithdraw,
-                strategyAssetAddress,
-                withdrawToken
+                // swap strategies tokens to withdraw token
+                amountWithdraw = _trySwap(
+                    amountWithdraw,
+                    token,
+                    withdrawToken
+                );
+                amountToTransfer += amountWithdraw;
+            }
+
+            console.log(
+                "withdraw token balance %s, total withdraw %s",
+                IERC20(withdrawToken).balanceOf(address(this)),
+                amountToTransfer
             );
-            amountToTransfer += amountWithdraw;
         }
         cycles[currentCycleId].totalInBatch -= amount;
-
-        // console.log(
-        //     "withdraw token balance %s, total withdraw %s",
-        //     IERC20(withdrawToken).balanceOf(address(this)),
-        //     amountToTransfer
-        // );
         IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
         emit WithdrawFromBatching(msg.sender, withdrawToken, amountToTransfer);
     }
@@ -802,7 +810,7 @@ contract StrategyRouter is Ownable {
         uint256 totalBalance;
 
         uint256 len = strategies.length;
-        if(len < 2) revert NothingToRebalance();
+        if (len < 2) revert NothingToRebalance();
         uint256[] memory _strategiesBalances = new uint256[](len);
         address[] memory _strategiesTokens = new address[](len);
         address[] memory _strategies = new address[](len);
@@ -810,7 +818,10 @@ contract StrategyRouter is Ownable {
             _strategiesTokens[i] = strategies[i].depositToken;
             _strategies[i] = strategies[i].strategyAddress;
             _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
+            totalBalance += toUniform(
+                _strategiesBalances[i],
+                _strategiesTokens[i]
+            );
         }
 
         uint256[] memory toAdd = new uint256[](len);
@@ -818,17 +829,14 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             uint256 desiredBalance = (totalBalance *
                 viewStrategyPercentWeight(i)) / 1e18;
-            desiredBalance = fromUniform(
-                desiredBalance,
-                _strategiesTokens[i]
-            );
+            desiredBalance = fromUniform(desiredBalance, _strategiesTokens[i]);
             unchecked {
                 if (desiredBalance > _strategiesBalances[i]) {
                     toAdd[i] = desiredBalance - _strategiesBalances[i];
                 } else if (desiredBalance < _strategiesBalances[i]) {
                     toSell[i] = _strategiesBalances[i] - desiredBalance;
                 }
-                console.log(toAdd[i], toSell[i]);
+                // console.log(toAdd[i], toSell[i]);
             }
         }
 
@@ -839,15 +847,17 @@ contract StrategyRouter is Ownable {
                     uint256 curSell = toSell[i] > toAdd[j]
                         ? toAdd[j]
                         : toSell[i];
-                    console.log("sell add", toSell[i], toAdd[j]);
+                    // console.log("sell add", toSell[i], toAdd[j]);
 
                     address sellToken = _strategiesTokens[i];
-                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
-                        console.log(
-                            "swap threshold reached",
-                            toUniform(curSell, sellToken),
-                            REBALANCE_SWAP_THRESHOLD
-                        );
+                    if (
+                        toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
+                    ) {
+                        // console.log(
+                        //     "swap threshold reached",
+                        //     toUniform(curSell, sellToken),
+                        //     REBALANCE_SWAP_THRESHOLD
+                        // );
                         unchecked {
                             toSell[i] = 0;
                             toAdd[j] -= curSell;
@@ -856,7 +866,9 @@ contract StrategyRouter is Ownable {
                     }
                     address buyToken = _strategiesTokens[j];
 
-                    uint256 received = IStrategy(_strategies[i]).withdraw(curSell);
+                    uint256 received = IStrategy(_strategies[i]).withdraw(
+                        curSell
+                    );
                     received = _trySwap(received, sellToken, buyToken);
                     ERC20(buyToken).transfer(_strategies[j], received);
                     IStrategy(_strategies[j]).deposit(received);
@@ -871,7 +883,10 @@ contract StrategyRouter is Ownable {
 
         for (uint256 i; i < len; i++) {
             _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
+            totalBalance += toUniform(
+                _strategiesBalances[i],
+                _strategiesTokens[i]
+            );
         }
 
         return (totalBalance, _strategiesBalances);
@@ -981,7 +996,9 @@ contract StrategyRouter is Ownable {
                         : strategies[i].depositToken;
 
                     // its not worth to swap too small amounts
-                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
+                    if (
+                        toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
+                    ) {
                         console.log(
                             "aaa",
                             toUniform(curSell, sellToken),

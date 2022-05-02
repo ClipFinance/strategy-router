@@ -29,6 +29,7 @@ async function main() {
 
   CYCLE_DURATION = 1;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
+  MIN_DEPOSIT = parseUniform("0.0001");
 
   // ~~~~~~~~~~~ GET UST ADDRESS ON MAINNET ~~~~~~~~~~~ 
   UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
@@ -49,6 +50,7 @@ async function main() {
   console.log("SharesToken", await router.sharesToken());
 
   await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE);
+  await router.setMinDeposit(MIN_DEPOSIT);
   await router.setCycleDuration(CYCLE_DURATION);
   await router.setExchange(exchange.address);
 
