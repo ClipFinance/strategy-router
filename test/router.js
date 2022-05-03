@@ -47,17 +47,20 @@ describe("Test StrategyRouter with fake strategies", function () {
 
   };
 
-  // beforeEach(async function () {
-  //   // await provider.send("evm_revert", [snapshotId]);
-  //   // snapshotId = await provider.send("evm_snapshot");
-  // });
-
-  beforeEach(async function () {
+  before(async function () {
     await setupTokens();
     await setupCore();
     await setupFarms();
     await setupSettings();
     await adminInitialDeposit();
+  });
+
+  beforeEach(async function () {
+    snapshotId = await provider.send("evm_snapshot");
+  });
+
+  afterEach(async function () {
+    await provider.send("evm_revert", [snapshotId]);
   });
 
   async function setupCore() {
@@ -95,10 +98,12 @@ describe("Test StrategyRouter with fake strategies", function () {
     const FarmUnprofitable = await ethers.getContractFactory("MockFarm");
     farmUnprofitable = await FarmUnprofitable.deploy(ust.address, 10000);
     await farmUnprofitable.deployed();
+    await farmUnprofitable.transferOwnership(router.address);
 
     const Farm = await ethers.getContractFactory("MockFarm");
-    farm = await Farm.deploy(usdc.address, 20000);
+    farm = await Farm.deploy(usdc.address, 10000);
     await farm.deployed();
+    await farm.transferOwnership(router.address);
   };
 
   async function setupSettings() {
@@ -109,7 +114,6 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.addStrategy(farm.address, usdc.address, 9000);
   };
 
-  
   async function adminInitialDeposit() {
     await ust.approve(router.address, parseUst("1000000"));
     await usdc.approve(router.address, parseUsdc("1000000"));
@@ -117,7 +121,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     // admin initial deposit seems to be fix for a problem, 
     // if you deposit and withdraw multiple times (without initial deposit)
     // then pps and shares become broken (they increasing because of dust always left on farms)
-    await router.depositToBatch(ust.address, parseUst("100"));
+    await router.depositToBatch(ust.address, parseUst("1"));
     await skipCycleTime();
     await router.depositToStrategies();
     await skipCycleTime();
@@ -150,80 +154,95 @@ describe("Test StrategyRouter with fake strategies", function () {
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
 
-  // it("Deposit to strategies", async function () {
-  //   await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  //   await provider.send("evm_mine");
+  it("depositToStrategies", async function () {
+    await router.depositToBatch(ust.address, parseUst("100"))
 
-  //   await router.depositToStrategies();
-  //   expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
-  //     parseUniform("290"),
-  //     parseUniform("1.0")
-  //   );
-  // });
+    await router.depositToStrategies()
+    let strategiesBalance = await router.viewStrategiesBalance()
+    console.log(await usdc.balanceOf(owner.address));
+    console.log(await ust.balanceOf(owner.address));
+    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+  });
 
-  // it("User deposit", async function () {
-  //   await router.depositToBatch(ust.address, parseUst("100"));
-  // });
+  it("withdrawFromStrategies", async function () {
+    await router.depositToBatch(ust.address, parseUst("100"))
+    await router.depositToStrategies()
 
-  // it("Send funds to farm to simulate balance growth", async function () {
-  //   await usdc.transfer(farm.address, await usdc.balanceOf(farm.address));
-  // });
+    let receiptsShares = await router.receiptsToShares([1]);
 
-  // it("Deposit to strategies", async function () {
-  //   await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  //   await provider.send("evm_mine");
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+  });
 
-  //   await router.depositToStrategies();
+  it("withdrawFromStrategies both nft and shares", async function () {
+    await router.depositToBatch(ust.address, parseUst("100"))
+    await router.depositToBatch(ust.address, parseUst("100"))
+    await router.depositToStrategies()
 
-  //   expect((await router.viewStrategiesBalance()).totalBalance).to.be.closeTo(
-  //     parseUniform("660"),
-  //     parseUniform("3.0")
-  //   );
-  // });
+    await router.unlockShares([1]);
 
-  // it("Withdraw other half from strategies", async function () {
-  //   let shares = await sharesToken.balanceOf(owner.address);
-  //   let oldBalance = await usdc.balanceOf(owner.address);
-  //   await router.withdrawShares(shares, usdc.address);
-  //   let newBalance = await usdc.balanceOf(owner.address);
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.receiptsToShares([2]);
+    let withdrawShares = sharesBalance.add(receiptsShares);
+    await expect(router.withdrawFromStrategies([2], usdc.address, withdrawShares)).to.be.reverted;
 
-  //   expect(newBalance.sub(oldBalance)).to.be.closeTo(
-  //     parseUsdc("96"),
-  //     parseUniform("1.0")
-  //   );
-  // });
+    await sharesToken.approve(router.address, sharesBalance);
 
-  // it("Withdraw from strategies", async function () {
-  //   await printStruct(await receiptContract.viewReceipt(3));
-  //   let oldBalance = await usdc.balanceOf(owner.address);
-  //   await router.withdrawFromStrategies(3, usdc.address, 10000);
-  //   let newBalance = await usdc.balanceOf(owner.address);
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("1"));
+  });
+  
+  it("crossWithdrawFromBatching", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
 
-  //   expect(newBalance.sub(oldBalance)).to.be.closeTo(
-  //     parseUsdc("100"),
-  //     parseUniform("1.0")
-  //   );
+    let oldBalance = await usdc.balanceOf(owner.address);
+    let receiptsShares = await router.receiptsToShares([1]);
+    await router.crossWithdrawFromBatching([1], usdc.address, receiptsShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
 
-  //   // should've withdrawn all (excpet admin), so verify that
+  it("crossWithdrawFromBatching both nft and shares", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
 
-  //   expect(await ust.balanceOf(farm.address)).to.equal(0);
-  //   expect(await usdc.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-  //   expect(await ust.balanceOf(router.address)).to.equal(0);
-  //   expect(await usdc.balanceOf(router.address)).to.equal(0);
+    await router.unlockShares([1]);
 
-  //   expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-  //   expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
-  //   expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.receiptsToShares([2]);
+    let withdrawShares = sharesBalance.add(receiptsShares);
+    await expect(router.crossWithdrawFromBatching([2], usdc.address, withdrawShares)).to.be.reverted;
 
-  //   expect(await ust.balanceOf(farmUnprofitable.address)).to.be.closeTo(
-  //     parseUst("16"), 
-  //     parseUst("1")
-  //   );
-  //   expect(await usdc.balanceOf(farm.address)).to.be.closeTo(
-  //     parseUsdc("170"), 
-  //     parseUsdc("1")
-  //   );
-  // });
+    await sharesToken.approve(router.address, sharesBalance);
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.crossWithdrawFromBatching([2], usdc.address, withdrawShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("40"));
+  });
+
+  it("crossWithdrawFromStrategies", async function () {
+    await router.depositToBatch(ust.address, parseUst("100000")); // nft 1
+    await router.depositToBatch(ust.address, parseUst("20000")); // 2
+    await router.depositToStrategies(); // 120k
+    await router.depositToBatch(ust.address, parseUst("10000")); // 3
+    await router.depositToBatch(ust.address, parseUst("20000")); // 4
+
+    let receiptsShares = await router.receiptsToShares([2]);
+    await router.crossWithdrawFromBatching([2], usdc.address, receiptsShares);
+    
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.crossWithdrawFromStrategies([3], usdc.address, MaxUint256);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
 
   // it("Farms should be empty on withdraw all multiple times", async function () {
 
@@ -269,56 +288,31 @@ describe("Test StrategyRouter with fake strategies", function () {
 
   //   // deposit to strategies
   //   await router.depositToBatch(ust.address, parseUst("10"));
-  //   await skipCycleTime();
   //   await router.depositToStrategies();
-  //   console.log("strategies balance", await router.viewStrategiesBalance(), await receiptContract.walletOfOwner(owner.address));
+  //   console.log("strategies balance", await router.viewStrategiesBalance());
     
-
-  //   let simulateGrowthAmount = (await farm.totalTokens()).sub(await usdc.balanceOf(farm.address));
-  //   simulateGrowthAmount = simulateGrowthAmount.mul(3); // removeStrategy calls compound
-  //   await usdc.transfer(farm.address, simulateGrowthAmount);
-
   //   // deploy new farm
   //   const Farm = await ethers.getContractFactory("MockFarm");
   //   farm2 = await Farm.deploy(usdc.address, 10000);
   //   await farm2.deployed();
+  //   await farm2.transferOwnership(router.address);
 
   //   // add new farm
   //   await router.addStrategy(farm2.address, usdc.address, 1000);
 
   //   // remove 2nd farm with index 1
   //   await router.removeStrategy(1);
+  //   await router.rebalanceStrategies();
 
   //   // withdraw user shares
-  //   let receipts = await receiptContract.walletOfOwner(owner.address);
-  //   console.log('1', receipts);
-  //   receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
   //   let oldBalance = await usdc.balanceOf(owner.address);
-  //   await router.withdrawFromStrategies(receipts[0], usdc.address, 10000);
+  //   await router.withdrawFromStrategies([1], usdc.address, MaxUint256);
   //   let newBalance = await usdc.balanceOf(owner.address);
   //   expect(newBalance.sub(oldBalance)).to.be.closeTo(
-  //     parseUsdc("21"),
-  //     parseUniform("1.0")
+  //     parseUsdc("10"),
+  //     parseUniform("1")
   //   );
 
-
-  //   expect(await ust.balanceOf(farm.address)).to.equal(0);
-  //   expect(await usdc.balanceOf(farmUnprofitable.address)).to.be.equal(0);
-  //   expect(await ust.balanceOf(router.address)).to.equal(0);
-  //   expect(await usdc.balanceOf(router.address)).to.equal(0);
-
-  //   expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-  //   expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
-  //   expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
-
-  //   // expect(await ust.balanceOf(farmUnprofitable.address)).to.be.closeTo(
-  //   //   parseUst("22361"), 
-  //   //   parseUst("1")
-  //   // );
-  //   // expect(await usdc.balanceOf(farm.address)).to.be.closeTo(
-  //   //   parseUsdc("10987"), 
-  //   //   parseUsdc("1")
-  //   // );
   // });
 
   // it("Test rebalance function", async function () {
@@ -365,12 +359,12 @@ describe("Test StrategyRouter with fake strategies", function () {
     // await router.withdrawFromStrategies(4, ust.address, 10000);
 
     // // convert receipts to shares and withdraw using shares
-    // await router.unlockSharesFromNFT(5);
+    // await router.unlockShares(5);
     // let sharesUnlocked = await sharesToken.balanceOf(owner.address);
     // console.log("sharesUnlocked", sharesUnlocked);
     // await router.withdrawShares(sharesUnlocked, ust.address);
 
-    // await router.unlockSharesFromNFT(6);
+    // await router.unlockShares(6);
     // sharesUnlocked = await sharesToken.balanceOf(owner.address);
     // console.log("sharesUnlocked", sharesUnlocked);
     // await router.withdrawShares(sharesUnlocked, usdc.address);

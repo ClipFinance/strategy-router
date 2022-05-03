@@ -395,7 +395,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     // unlock shares and withdraw tokens by shares
-    await router.unlockSharesFromNFT([12]);
+    await router.unlockShares([12]);
     let sharesUnlocked = await sharesToken.balanceOf(owner.address);
     console.log("sharesUnlocked", sharesUnlocked);
 
@@ -404,7 +404,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
-    await router.unlockSharesFromNFT([13]);
+    await router.unlockShares([13]);
     sharesUnlocked = await sharesToken.balanceOf(owner.address);
     console.log("sharesUnlocked", sharesUnlocked);
     oldBalance = await ust.balanceOf(owner.address);

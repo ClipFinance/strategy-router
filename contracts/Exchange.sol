@@ -49,11 +49,14 @@ contract Exchange is Ownable {
 
     constructor() {
         _setDexType(UST, BUSD, DexType.acryptosACS4UST);
+        _setDexType(UST, BUSDT, DexType.acryptosACS4UST);
+        _setDexType(UST, DAI, DexType.acryptosACS4UST);
+        _setDexType(UST, USDC, DexType.acryptosACS4UST);
         _setCoinId(address(poolACS4UST), UST, UST_ID);
         _setCoinId(address(poolACS4UST), BUSD, BUSD_ID);
-        // coinIds[address(poolACS4UST)][BUSDT] = BUSDT_ID;
-        // coinIds[address(poolACS4UST)][DAI] = DAI_ID;
-        // coinIds[address(poolACS4UST)][USDC] = USDC_ID;
+        _setCoinId(address(poolACS4UST), BUSDT, BUSDT_ID);
+        _setCoinId(address(poolACS4UST), DAI, DAI_ID);
+        _setCoinId(address(poolACS4UST), USDC, USDC_ID);
     }
 
     function sortTokens(address tokenA, address tokenB)
@@ -132,7 +135,7 @@ contract Exchange is Ownable {
         if (_dexType == DexType.pancakeSwapThroughWETH) {
             return _swapOnPancakeWithWETH(amountA, tokenA, tokenB, to);
         } else if (_dexType == DexType.pancakeDirectSwap) {
-            return _swapDirect(amountA, tokenA, tokenB, to);
+            return _swapOnPancakeDirect(amountA, tokenA, tokenB, to);
         } else if (_dexType == DexType.acryptosACS4UST) {
             return _swapOnAcryptosUST(amountA, tokenA, tokenB, to);
         }
@@ -166,7 +169,7 @@ contract Exchange is Ownable {
         return received;
     }    
     
-    function _swapDirect(
+    function _swapOnPancakeDirect(
         uint256 amountA,
         IERC20 tokenA,
         IERC20 tokenB,

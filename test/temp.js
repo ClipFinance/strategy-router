@@ -83,10 +83,6 @@ describe("Trying to find source of bug", function () {
     await router.setCycleDuration(1);
     CYCLE_DURATION = Number(await router.cycleDuration());
     INITIAL_SHARES = await router.INITIAL_SHARES();
-
-    // console.log(await exchange.estimateGas.test(parseUst("10"), ust.address, usdc.address));
-    // console.log(await exchange.test(parseUsdc("1000"), usdc.address, ust.address));
-    // console.log(await exchange.test(parseUst("1000"), ust.address, usdc.address));
   });
 
   it("Deploy acryptos_ust", async function () {

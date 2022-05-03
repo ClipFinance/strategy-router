@@ -4,9 +4,10 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IStrategy.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
 
-/// profitable farm gives x2 on each compound
-contract MockFarm {
+contract MockFarm is Ownable, IStrategy {
     address private asset;
     uint256 private balance;
     uint256 private mockProfitPercent;
@@ -16,12 +17,18 @@ contract MockFarm {
         mockProfitPercent = _mockProfitPercent;
     }
 
-    function deposit(uint256 amount) external {
+    function depositToken() external view override returns (address) {
+        return asset;
+    }
+
+    function deposit(uint256 amount) external override {
+        // console.log("MockFarm.deposit", amount, ERC20(asset).balanceOf(address(this)));
         balance += amount;
     }
 
     function withdraw(uint256 amount)
         external
+        override
         returns (uint256 amountWithdrawn)
     {
         ERC20(asset).transfer(msg.sender, amount);
@@ -29,17 +36,16 @@ contract MockFarm {
         return amount;
     }
 
-    function compound() external {
+    function compound() external override {
+
         balance = (balance * mockProfitPercent) / 10000;
     }
 
-    // function netAssetValue() external view returns (uint256) { }
-
-    function totalTokens() external view returns (uint256) {
+    function totalTokens() external view override returns (uint256) {
         return balance;
     }
 
-    function withdrawAll() external returns (uint256 amountWithdrawn) {
+    function withdrawAll() external override returns (uint256 amountWithdrawn) {
         if (balance > 0) {
             amountWithdrawn = balance;
             ERC20(asset).transfer(msg.sender, amountWithdrawn);

@@ -42,7 +42,7 @@ contract StrategyRouter is Ownable {
     /// @notice Fires when user converts his receipt into shares token.
     /// @param receiptId Index of the receipt to burn.
     /// @param shares Amount of shares received by user.
-    event UnlockSharesFromNFT(
+    event UnlockShares(
         address indexed user,
         uint256 receiptId,
         uint256 shares
@@ -149,15 +149,36 @@ contract StrategyRouter is Ownable {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositToken);
 
-            // console.log("depositAmounts[i]", depositAmounts[i]);
-            strategyAssetAddress.transfer(
-                strategies[i].strategyAddress,
-                depositAmounts[i]
+            console.log(
+                "depositAmounts[i]",
+                depositAmounts[i],
+                strategyAssetAddress.balanceOf(address(this))
             );
-            if (depositAmounts[i] > 0)
+            console.log(
+                IStrategy(strategies[i].strategyAddress).depositToken(),
+                address(strategyAssetAddress)
+            );
+            if (depositAmounts[i] > 0) {
+                console.log(
+                    "dif",
+                    strategyAssetAddress.balanceOf(
+                        address(strategies[i].strategyAddress)
+                    )
+                );
+                strategyAssetAddress.transfer(
+                    strategies[i].strategyAddress,
+                    depositAmounts[i]
+                );
+                console.log(
+                    "dif",
+                    strategyAssetAddress.balanceOf(
+                        address(strategies[i].strategyAddress)
+                    )
+                );
                 IStrategy(strategies[i].strategyAddress).deposit(
                     depositAmounts[i]
                 );
+            }
 
             // console.log("depositAmount %s leftoverAmount %s", depositAmount);
         }
@@ -167,12 +188,12 @@ contract StrategyRouter is Ownable {
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
         uint256 totalWithdrawnUniform = cycles[currentCycleId]
             .totalWithdrawnUniform;
-        // console.log(
-        //     "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
-        //     receivedByStrats,
-        //     totalWithdrawnUniform,
-        //     receivedByStrats + totalWithdrawnUniform
-        // );
+        console.log(
+            "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
+            receivedByStrats,
+            totalWithdrawnUniform,
+            receivedByStrats + totalWithdrawnUniform
+        );
         receivedByStrats += totalWithdrawnUniform;
         balanceAfterCompound -= totalWithdrawnUniform;
 
@@ -213,6 +234,7 @@ contract StrategyRouter is Ownable {
             // );
             uint256 newShares = receivedByStrats /
                 cycles[currentCycleId].pricePerShare;
+            console.log("newShares", newShares);
             sharesToken.mint(address(this), newShares);
         }
 
@@ -221,12 +243,12 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].totalDepositUniform =
             totalDepositUniform +
             totalWithdrawnUniform;
-        // console.log(
-        //     "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
-        //     totalWithdrawnUniform,
-        //     totalDepositUniform,
-        //     receivedByStrats
-        // );
+        console.log(
+            "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
+            totalWithdrawnUniform,
+            totalDepositUniform,
+            receivedByStrats
+        );
         // cycles[currentCycleId].totalWithdrawnUniform = 0;
         emit DepositToStrategies(currentCycleId, receivedByStrats);
         currentCycleId++;
@@ -321,7 +343,7 @@ contract StrategyRouter is Ownable {
     /// @notice Returns amount of shares retrievable by receipt.
     /// @notice Cycle noted in receipt should be closed.
     function receiptToShares(uint256 receiptId)
-        public
+        private
         view
         returns (uint256 shares)
     {
@@ -332,10 +354,28 @@ contract StrategyRouter is Ownable {
         );
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
 
+        console.log(
+            "rts",
+            receipt.amount,
+            shares,
+            (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
+                cycles[receipt.cycleId].totalInBatch
+        );
         receipt.amount =
             (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
-            cycles[receipt.cycleId].totalDepositUniform;
+            cycles[receipt.cycleId].totalInBatch;
         shares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
+    }
+
+    function receiptsToShares(uint256[] calldata receiptIds)
+        public
+        view
+        returns (uint256 shares)
+    {
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            shares += receiptToShares(receiptId);
+        }
     }
 
     /// @notice Calculate how much usd shares representing using current price per share.
@@ -362,16 +402,16 @@ contract StrategyRouter is Ownable {
 
     /// @notice Convert receipts into share tokens. Withdraw functions doing it internally.
     /// @notice Cycle noted in receipt should be closed.
-    function unlockSharesFromNFT(uint256[] calldata receiptIds)
+    function unlockShares(uint256[] calldata receiptIds)
         public
         OnlyEOW
         returns (uint256 shares)
     {
-        shares = _unlockSharesFromNFT(receiptIds);
+        shares = _unlockShares(receiptIds);
         sharesToken.transfer(msg.sender, shares);
     }
 
-    function _unlockSharesFromNFT(uint256[] calldata receiptIds)
+    function _unlockShares(uint256[] calldata receiptIds)
         private
         returns (uint256 shares)
     {
@@ -381,16 +421,17 @@ contract StrategyRouter is Ownable {
                 revert NotReceiptOwner();
             shares += receiptToShares(receiptId);
             receiptContract.burn(receiptId);
-            emit UnlockSharesFromNFT(msg.sender, receiptId, shares);
+            emit UnlockShares(msg.sender, receiptId, shares);
         }
     }
 
     /// @notice Withdraw from strategies while receipts are in strategies.
     /// @notice On partial withdraw leftover shares transferred to user.
+    /// @notice When receipts don't have enough shares, user has to approve us missing amount of share tokens.
     /// @notice Receipts are burned.
     /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param shares Amount of shares from receipts to withdraw. Put max uint to withdraw all.
+    /// @param shares Amount of shares from receipts to withdraw.
     /// @dev Only callable by user wallets.
     function withdrawFromStrategies(
         uint256[] calldata receiptIds,
@@ -403,12 +444,16 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-        uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
+        uint256 unlcokedShares = _unlockShares(receiptIds);
         uint256 leftoverShares;
         if (unlcokedShares > shares) {
             leftoverShares = unlcokedShares - shares;
             unlcokedShares = shares;
             sharesToken.transfer(msg.sender, leftoverShares);
+        } else if (unlcokedShares < shares) {
+            uint256 amountMissing = shares - unlcokedShares;
+            unlcokedShares += amountMissing;
+            sharesToken.transferFrom(msg.sender, address(this), amountMissing);
         }
 
         uint256 amountWithdraw = sharesToAmount(unlcokedShares);
@@ -580,10 +625,11 @@ contract StrategyRouter is Ownable {
 
     /// @notice Withdraw from batching while receipts are in strategies.
     /// @notice On partial withdraw leftover shares transferred to user.
+    /// @notice When receipts don't have enough shares, user has to approve us missing amount of share tokens.
     /// @notice Receipts are burned.
     /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param shares Amount of shares from receipts to withdraw. Put max uint to withdraw all.
+    /// @param shares Amount of shares from receipts to withdraw.
     /// @dev Only callable by user wallets.
     function crossWithdrawFromBatching(
         uint256[] calldata receiptIds,
@@ -595,15 +641,24 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-        uint256 unlcokedShares = _unlockSharesFromNFT(receiptIds);
+        uint256 unlcokedShares = _unlockShares(receiptIds);
         uint256 leftoverShares;
         if (unlcokedShares > shares) {
             leftoverShares = unlcokedShares - shares;
             unlcokedShares = shares;
             sharesToken.transfer(msg.sender, leftoverShares);
+        } else if (unlcokedShares < shares) {
+            uint256 amountMissing = shares - unlcokedShares;
+            unlcokedShares += amountMissing;
+            sharesToken.transferFrom(msg.sender, address(this), amountMissing);
         }
 
         uint256 amountWithdraw = sharesToAmount(unlcokedShares);
+        // console.log(
+        //     "burn",
+        //     unlcokedShares,
+        //     sharesToken.balanceOf(address(this))
+        // );
         sharesToken.burn(address(this), unlcokedShares);
 
         _withdrawFromBatching(amountWithdraw, withdrawToken);
@@ -630,20 +685,14 @@ contract StrategyRouter is Ownable {
             // uint256 len = strategies.length;
             for (uint256 i; i < balances.length; i++) {
                 address token = stablecoins[i];
-                if(balances[i] < 10**ERC20(token).decimals()) continue; 
                 // split withdraw amount proportionally between strategies
                 uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-                amountWithdraw = fromUniform(
-                    amountWithdraw,
-                    token
-                );
+                if (amountWithdraw < 10**ERC20(token).decimals()) continue;
+
+                amountWithdraw = fromUniform(amountWithdraw, token);
 
                 // swap strategies tokens to withdraw token
-                amountWithdraw = _trySwap(
-                    amountWithdraw,
-                    token,
-                    withdrawToken
-                );
+                amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
                 amountToTransfer += amountWithdraw;
             }
 
