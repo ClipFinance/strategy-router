@@ -244,6 +244,34 @@ describe("Test StrategyRouter with fake strategies", function () {
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
   });
 
+  it("withdrawShares", async function () {
+    await router.depositToBatch(ust.address, parseUst("100000"));
+    await router.depositToStrategies();
+
+    let receiptsShares = await router.receiptsToShares([1]);
+    await router.unlockShares([1]);
+    // await sharesToken.approve(router.address, receiptsShares);
+    
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawShares(receiptsShares, usdc.address);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("250"));
+  });
+
+  it("crossWithdrawShares", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
+
+    let receiptsShares = await router.receiptsToShares([1]);
+    await router.unlockShares([1]);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.crossWithdrawShares(receiptsShares, usdc.address);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
+
   // it("Farms should be empty on withdraw all multiple times", async function () {
 
   //   console.log("strategies balance", await router.viewStrategiesBalance());
@@ -282,55 +310,43 @@ describe("Test StrategyRouter with fake strategies", function () {
   //   );
   // });
 
-  // it("Remove strategy", async function () {
+  it("Remove strategy", async function () {
 
-  //   console.log("strategies balance", await router.viewStrategiesBalance());
+    console.log("strategies balance", await router.viewStrategiesBalance());
 
-  //   // deposit to strategies
-  //   await router.depositToBatch(ust.address, parseUst("10"));
-  //   await router.depositToStrategies();
-  //   console.log("strategies balance", await router.viewStrategiesBalance());
+    // deposit to strategies
+    await router.depositToBatch(ust.address, parseUst("10"));
+    await router.depositToStrategies();
+    console.log("strategies balance", await router.viewStrategiesBalance());
     
-  //   // deploy new farm
-  //   const Farm = await ethers.getContractFactory("MockFarm");
-  //   farm2 = await Farm.deploy(usdc.address, 10000);
-  //   await farm2.deployed();
-  //   await farm2.transferOwnership(router.address);
+    // deploy new farm
+    const Farm = await ethers.getContractFactory("MockFarm");
+    farm2 = await Farm.deploy(usdc.address, 10000);
+    await farm2.deployed();
+    await farm2.transferOwnership(router.address);
 
-  //   // add new farm
-  //   await router.addStrategy(farm2.address, usdc.address, 1000);
+    // add new farm
+    await router.addStrategy(farm2.address, usdc.address, 1000);
 
-  //   // remove 2nd farm with index 1
-  //   await router.removeStrategy(1);
-  //   await router.rebalanceStrategies();
+    // remove 2nd farm with index 1
+    await router.removeStrategy(1);
+    await router.rebalanceStrategies();
 
-  //   // withdraw user shares
-  //   let oldBalance = await usdc.balanceOf(owner.address);
-  //   await router.withdrawFromStrategies([1], usdc.address, MaxUint256);
-  //   let newBalance = await usdc.balanceOf(owner.address);
-  //   expect(newBalance.sub(oldBalance)).to.be.closeTo(
-  //     parseUsdc("10"),
-  //     parseUniform("1")
-  //   );
+    // withdraw user shares
+    let oldBalance = await usdc.balanceOf(owner.address);
+    let receiptsShares = await router.receiptsToShares([1]);
+    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("10"),
+      parseUniform("1")
+    );
 
-  // });
+  });
 
-  // it("Test rebalance function", async function () {
-
-  //   // console.log("strategies balance", await router.viewStrategiesBalance());
-
-  //   // deposit to strategies
-  //   await router.updateStrategy(0, 1000);
-  //   await router.updateStrategy(1, 9000);
-
-  //   await router.rebalance(usdc.address);
-
-  //   let {balances, totalBalance} = await router.viewStrategiesBalance();
-  //   // strategies should be balanced as 10% and 90%
-  //   expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
-  //   expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
-  //   // console.log("strategies balance", await router.viewStrategiesBalance());
-  // });
+  it("Test rebalance function", async function () {
+    // see rebalance.js
+  });
 
   // it("Scenario", async function () {
 
