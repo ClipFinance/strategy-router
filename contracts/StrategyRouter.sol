@@ -102,10 +102,12 @@ contract StrategyRouter is Ownable {
     uint256 public currentCycleId;
     uint256 public minUsdPerCycle;
     uint256 public minDeposit;
+    uint256 public feePercent;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
     SharesToken public sharesToken;
+    address public feeAddress;
 
     StrategyInfo[] public strategies;
     address[] private stablecoins;
@@ -737,6 +739,19 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
+    }
+
+    /// @notice Set address for collecting fees from rewards.
+    /// @dev Admin function.
+    function setFeeAddress(address _feeAddress) external onlyOwner {
+        if(_feeAddress == address(0)) revert();
+        feeAddress = _feeAddress;
+    }
+
+    /// @notice Set percent to take of rewards for owners.
+    /// @dev Admin function.
+    function setFeePercent(uint256 percent) external onlyOwner {
+        feePercent = percent;
     }
 
     /// @notice Minimum usd needed to be able to close the cycle.

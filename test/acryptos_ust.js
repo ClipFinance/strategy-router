@@ -2,6 +2,7 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
+const { getTokens, skipBlocks, BLOCKS_MONTH } = require("./utils");
 
 // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
 provider = ethers.provider;
@@ -25,41 +26,24 @@ describe("Test acryptos_ust strategy", function () {
       "0x10ED43C718714eb63d5aA57B78B54704E256024E"
     );
 
+    // ~~~~~~~~~~~ GET BUSD ON MAINNET ~~~~~~~~~~~ 
+    BUSD = "0xe9e7cea3dedca5984780bafc599bd69add087d56";
+    busd = await ethers.getContractAt("ERC20", BUSD);
+    // ~~~~~~~~~~~ GET IAcryptoSPool ON MAINNET ~~~~~~~~~~~ 
+    ACS4UST = "0x99c92765EfC472a9709Ced86310D64C4573c4b77";
+    acsUst = await ethers.getContractAt("IAcryptoSPool", ACS4UST);
     // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
-    ust = await ethers.getContractAt("ERC20", UST);
-
     ustHolder = "0x05faf555522fa3f93959f86b41a3808666093210";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [ustHolder],
-    });
-    ustHolder = await ethers.getSigner(ustHolder);
-    await network.provider.send("hardhat_setBalance", [
-      ustHolder.address.toString(),
-      "0x" + Number(parseEther("1").toHexString(2)).toString(2),
-    ]);
-    await ust.connect(ustHolder).transfer(
-      owner.address,
-      parseUst("500000")
-    );
-
+    ust = await getTokens(UST, ustHolder, parseUst("500000"), owner.address);
     // ~~~~~~~~~~~ GET USDC TOKENS ON MAINNET ~~~~~~~~~~~ 
-
     USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    usdc = await ethers.getContractAt("ERC20", USDC);
-
     usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [usdcHolder],
-    });
-    usdcHolder = await ethers.getSigner(usdcHolder);
-    await usdc.connect(usdcHolder).transfer(
-      owner.address,
-      parseUsdc("500000")
-    );
+    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address);
+    // ~~~~~~~~~~~ GET BSW TOKENS ON MAINNET ~~~~~~~~~~~ 
+    BSW = "0x965F527D9159dCe6288a2219DB51fc6Eef120dD1";
+    bswHolder = "0x000000000000000000000000000000000000dead";
+    bsw = await getTokens(BSW, bswHolder, parseEther("10000000"), owner.address);
 
   });
 
@@ -76,7 +60,8 @@ describe("Test acryptos_ust strategy", function () {
     await router.deployed();
     await router.setMinUsdPerCycle(parseUniform("1.0"));
     await router.setExchange(exchange.address);
-
+    await router.setFeePercent(2000);
+    await router.setFeeAddress(bob.address);
   });
 
   it("Deploy acryptos_ust", async function () {
@@ -188,16 +173,17 @@ describe("Test acryptos_ust strategy", function () {
     await strategy.deposit(amountDeposit);
 
     // skip blocks
-    let MONTH_BLOCKS = 60 * 60 * 24 * 30 / 3;
-    MONTH_BLOCKS = "0x" + MONTH_BLOCKS.toString(16);
-    await hre.network.provider.send("hardhat_mine", [MONTH_BLOCKS]);
+    await skipBlocks(BLOCKS_MONTH);
 
     // compound, should incsrease totalTokens
     let oldBalance = await strategy.totalTokens();
+    let oldFeeBalance = await ust.balanceOf(bob.address);
     await strategy.compound();
+    let newFeeBalance = await ust.balanceOf(bob.address);
     let newBalance = await strategy.totalTokens();
     console.log("added after compound", newBalance.sub(oldBalance));
 
+    expect(newFeeBalance).to.be.gt(oldFeeBalance);
     expect(newBalance).to.be.gt(oldBalance);
     expect(await ust.balanceOf(strategy.address)).to.be.equal(0);
     expect(await lpToken.balanceOf(strategy.address)).to.be.equal(0);

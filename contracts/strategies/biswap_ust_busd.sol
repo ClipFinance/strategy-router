@@ -46,23 +46,14 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         // TODO: Is there a way to swap ust to busd so that we'll get perfect ratio to addLiquidity?
         //       If so, we could get rid of that helper function.
-        // fix_leftover(amount);
 
-        // the closer amount to 500k UST the higher slippage factor
-        uint256 slippageFactor = calcSlippageFactor(amount);
         // swap a bit more to account for swap fee (0.06% on acryptos)
-        uint256 busdAmount = (amount * (50030 + slippageFactor)) / 100000;
+        uint256 busdAmount = (amount * 5003) / 10000;
         uint256 ustAmount = amount - busdAmount;
 
         Exchange exchange = strategyRouter.exchange();
         ust.transfer(address(exchange), busdAmount);
-        // console.log("busdAmount", busdAmount);
         busdAmount = exchange.swapRouted(busdAmount, ust, busd, address(this));
-        // console.log(
-        //     "ust %s busd %s",
-        //     ust.balanceOf(address(this)),
-        //     busd.balanceOf(address(this))
-        // );
 
         ust.approve(address(biswapRouter), ustAmount);
         busd.approve(address(biswapRouter), busdAmount);
@@ -78,17 +69,8 @@ contract biswap_ust_busd is Ownable, IStrategy {
                 block.timestamp
             );
 
-        // console.log("addLiquidity leftover", ustAmount - amountA, busdAmount - amountB);
         lpToken.approve(address(farm), liquidity);
-        //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
         farm.deposit(poolId, liquidity);
-
-        // after add_liquidity some tokens leftover, send them back to StrategyRouter
-        // busd.transfer(msg.sender, busd.balanceOf(address(this)));
-        //  console.log(lpAmount, amount, lpToken.balanceOf(address(this)), lpToken.balanceOf(address(farm)));
-
-        // (uint256 amount, , , ) = farm.userInfo(address(lpToken), address(this));
-        //  console.log(lpAmount, amount);
     }
 
     function withdraw(uint256 amount)
@@ -97,7 +79,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        // console.log("--- biswap withdraw");
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
         address token1 = IUniswapV2Pair(address(lpToken)).token1();
         uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
@@ -119,18 +100,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         uint256 liquidity = (lpToken.totalSupply() * (amountUst + amountBusd)) /
             (balance0 + balance1);
 
-        // console.log(
-        //     "amountUst %s amountBusd %s",
-        //     amountUst,
-        //     amountBusd
-        // );
-
         farm.withdraw(poolId, liquidity);
-        // console.log(
-        //     "liquidity %s, lpToken.balanceOf(address(this)) %s",
-        //     liquidity,
-        //     lpToken.balanceOf(address(this))
-        // );
         lpToken.approve(address(biswapRouter), liquidity);
         (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
             address(ust),
@@ -144,9 +114,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         busd.transfer(address(exchange), amountB);
-        // console.log("amountA %s amountB %s", amountA, amountB);
         amountA += exchange.swapRouted(amountB, busd, ust, address(this));
-        // console.log("amountA %s amountB %s", amountA, amountB);
         ust.transfer(msg.sender, amountA);
         amountWithdrawn = amountA;
     }
@@ -155,9 +123,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         farm.withdraw(poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
-        // console.log("bswAmount", bswAmount);
 
-        // console.log("block.number", block.number);
         if (bswAmount > 0) {
             fix_leftover(0);
             sellBSW(bswAmount);
@@ -167,11 +133,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
             ust.approve(address(biswapRouter), balanceUst);
             busd.approve(address(biswapRouter), balanceBusd);
 
-            // console.log(
-            //     "receivedUst %s receivedBusd %s",
-            //     balanceUst,
-            //     balanceBusd
-            // );
             (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
                 .addLiquidity(
                     address(ust),
@@ -186,19 +147,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
 
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(farm), lpAmount);
-            // console.log(
-            //     "liquidity %s amountA %s amountB %s",
-            //     liquidity,
-            //     amountA,
-            //     amountB
-            // );
             farm.deposit(poolId, lpAmount);
-            // console.log(
-            //     "biswap farm compound leftover ust %s busd %s, max_leftover_busd %s",
-            //     ust.balanceOf(address(this)),
-            //     busd.balanceOf(address(this)),
-            //     max_leftover_busd
-            // );
         }
     }
 
@@ -212,21 +161,14 @@ contract biswap_ust_busd is Ownable, IStrategy {
             busdAmount > ustAmount &&
             (toSwap = busdAmount - ustAmount) > LEFTOVER_TRESHOLD_BUSD
         ) {
-            console.log("~~~~~~~~~~ fix_leftover ~~~~~~~~~~~");
-            console.log("toSwap %s", toSwap);
             toSwap = (toSwap * 5003) / 1e4;
-            console.log("toSwap/2 %s", toSwap);
             busd.transfer(address(exchange), toSwap);
             exchange.swapRouted(toSwap, busd, ust, address(this));
         } else if (
             ustAmount > busdAmount &&
             (toSwap = ustAmount - busdAmount) > LEFTOVER_TRESHOLD_UST
         ) {
-            console.log("~~~~~~~~~~ fix_leftover ~~~~~~~~~~~");
-            console.log("ust toSwap %s", toSwap);
             toSwap = (toSwap * 5003) / 1e4;
-            console.log("ust toSwap/2 %s", toSwap);
-            // console.log("fix_leftover ust %s", ustAmount);
             ust.transfer(address(exchange), toSwap);
             exchange.swapRouted(toSwap, ust, busd, address(this));
         }
@@ -265,8 +207,10 @@ contract biswap_ust_busd is Ownable, IStrategy {
         public
         returns (uint256 receivedUst, uint256 receivedBusd)
     {
-        bsw.approve(address(biswapRouter), amountA);
+        // take comission
+        amountA = takeFee(amountA);
 
+        // sell for lp ratio
         uint256 ustPart = amountA / 2;
         uint256 busdPart = amountA - ustPart;
 
@@ -284,10 +228,7 @@ contract biswap_ust_busd is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        // console.log("--- withdrawAll call");
-
         (uint256 amount, ) = farm.userInfo(poolId, address(this));
-        // console.log("withdraw amount LPs %s", amount);
         if (amount > 0) {
             farm.withdraw(poolId, amount);
             uint256 lpAmount = lpToken.balanceOf(address(this));
@@ -306,7 +247,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
         uint256 amountUst = ust.balanceOf(address(this));
         uint256 amountBusd = busd.balanceOf(address(this));
 
-        // console.log("ust balance %s busd %s", amountUst, amountBusd);
         if (amountBusd > 0) {
             Exchange exchange = strategyRouter.exchange();
             busd.transfer(address(exchange), amountBusd);
@@ -317,29 +257,23 @@ contract biswap_ust_busd is Ownable, IStrategy {
                 address(this)
             );
         }
-        // console.log("amountA %s amountB %s", amountA, amountB);
         if (amountUst > 0) {
             ust.transfer(msg.sender, amountUst);
             amountWithdrawn = amountUst;
         }
     }
 
-    function calcSlippageFactor(uint256 amount) public view returns (uint256) {
-        uint256 approxSwapAmount = amount / 2 / 10**ERC20(ust).decimals();
+    function takeFee(uint256 amount) private returns (uint256 amountAfterFee) {
+        Exchange exchange = strategyRouter.exchange();
 
-        uint256 slippageFactor;
-        uint256 max_slippage_factor;
-        if (approxSwapAmount > 100_000) {
-            max_slippage_factor = 40;
-            slippageFactor = (max_slippage_factor * approxSwapAmount) / 500_000;
-        } else if (approxSwapAmount > 10_000) {
-            max_slippage_factor = 20;
-            slippageFactor = (max_slippage_factor * approxSwapAmount) / 100_000;
+        uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
+        address feeAddress = StrategyRouter(strategyRouter).feeAddress();
+        uint256 fee = (amount * feePercent) / 1e4;
+        if (fee > 0 && feeAddress != address(0)) {
+            bsw.transfer(address(exchange), fee);
+            // console.log(fee, amount-fee);
+            exchange.swapRouted(fee, bsw, ust, feeAddress);
         }
-
-        slippageFactor = slippageFactor > max_slippage_factor
-            ? max_slippage_factor
-            : slippageFactor;
-        return slippageFactor;
+        return amount - fee;
     }
 }

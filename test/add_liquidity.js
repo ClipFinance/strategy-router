@@ -153,18 +153,53 @@ describe("Trying to find source of bug", function () {
 
       let {reserve0, reserve1} = await pair.getReserves();
       let ratio = reserve0.mul(parseEther("1")).div(reserve1);
-      console.log("ratio", formatEther(ratio.mul(100)));
+      console.log("reserves ratio", formatEther(ratio));
+      // console.log("ratio", formatEther(ratio.mul(100)));
 
-      let ret = total.div(2).mul(100030).div(100000);
-      ret = ret.mul(parseEther("1")).div(ratio);
-      // let ret = total.div(2).mul(parseEther("1")).div(ratio);
-      // ret = ret.mul(100030).div(100000);
+      // let ret = total.mul(reserve0).div(reserve0.add(reserve1));
+      // let feeRat = (BigNumber.from(30)).mul(reserve0).div(reserve0.add(reserve1));
+      // ret = ret.mul((BigNumber.from(10000)).sub(feeRat)).div(10000);
+      // console.log(feeRat);
 
-      // let ret = total.mul(5003).div(10000);
-      // ret = ret.mul(5006).div(1e4);
-      // ret = ret.mul(ratio).div(parseEther("1"));
+      // def get_dy_underlying(i: int128, j: int128, dx: uint256)
+      // let half = total.div(2).mul(10030).div(10000);
+      let half = total.div(2);
+      let otherHalf = total.sub(half);
+      let poolACS4UST = await ethers.getContractAt(
+        "IAcryptoSPool",
+        "0x99c92765EfC472a9709Ced86310D64C4573c4b77"
+      );
+      let dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+      let dy_ratio = (otherHalf).mul(parseEther("1")).div(dy);
+      // first time when there was dy/total.div(2) (and similar in loop) it was worked better
+
+      console.log("dy_ratio1", formatEther(dy_ratio));
+
+      for (let i = 0; i < 3; i++) {
+        
+        if(dy_ratio.lt(ratio)) {
+          console.log("ratio <", dy_ratio, ratio);
+          // let r = ratio.mul(parseEther("1")).div(dy_ratio);
+          let r = parseEther("1").sub(ratio.sub(dy_ratio));
+          half = half.mul(r).div(parseEther("1"));
+          otherHalf = total.sub(half);
+          dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+          dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
+        } else if (dy_ratio.gt(ratio)) {
+          console.log("ratio >", dy_ratio, ratio);
+          // let r = ratio.mul(parseEther("1")).div(dy_ratio);
+          let r = dy_ratio.sub(ratio).add(parseEther("1"));
+          half = half.mul(r).div(parseEther("1"));
+          otherHalf = total.sub(half);
+          dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+          dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
+        }
+      }
+
+      console.log(formatEther(dy_ratio));
+
       console.log(reserve0, reserve1);
-      // console.log(ratio);
+      let ret = half;
       return ret;
     }
     let depAmount = parseUst("10000");
@@ -182,7 +217,7 @@ describe("Trying to find source of bug", function () {
     );
     let busdAmount = await busd.balanceOf(owner.address);
     let ustAmount = await ust.balanceOf(owner.address);
-    console.log(ustAmount, busdAmount);
+    console.log("after swap", ustAmount, busdAmount, formatEther(ustAmount.mul(parseEther("1")).div(busdAmount)));
 
     await ust.approve(br.address, parseUst("1000000"));
     await busd.approve(br.address, parseUst("1000000"));
