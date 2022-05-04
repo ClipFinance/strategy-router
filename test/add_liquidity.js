@@ -163,43 +163,64 @@ describe("Trying to find source of bug", function () {
 
       // def get_dy_underlying(i: int128, j: int128, dx: uint256)
       // let half = total.div(2).mul(10030).div(10000);
-      let half = total.div(2);
-      let otherHalf = total.sub(half);
+      let halfToSwap = total.div(2);
+      let otherHalf = total.sub(halfToSwap);
       let poolACS4UST = await ethers.getContractAt(
         "IAcryptoSPool",
         "0x99c92765EfC472a9709Ced86310D64C4573c4b77"
       );
-      let dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+      let dy = await poolACS4UST.get_dy_underlying(0, 1, halfToSwap);
       let dy_ratio = (otherHalf).mul(parseEther("1")).div(dy);
       // first time when there was dy/total.div(2) (and similar in loop) it was worked better
 
       console.log("dy_ratio1", formatEther(dy_ratio));
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         
         if(dy_ratio.lt(ratio)) {
           console.log("ratio <", dy_ratio, ratio);
           // let r = ratio.mul(parseEther("1")).div(dy_ratio);
-          let r = parseEther("1").sub(ratio.sub(dy_ratio));
-          half = half.mul(r).div(parseEther("1"));
-          otherHalf = total.sub(half);
-          dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+          let r = ((ratio.sub(dy_ratio)).div(4)).add(parseEther("1"));
+          halfToSwap = (total.div(2)).mul(parseEther("1")).div(r);
+          otherHalf = total.sub(halfToSwap);
+          dy = await poolACS4UST.get_dy_underlying(0, 1, halfToSwap);
           dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
         } else if (dy_ratio.gt(ratio)) {
           console.log("ratio >", dy_ratio, ratio);
+          let r = parseEther("1").sub((dy_ratio.sub(ratio)).div(4));
           // let r = ratio.mul(parseEther("1")).div(dy_ratio);
-          let r = dy_ratio.sub(ratio).add(parseEther("1"));
-          half = half.mul(r).div(parseEther("1"));
-          otherHalf = total.sub(half);
-          dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+          halfToSwap = (total.div(2)).mul(parseEther("1")).div(r);
+          otherHalf = total.sub(halfToSwap);
+          dy = await poolACS4UST.get_dy_underlying(0, 1, halfToSwap);
           dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
+          console.log(dy, otherHalf);
         }
       }
+      // for (let i = 0; i < 3; i++) {
+        
+      //   if(dy_ratio.lt(ratio)) {
+      //     console.log("ratio <", dy_ratio, ratio);
+      //     // let r = ratio.mul(parseEther("1")).div(dy_ratio);
+      //     let r = parseEther("1").sub(ratio.sub(dy_ratio));
+      //     half = half.mul(r).div(parseEther("1"));
+      //     otherHalf = total.sub(half);
+      //     dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+      //     dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
+      //   } else if (dy_ratio.gt(ratio)) {
+      //     console.log("ratio >", dy_ratio, ratio);
+      //     // let r = ratio.mul(parseEther("1")).div(dy_ratio);
+      //     let r = dy_ratio.sub(ratio).add(parseEther("1"));
+      //     half = half.mul(r).div(parseEther("1"));
+      //     otherHalf = total.sub(half);
+      //     dy = await poolACS4UST.get_dy_underlying(0, 1, half);
+      //     dy_ratio = otherHalf.mul(parseEther("1")).div(dy);
+      //   }
+      // }
 
       console.log(formatEther(dy_ratio));
 
       console.log(reserve0, reserve1);
-      let ret = half;
+      let ret = halfToSwap;
       return ret;
     }
     let depAmount = parseUst("10000");

@@ -30,6 +30,8 @@ async function main() {
   CYCLE_DURATION = 1;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
   MIN_DEPOSIT = parseUniform("0.0001");
+  FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
+  FEE_PERCENT = 1000;
 
   // ~~~~~~~~~~~ GET UST ADDRESS ON MAINNET ~~~~~~~~~~~ 
   UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
@@ -45,7 +47,7 @@ async function main() {
   const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
   router = await StrategyRouter.deploy();
   await router.deployed();
-  console.log("router", router.address);
+  console.log("StrategyRouter", router.address);
   console.log("ReceiptNFT", await router.receiptContract());
   console.log("SharesToken", await router.sharesToken());
 
@@ -53,8 +55,11 @@ async function main() {
   await router.setMinDeposit(MIN_DEPOSIT);
   await router.setCycleDuration(CYCLE_DURATION);
   await router.setExchange(exchange.address);
+  await router.setFeePercent(FEE_PERCENT);
+  await router.setFeeAddress(FEE_ADDRESS);
 
   // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
+  console.log("Deploying strategies...");
   strategyAcryptos = await ethers.getContractFactory("acryptos_ust");
   strategyAcryptos = await strategyAcryptos.deploy(router.address);
   await strategyAcryptos.deployed();

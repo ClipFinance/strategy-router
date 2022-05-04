@@ -10,7 +10,7 @@ import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract StrategyRouter is Ownable {
     /* EVENTS */
@@ -151,32 +151,32 @@ contract StrategyRouter is Ownable {
             // deposit to strategy
             IERC20 strategyAssetAddress = IERC20(strategies[i].depositToken);
 
-            console.log(
-                "depositAmounts[i]",
-                depositAmounts[i],
-                strategyAssetAddress.balanceOf(address(this))
-            );
-            console.log(
-                IStrategy(strategies[i].strategyAddress).depositToken(),
-                address(strategyAssetAddress)
-            );
+            // console.log(
+            //     "depositAmounts[i]",
+            //     depositAmounts[i],
+            //     strategyAssetAddress.balanceOf(address(this))
+            // );
+            // console.log(
+            //     IStrategy(strategies[i].strategyAddress).depositToken(),
+            //     address(strategyAssetAddress)
+            // );
             if (depositAmounts[i] > 0) {
-                console.log(
-                    "dif",
-                    strategyAssetAddress.balanceOf(
-                        address(strategies[i].strategyAddress)
-                    )
-                );
+                // console.log(
+                //     "dif",
+                //     strategyAssetAddress.balanceOf(
+                //         address(strategies[i].strategyAddress)
+                //     )
+                // );
                 strategyAssetAddress.transfer(
                     strategies[i].strategyAddress,
                     depositAmounts[i]
                 );
-                console.log(
-                    "dif",
-                    strategyAssetAddress.balanceOf(
-                        address(strategies[i].strategyAddress)
-                    )
-                );
+                // console.log(
+                //     "dif",
+                //     strategyAssetAddress.balanceOf(
+                //         address(strategies[i].strategyAddress)
+                //     )
+                // );
                 IStrategy(strategies[i].strategyAddress).deposit(
                     depositAmounts[i]
                 );
@@ -190,12 +190,12 @@ contract StrategyRouter is Ownable {
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
         uint256 totalWithdrawnUniform = cycles[currentCycleId]
             .totalWithdrawnUniform;
-        console.log(
-            "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
-            receivedByStrats,
-            totalWithdrawnUniform,
-            receivedByStrats + totalWithdrawnUniform
-        );
+        // console.log(
+        //     "receivedByStrats (raw) %s, withdrawFromBatch %s, receivedByStrats (+withdrawn) %s",
+        //     receivedByStrats,
+        //     totalWithdrawnUniform,
+        //     receivedByStrats + totalWithdrawnUniform
+        // );
         receivedByStrats += totalWithdrawnUniform;
         balanceAfterCompound -= totalWithdrawnUniform;
 
@@ -236,7 +236,7 @@ contract StrategyRouter is Ownable {
             // );
             uint256 newShares = receivedByStrats /
                 cycles[currentCycleId].pricePerShare;
-            console.log("newShares", newShares);
+            // console.log("newShares", newShares);
             sharesToken.mint(address(this), newShares);
         }
 
@@ -245,12 +245,12 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].totalDepositUniform =
             totalDepositUniform +
             totalWithdrawnUniform;
-        console.log(
-            "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
-            totalWithdrawnUniform,
-            totalDepositUniform,
-            receivedByStrats
-        );
+        // console.log(
+        //     "totalWithdrawnUniform %s, totalDepositUniform %s, receivedByStrats %s",
+        //     totalWithdrawnUniform,
+        //     totalDepositUniform,
+        //     receivedByStrats
+        // );
         // cycles[currentCycleId].totalWithdrawnUniform = 0;
         emit DepositToStrategies(currentCycleId, receivedByStrats);
         currentCycleId++;
@@ -356,13 +356,13 @@ contract StrategyRouter is Ownable {
         );
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
 
-        console.log(
-            "rts",
-            receipt.amount,
-            shares,
-            (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
-                cycles[receipt.cycleId].totalInBatch
-        );
+        // console.log(
+        //     "rts",
+        //     receipt.amount,
+        //     shares,
+        //     (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
+        //         cycles[receipt.cycleId].totalInBatch
+        // );
         receipt.amount =
             (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
             cycles[receipt.cycleId].totalInBatch;
@@ -391,12 +391,12 @@ contract StrategyRouter is Ownable {
         uint256 currentPricePerShare = (strategiesBalance -
             cycles[currentCycleId].totalWithdrawnUniform) /
             sharesToken.totalSupply();
-        console.log(
-            "currentPricePerShare %s, totalShares %s, strategiesBalance-w %s",
-            currentPricePerShare,
-            sharesToken.totalSupply(),
-            (strategiesBalance - cycles[currentCycleId].totalWithdrawnUniform)
-        );
+        // console.log(
+        //     "currentPricePerShare %s, totalShares %s, strategiesBalance-w %s",
+        //     currentPricePerShare,
+        //     sharesToken.totalSupply(),
+        //     (strategiesBalance - cycles[currentCycleId].totalWithdrawnUniform)
+        // );
         amount = shares * currentPricePerShare;
     }
 
@@ -440,7 +440,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 shares
     ) external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ withdrawFromStrategies ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ withdrawFromStrategies ~~~~~~~~~~~~~");
 
         if (shares == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
@@ -475,7 +475,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 amount
     ) external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ crossWithdrawFromStrategies ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ crossWithdrawFromStrategies ~~~~~~~~~~~~~");
         // if (receiptId == 0) revert InitialSharesAreUnwithdrawable();
         if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
@@ -505,7 +505,7 @@ contract StrategyRouter is Ownable {
             if (amount == 0) break;
         }
 
-        console.log(cycles[currentCycleId].totalWithdrawnUniform, toWithdraw);
+        // console.log(cycles[currentCycleId].totalWithdrawnUniform, toWithdraw);
         if (cycles[currentCycleId].totalWithdrawnUniform < toWithdraw)
             revert PleaseWithdrawFromBatching();
         _withdrawFromStrategies(toWithdraw, withdrawToken);
@@ -593,7 +593,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 amount
     ) external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
 
         if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
@@ -621,7 +621,7 @@ contract StrategyRouter is Ownable {
             }
             if (amount == 0) break;
         }
-        console.log("toWithdraw", toWithdraw);
+        // console.log("toWithdraw", toWithdraw);
         _withdrawFromBatching(toWithdraw, withdrawToken);
     }
 
@@ -638,7 +638,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 shares
     ) external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
         if (shares == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
@@ -698,11 +698,11 @@ contract StrategyRouter is Ownable {
                 amountToTransfer += amountWithdraw;
             }
 
-            console.log(
-                "withdraw token balance %s, total withdraw %s",
-                IERC20(withdrawToken).balanceOf(address(this)),
-                amountToTransfer
-            );
+            // console.log(
+            //     "withdraw token balance %s, total withdraw %s",
+            //     IERC20(withdrawToken).balanceOf(address(this)),
+            //     amountToTransfer
+            // );
         }
         cycles[currentCycleId].totalInBatch -= amount;
         IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
@@ -723,7 +723,7 @@ contract StrategyRouter is Ownable {
         if (fromUniform(minDeposit, depositToken) > _amount)
             revert DepositUnderMinimum();
 
-        console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
         IERC20(depositToken).transferFrom(msg.sender, address(this), _amount);
 
         uint256 amountUniform = toUniform(_amount, depositToken);
@@ -869,7 +869,7 @@ contract StrategyRouter is Ownable {
         onlyOwner
         returns (uint256 totalInStrategies, uint256[] memory balances)
     {
-        console.log("~~~~~~~~~~~~~ rebalance strategies ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ rebalance strategies ~~~~~~~~~~~~~");
 
         uint256 totalBalance;
 
@@ -971,7 +971,7 @@ contract StrategyRouter is Ownable {
         private
         returns (uint256 totalDeposit, uint256[] memory balances)
     {
-        console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
 
         uint256 totalInBatch;
 
@@ -1063,11 +1063,11 @@ contract StrategyRouter is Ownable {
                     if (
                         toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
                     ) {
-                        console.log(
-                            "aaa",
-                            toUniform(curSell, sellToken),
-                            REBALANCE_SWAP_THRESHOLD
-                        );
+                        // console.log(
+                        //     "aaa",
+                        //     toUniform(curSell, sellToken),
+                        //     REBALANCE_SWAP_THRESHOLD
+                        // );
                         unchecked {
                             toSell[i] = 0;
                             toAdd[j] -= curSell;
@@ -1162,7 +1162,7 @@ contract StrategyRouter is Ownable {
                 IERC20(to),
                 address(this)
             );
-            console.log("swapped amount %s, got %s", amount, result);
+            // console.log("swapped amount %s, got %s", amount, result);
             return result;
         }
         return amount;

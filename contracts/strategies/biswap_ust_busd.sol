@@ -8,10 +8,9 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IZapDepositer.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
-// import "./interfaces/IExchangeRegistry.sol";
 import "../StrategyRouter.sol";
-
 // import "hardhat/console.sol";
+
 
 // TODO: do something with leftover amounts
 contract biswap_ust_busd is Ownable, IStrategy {
@@ -42,7 +41,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-        // console.log("block.number", block.number);
 
         // TODO: Is there a way to swap ust to busd so that we'll get perfect ratio to addLiquidity?
         //       If so, we could get rid of that helper function.
@@ -271,7 +269,6 @@ contract biswap_ust_busd is Ownable, IStrategy {
         uint256 fee = (amount * feePercent) / 1e4;
         if (fee > 0 && feeAddress != address(0)) {
             bsw.transfer(address(exchange), fee);
-            // console.log(fee, amount-fee);
             exchange.swapRouted(fee, bsw, ust, feeAddress);
         }
         return amount - fee;
