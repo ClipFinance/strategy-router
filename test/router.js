@@ -146,12 +146,23 @@ describe("Test StrategyRouter with fake strategies", function () {
 
   it("withdrawFromBatching with swaps", async function () {
     await router.depositToBatch(ust.address, parseUst("100"))
+    await router.depositToBatch(ust.address, parseUst("100"))
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching([1], usdc.address, MaxUint256);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+
+    // WITHDRAW PART
+    oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromBatching([2], usdc.address, parseUst("50"));
+    newBalance = await usdc.balanceOf(owner.address);
+
+    let receipt = await receiptContract.viewReceipt(2);
+
+    expect(receipt.amount).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
   });
 
   it("depositToStrategies", async function () {
@@ -270,6 +281,60 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.crossWithdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
+
+  it("withdrawUniversal - withdraw from batching", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawUniversal([2], [], usdc.address, parseUst("100000"));
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("200"));
+  });
+
+  it("withdrawUniversal - withdraw shares (by receipt)", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
+
+    let receiptsShares = await router.receiptsToShares([1]);
+    let amountFromShares = await router.sharesToAmount(receiptsShares);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawUniversal([], [1], usdc.address, parseUst("100000"));
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
+
+  it("withdrawUniversal - withdraw shares (no receipt)", async function () {
+    await router.depositToBatch(ust.address, parseUst("10000"));
+    await router.depositToStrategies();
+    await router.depositToBatch(ust.address, parseUst("100000"));
+
+    let receiptsShares = await router.receiptsToShares([1]);
+    await router.unlockShares([1]);
+    let amountFromShares = await router.sharesToAmount(receiptsShares);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawUniversal([], [], usdc.address, amountFromShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+  });
+
+  it("withdrawUniversal - withdraw batch, shares and shares by receipt", async function () {
+    // await router.depositToBatch(ust.address, parseUst("10000"));
+    // await router.depositToStrategies();
+    // await router.depositToBatch(ust.address, parseUst("100000"));
+
+    // let receiptsShares = await router.receiptsToShares([1]);
+    // let amountFromShares = await router.sharesToAmount(receiptsShares);
+
+    // let oldBalance = await usdc.balanceOf(owner.address);
+    // await router.withdrawUniversal([], [1], usdc.address, parseUst("100000"));
+    // let newBalance = await usdc.balanceOf(owner.address);
+    // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("200"));
   });
 
   // it("Farms should be empty on withdraw all multiple times", async function () {

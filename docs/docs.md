@@ -39,7 +39,7 @@ User can withdraw part or whole amount noted in his Receipt NFT directly from th
 There is also function to compound all the strategies which can be called anytime by anyone, and it is also called when depositing batch into strategies.
 
 ### Platform fee collection
-**TODO** Platform fee is collected inside each strategy as strategies are unique. I.e biswap gives token in reward and when platform sells token for stablecoin to auto-compound, 20% from the amount is moved to platform's treasury.  
+Platform fee is collected inside each strategy as strategies are unique. I.e biswap gives token in reward and when platform sells token for stablecoin to auto-compound, 20% from the amount is moved to platform's treasury.  
 Acryptos on BSC and Curve give rewards in their token and also in the interest bearing token.  
 
 ### Adjust to most profitable strategies
