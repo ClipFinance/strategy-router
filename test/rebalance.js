@@ -71,6 +71,10 @@ describe("Test rebalance functions", function () {
     await router.setExchange(exchange.address);
 
     // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
+    batching = await ethers.getContractAt(
+      "Batching",
+      await router.batching()
+    );
     receiptContract = await ethers.getContractAt(
       "ReceiptNFT",
       await router.receiptContract()
@@ -472,7 +476,7 @@ async function getTokenBalances() {
   for (let i = 0; i < stables.length; i++) {
     const tokenAddr = stables[i];
     let token = await ethers.getContractAt("ERC20", tokenAddr);
-    let balance = await token.balanceOf(router.address);
+    let balance = await token.balanceOf(batching.address);
     total = total.add(BigNumber.from(balance));
     balances.push(balance)
   }

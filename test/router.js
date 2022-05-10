@@ -67,6 +67,10 @@ describe("Test StrategyRouter with fake strategies", function () {
       "ReceiptNFT",
       await router.receiptContract()
     );
+    batching = await ethers.getContractAt(
+      "Batching",
+      await router.batching()
+    );
     sharesToken = await ethers.getContractAt(
       "SharesToken",
       await router.sharesToken()
@@ -111,7 +115,7 @@ describe("Test StrategyRouter with fake strategies", function () {
 
   it("depositToBatch", async function () {
     await router.depositToBatch(ust.address, parseUst("100"))
-    expect(await ust.balanceOf(router.address)).to.be.equal(parseUst("100"));
+    expect(await ust.balanceOf(batching.address)).to.be.equal(parseUst("100"));
   });
 
   it("withdrawFromBatching withdout swaps", async function () {

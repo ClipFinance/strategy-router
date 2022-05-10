@@ -67,6 +67,10 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.setExchange(exchange.address);
 
     // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
+    batching = await ethers.getContractAt(
+      "Batching",
+      await router.batching()
+    );
     receiptContract = await ethers.getContractAt(
       "ReceiptNFT",
       await router.receiptContract()
@@ -151,7 +155,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     await router.depositToBatch(ust.address, parseUst("100"))
 
-    expect(await ust.balanceOf(router.address)).to.be.closeTo(
+    expect(await ust.balanceOf(batching.address)).to.be.closeTo(
       parseUst("100"),
       parseUst("0.1")
     );
@@ -213,7 +217,8 @@ describe("Test StrategyRouter with two real strategies", function () {
 
   it("Withdraw half from strategies", async function () {
     let oldBalance = await ust.balanceOf(owner.address);
-    let shares = await router.receiptToShares(2);
+    let shares = await router.receiptsToShares([2]);
+    console.log(shares);
     await router.withdrawFromStrategies([2], ust.address, shares.div(2));
     let newBalance = await ust.balanceOf(owner.address);
 
@@ -238,7 +243,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Withdraw from strategies", async function () {
     await printStruct(await receiptContract.viewReceipt(3));
     let oldBalance = await ust.balanceOf(owner.address);
-    let shares = await router.receiptToShares(3);
+    let shares = await router.receiptsToShares([3]);
     await router.withdrawFromStrategies([3], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
 
@@ -271,7 +276,7 @@ describe("Test StrategyRouter with two real strategies", function () {
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       // console.log(receipts);
-      let shares = await router.receiptToShares(receipts[0]);
+      let shares = await router.receiptsToShares([receipts[0]]);
       await router.withdrawFromStrategies([receipts[0]], ust.address, shares);
 
       console.log("strategies balance");
@@ -321,7 +326,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log(receipts);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await ust.balanceOf(owner.address);
-    let shares = await router.receiptToShares(receipts[0]);
+    let shares = await router.receiptsToShares([receipts[0]]);
     await router.withdrawFromStrategies([receipts[0]], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -383,13 +388,13 @@ describe("Test StrategyRouter with two real strategies", function () {
     console.log("owner receipts", receipts);
     // withdraw by receipt
     let oldBalance = await ust.balanceOf(owner.address);
-    let shares = await router.receiptToShares(10);
+    let shares = await router.receiptsToShares([10]);
     await router.withdrawFromStrategies([10], ust.address, shares);
     let newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));
 
     oldBalance = await ust.balanceOf(owner.address);
-    shares = await router.receiptToShares(11);
+    shares = await router.receiptsToShares([11]);
     await router.withdrawFromStrategies([11], ust.address, shares);
     newBalance = await ust.balanceOf(owner.address);
     console.log("withdrawFromStrategies %s", newBalance.sub(oldBalance));

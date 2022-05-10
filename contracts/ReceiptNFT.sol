@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
 
     error NonexistenToken();
+    error NotManager();
     
     struct ReceiptData {
         uint256 cycleId;
@@ -18,6 +19,12 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     uint256 private _tokenIdCounter;
 
     mapping(uint256 => ReceiptData) public receipts;
+    mapping(address => bool) public managers;
+
+    modifier onlyManager {
+        if(managers[msg.sender] == false) revert NotManager();
+        _;
+    }
 
     constructor () { }
 
@@ -49,16 +56,20 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         }
     }
 
-    function setAmount(uint256 tokenId, uint256 amount) external onlyOwner {
+    function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
         if (_exists(tokenId) == false) revert NonexistenToken();
         receipts[tokenId].amount = amount;
+    }     
+    
+    function setManager(address _manager) external onlyOwner {
+        managers[_manager] = true;
     } 
 
     function mint(
         uint256 cycleId, 
         uint256 amount, 
         address wallet
-    ) external onlyOwner {
+    ) external onlyManager {
         uint256 _tokenId = _tokenIdCounter;
         receipts[_tokenId] = ReceiptData({
             cycleId: cycleId,
@@ -68,7 +79,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
         _tokenIdCounter++;
     }
 
-    function burn(uint256 tokenId) external onlyOwner {
+    function burn(uint256 tokenId) external onlyManager {
         _burn(tokenId);
         delete receipts[tokenId];
     } 

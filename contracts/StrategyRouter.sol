@@ -9,6 +9,7 @@ import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
+import "./Batching.sol";
 
 import "hardhat/console.sol";
 
@@ -80,9 +81,9 @@ contract StrategyRouter is Ownable {
     struct Cycle {
         uint256 startAt;
         uint256 pricePerShare;
+        // diff between deposited and received by strategies
         uint256 totalInBatch;
         uint256 receivedByStrats;
-        uint256 totalDepositUniform;
         // cross withdrawn amount from batching by strategy receipt
         uint256 totalWithdrawnUniform;
     }
@@ -103,16 +104,19 @@ contract StrategyRouter is Ownable {
     ReceiptNFT public receiptContract;
     Exchange public exchange;
     SharesToken public sharesToken;
+    Batching public batching;
     address public feeAddress;
 
     StrategyInfo[] public strategies;
-    address[] private stablecoins;
-    mapping(address => bool) public stablecoinsMap;
     mapping(uint256 => Cycle) public cycles;
 
     constructor() {
         receiptContract = new ReceiptNFT();
         sharesToken = new SharesToken();
+        batching = new Batching();
+        batching.init(StrategyRouter(address(this)), exchange, sharesToken, receiptContract);
+        receiptContract.setManager(address(this));
+        receiptContract.setManager(address(batching));
         cycles[0].startAt = block.timestamp;
     }
 
@@ -142,15 +146,15 @@ contract StrategyRouter is Ownable {
         (
             uint256 totalDepositUniform,
             uint256[] memory depositAmounts
-        ) = _rebalanceBatching();
+        ) = batching.rebalanceBatching();
 
         for (uint256 i; i < len; i++) {
             // deposit to strategy
-            IERC20 strategyAssetAddress = IERC20(strategies[i].depositToken);
+            address strategyAssetAddress = strategies[i].depositToken;
 
             if (depositAmounts[i] > 0) {
-
-                strategyAssetAddress.transfer(
+                batching.transfer(
+                    strategyAssetAddress,
                     strategies[i].strategyAddress,
                     depositAmounts[i]
                 );
@@ -183,16 +187,15 @@ contract StrategyRouter is Ownable {
 
             uint256 newShares = receivedByStrats /
                 cycles[_currentCycleId].pricePerShare;
+            console.log("newShares, receivedByStrats", newShares, receivedByStrats);
             sharesToken.mint(address(this), newShares);
         }
 
-        // start new cycle
+        // console.log("receivedByStrats, totalDep", (receivedByStrats), cycles[_currentCycleId].totalInBatch , cycles[_currentCycleId].pricePerShare);
         cycles[_currentCycleId].receivedByStrats = receivedByStrats;
-        cycles[_currentCycleId].totalDepositUniform =
-            totalDepositUniform +
-            totalWithdrawnUniform;
 
         emit DepositToStrategies(_currentCycleId, receivedByStrats);
+        // start new cycle
         currentCycleId++;
         cycles[_currentCycleId + 1].startAt = block.timestamp;
     }
@@ -210,13 +213,8 @@ contract StrategyRouter is Ownable {
 
     /// @dev Returns list of supported stablecoins.
     function viewStablecoins() public view returns (address[] memory) {
-        return stablecoins;
+        return batching.viewStablecoins();
     }
-
-    /// @dev Returns list of supported stablecoins.
-    // function viewStablecoinsCount() public view returns (uint256 count) {
-    //     return stablecoins.length;
-    // }
 
     /// @dev Returns strategy weight as percent of total weight.
     function viewStrategyPercentWeight(uint256 _strategyId)
@@ -244,6 +242,10 @@ contract StrategyRouter is Ownable {
     /// @notice Returns array of strategies.
     function viewStrategies() public view returns (StrategyInfo[] memory) {
         return strategies;
+    }
+
+    function viewStrategyDepositToken(uint256 i) public view returns (address) {
+        return strategies[i].depositToken;
     }
 
     /// @notice Returns amount of tokens in strategies.
@@ -277,14 +279,7 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        balances = new uint256[](stablecoins.length);
-        for (uint256 i; i < balances.length; i++) {
-            address token = stablecoins[i];
-            uint256 balance = ERC20(token).balanceOf(address(this));
-            balance = toUniform(balance, token);
-            balances[i] = balance;
-            totalBalance += balance;
-        }
+        return batching.viewBatchingBalance();
     }
 
     /// @notice Returns amount of shares retrievable by receipt.
@@ -294,7 +289,6 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 shares)
     {
-
         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
             receiptId
         );
@@ -303,6 +297,9 @@ contract StrategyRouter is Ownable {
         receipt.amount =
             (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
             cycles[receipt.cycleId].totalInBatch;
+        
+        console.log("diff, rec amt", cycles[receipt.cycleId].totalInBatch, receipt.amount);
+        
         shares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
     }
 
@@ -348,11 +345,11 @@ contract StrategyRouter is Ownable {
     /// @notice Returns whether provided stablecoin is supported.
     /// @param stablecoinAddress Address to lookup.
     function supportsCoin(address stablecoinAddress)
-        public 
+        public
         view
         returns (bool isSupported)
     {
-        return stablecoinsMap[stablecoinAddress];
+        return batching.supportsCoin(stablecoinAddress);
     }
 
     // User Functions
@@ -416,6 +413,7 @@ contract StrategyRouter is Ownable {
         }
 
         uint256 amountWithdraw = sharesToAmount(shares);
+        console.log(shares, sharesToken.balanceOf(address(this)), unlockedShares);
         sharesToken.burn(address(this), shares);
         _withdrawFromStrategies(amountWithdraw, withdrawToken);
     }
@@ -551,37 +549,8 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 amount
     ) public OnlyEOW {
-        // console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
-
-        if (amount == 0) revert AmountNotSpecified();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
-
-        uint256 _currentCycleId = currentCycleId;
-        uint256 toWithdraw;
-        for (uint256 i = 0; i < receiptIds.length; i++) {
-            uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != msg.sender)
-                revert NotReceiptOwner();
-
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
-                receiptId
-            );
-            // only for receipts in batching
-            if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-            if (amount >= receipt.amount) {
-                toWithdraw += receipt.amount;
-                amount -= receipt.amount;
-                receiptContract.burn(receiptId);
-            } else {
-                toWithdraw += amount;
-                receiptContract.setAmount(receiptId, receipt.amount - amount);
-                amount = 0;
-            }
-            if (amount == 0) break;
-        }
-        // console.log("toWithdraw", toWithdraw);
-        _withdrawFromBatching(toWithdraw, withdrawToken);
+        cycles[currentCycleId].totalInBatch -= 
+            batching.withdrawFromBatching(msg.sender, receiptIds, withdrawToken, amount);
     }
 
     /// @notice Withdraw from batching while receipts are in strategies.
@@ -625,43 +594,9 @@ contract StrategyRouter is Ownable {
     function _withdrawFromBatching(uint256 amount, address withdrawToken)
         private
     {
-        (
-            uint256 totalBalance,
-            uint256[] memory balances
-        ) = viewBatchingBalance();
-        // console.log("total %s, amount %s", totalBalance, amount);
-        if (totalBalance < amount) revert NotEnoughInBatching();
-
-        uint256 amountToTransfer;
-        uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
-            address(this)
-        );
-        if (withdrawTokenBalance >= amount) {
-            amountToTransfer = amount;
-        } else {
-            // uint256 len = strategies.length;
-            for (uint256 i; i < balances.length; i++) {
-                address token = stablecoins[i];
-                // split withdraw amount proportionally between strategies
-                uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-                if (amountWithdraw < 10**ERC20(token).decimals()) continue;
-
-                amountWithdraw = fromUniform(amountWithdraw, token);
-
-                // swap strategies tokens to withdraw token
-                amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
-                amountToTransfer += amountWithdraw;
-            }
-
-            // console.log(
-            //     "withdraw token balance %s, total withdraw %s",
-            //     IERC20(withdrawToken).balanceOf(address(this)),
-            //     amountToTransfer
-            // );
-        }
-        cycles[currentCycleId].totalInBatch -= amount;
-        IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
-        emit WithdrawFromBatching(msg.sender, withdrawToken, amountToTransfer);
+        
+        cycles[currentCycleId].totalInBatch -= 
+            batching._withdrawFromBatching(msg.sender, amount, withdrawToken);
     }
 
     // @notice
@@ -683,7 +618,6 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-
         uint256 fromBatchAmount;
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
@@ -701,7 +635,7 @@ contract StrategyRouter is Ownable {
             (uint256 totalBalance, ) = viewBatchingBalance();
 
             if (fromBatchAmount <= totalBalance) {
-            // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
+                // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
                 withdrawFromBatching(
                     receiptIdsBatch,
                     withdrawToken,
@@ -775,27 +709,27 @@ contract StrategyRouter is Ownable {
         external
         OnlyEOW
     {
-        if (!supportsCoin(depositToken)) revert UnsupportedStablecoin();
-        if (fromUniform(minDeposit, depositToken) > _amount)
-            revert DepositUnderMinimum();
-
-        // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
-        IERC20(depositToken).transferFrom(msg.sender, address(this), _amount);
-
-        uint256 amountUniform = toUniform(_amount, depositToken);
-        uint256 _currentCycleId = currentCycleId;
-        cycles[_currentCycleId].totalInBatch += amountUniform;
-
-        emit Deposit(msg.sender, depositToken, _amount);
-        receiptContract.mint(_currentCycleId, amountUniform, msg.sender);
+        IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
+        cycles[currentCycleId].totalInBatch += toUniform(_amount, depositToken);
+        batching.depositToBatch(msg.sender, depositToken, _amount);
     }
 
     // Admin functions
+
+    /// @notice Set token as supported for user deposit and withdraw.
+    /// @dev Admin function.
+    function setSupportedStablecoin(address tokenAddress, bool supported)
+        external
+        onlyOwner
+    {
+        batching.setSupportedStablecoin(tokenAddress, supported);
+    }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
+        batching.setExchange(newExchange);
     }
 
     /// @notice Set address for collecting fees from rewards.
@@ -822,7 +756,7 @@ contract StrategyRouter is Ownable {
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
     function setMinDeposit(uint256 amount) external onlyOwner {
-        minDeposit = amount;
+        batching.setMinDeposit(amount);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
@@ -917,6 +851,17 @@ contract StrategyRouter is Ownable {
         Ownable(address(removedStrategy)).transferOwnership(msg.sender);
     }
 
+    /// @notice Rebalance batching, so that token balances will match strategies weight.
+    /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
+    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
+    function rebalanceBatching()
+        external
+        onlyOwner
+        returns (uint256 totalDeposit, uint256[] memory balances)
+    {
+        return batching.rebalanceBatching();
+    }
+
     /// @notice Rebalance strategies, so that their balances will match their weights.
     /// @return totalInStrategies Total balance of the strategies with uniform decimals.
     /// @return balances Balances of the strategies after rebalancing.
@@ -1004,162 +949,6 @@ contract StrategyRouter is Ownable {
         }
 
         return (totalBalance, _strategiesBalances);
-    }
-
-    /// @notice Rebalance batching, so that token balances will match strategies weight.
-    /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
-    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalanceBatching()
-        external
-        onlyOwner
-        returns (uint256 totalDeposit, uint256[] memory balances)
-    {
-        return _rebalanceBatching();
-    }
-
-    function _rebalanceBatching()
-        private
-        returns (uint256 totalDeposit, uint256[] memory balances)
-    {
-        // console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
-
-        uint256 totalInBatch;
-
-        uint256 lenStables = stablecoins.length;
-        address[] memory _tokens = new address[](lenStables);
-        uint256[] memory _balances = new uint256[](lenStables);
-
-        for (uint256 i; i < lenStables; i++) {
-            _tokens[i] = stablecoins[i];
-            _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
-
-            totalInBatch += toUniform(_balances[i], _tokens[i]);
-        }
-
-        uint256 lenStrats = strategies.length;
-
-        uint256[] memory _strategiesBalances = new uint256[](
-            lenStrats + lenStables
-        );
-        for (uint256 i; i < lenStrats; i++) {
-            for (uint256 j; j < lenStables; j++) {
-                address depositToken = strategies[i].depositToken;
-                if (depositToken == _tokens[j] && _balances[j] > 0) {
-                    _strategiesBalances[i] = _balances[j];
-                    _balances[j] = 0;
-                    break;
-                } else if (
-                    depositToken == _tokens[j] /* && _balances[j] == 0 */
-                ) {
-                    break;
-                }
-            }
-        }
-
-        for (uint256 i = lenStrats; i < _strategiesBalances.length; i++) {
-            _strategiesBalances[i] = _balances[i - lenStrats];
-        }
-
-        uint256[] memory toAdd = new uint256[](lenStrats);
-        uint256[] memory toSell = new uint256[](_strategiesBalances.length);
-        for (uint256 i; i < lenStrats; ) {
-            uint256 desiredBalance = (totalInBatch *
-                viewStrategyPercentWeight(i)) / 1e18;
-            desiredBalance = fromUniform(
-                desiredBalance,
-                strategies[i].depositToken
-            );
-            unchecked {
-                if (desiredBalance > _strategiesBalances[i]) {
-                    toAdd[i] = desiredBalance - _strategiesBalances[i];
-                } else if (desiredBalance < _strategiesBalances[i]) {
-                    toSell[i] = _strategiesBalances[i] - desiredBalance;
-                }
-                i++;
-            }
-        }
-
-        for (uint256 i = lenStrats; i < _strategiesBalances.length; i++) {
-            toSell[i] = _strategiesBalances[i];
-        }
-
-        for (uint256 i; i < _strategiesBalances.length; i++) {
-            for (uint256 j; j < lenStrats; j++) {
-                if (toSell[i] == 0) break;
-                if (toAdd[j] > 0) {
-                    uint256 curSell = toSell[i] > toAdd[j]
-                        ? toAdd[j]
-                        : toSell[i];
-
-                    address sellToken = i > lenStrats - 1
-                        ? _tokens[i - lenStrats]
-                        : strategies[i].depositToken;
-
-                    // its not worth to swap too small amounts
-                    if (
-                        toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
-                    ) {
-                        unchecked {
-                            toSell[i] = 0;
-                            toAdd[j] -= curSell;
-                        }
-                        break;
-                    }
-                    address buyToken = strategies[j].depositToken;
-                    uint256 received = _trySwap(curSell, sellToken, buyToken);
-
-                    _strategiesBalances[i] -= curSell;
-                    _strategiesBalances[j] += received;
-                    unchecked {
-                        toSell[i] -= curSell;
-                        toAdd[j] -= curSell;
-                    }
-                }
-            }
-        }
-
-        _balances = new uint256[](lenStrats);
-        for (uint256 i; i < lenStrats; i++) {
-            _balances[i] = _strategiesBalances[i];
-            totalDeposit += toUniform(_balances[i], strategies[i].depositToken);
-        }
-
-        return (totalDeposit, _balances);
-    }
-
-    // function withdrawFromStrategy(uint256 _strategyId) external onlyOwner {}
-
-    /// @notice Set token as supported for user deposit and withdraw.
-    /// @dev Admin function.
-    function setSupportedStablecoin(address tokenAddress, bool supported)
-        external
-        onlyOwner
-    {
-        if (supported && supportsCoin(tokenAddress))
-            revert AlreadyAddedStablecoin();
-
-        stablecoinsMap[tokenAddress] = supported;
-        if (supported) {
-            stablecoins.push(tokenAddress);
-        } else {
-            uint8 len = uint8(strategies.length);
-            // shouldn't disallow tokens that are in use by active strategies
-            for (uint256 i = 0; i < len; i++) {
-                if (strategies[i].depositToken == tokenAddress) {
-                    revert CantRemoveTokenOfActiveStrategy();
-                }
-            }
-
-            len = uint8(stablecoins.length);
-            // disallow token
-            for (uint256 i = 0; i < len; i++) {
-                if (stablecoins[i] == tokenAddress) {
-                    stablecoins[i] = stablecoins[len - 1];
-                    stablecoins.pop();
-                    break;
-                }
-            }
-        }
     }
 
     // Internals
