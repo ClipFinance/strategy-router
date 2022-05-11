@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
@@ -13,6 +14,7 @@ import "./SharesToken.sol";
 import "hardhat/console.sol";
 
 contract Batching is Ownable {
+    using EnumerableSet for EnumerableSet.AddressSet;
     /// @notice Fires when user deposits in batching.
     /// @param token Supported token that user want to deposit.
     /// @param amount Amount of `token` transferred from user.
@@ -58,8 +60,7 @@ contract Batching is Ownable {
     SharesToken public sharesToken;
     StrategyRouter public router;
 
-    address[] private stablecoins;
-    mapping(address => bool) public stablecoinsMap;
+    EnumerableSet.AddressSet private stablecoins;
 
     constructor() { }
 
@@ -74,12 +75,12 @@ contract Batching is Ownable {
     // Universal Functions
 
     function supportsCoin(address stablecoinAddress) public view returns (bool) {
-        return stablecoinsMap[stablecoinAddress];
+        return stablecoins.contains(stablecoinAddress);
     }
 
     /// @dev Returns list of supported stablecoins.
     function viewStablecoins() public view returns (address[] memory) {
-        return stablecoins;
+        return stablecoins.values();
     }
 
 
@@ -94,9 +95,9 @@ contract Batching is Ownable {
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        balances = new uint256[](stablecoins.length);
+        balances = new uint256[](stablecoins.length());
         for (uint256 i; i < balances.length; i++) {
-            address token = stablecoins[i];
+            address token = stablecoins.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
             balance = toUniform(balance, token);
             balances[i] = balance;
@@ -176,7 +177,7 @@ contract Batching is Ownable {
         } else {
             // uint256 len = strategies.length;
             for (uint256 i; i < balances.length; i++) {
-                address token = stablecoins[i];
+                address token = stablecoins.at(i);
                 // split withdraw amount proportionally between strategies
                 uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
                 amountWithdraw = fromUniform(amountWithdraw, token);
@@ -255,12 +256,12 @@ contract Batching is Ownable {
 
         uint256 totalInBatch;
 
-        uint256 lenStables = stablecoins.length;
+        uint256 lenStables = stablecoins.length();
         address[] memory _tokens = new address[](lenStables);
         uint256[] memory _balances = new uint256[](lenStables);
 
         for (uint256 i; i < lenStables; i++) {
-            _tokens[i] = stablecoins[i];
+            _tokens[i] = stablecoins.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
             totalInBatch += toUniform(_balances[i], _tokens[i]);
@@ -272,8 +273,8 @@ contract Batching is Ownable {
             lenStrats + lenStables
         );
         for (uint256 i; i < lenStrats; i++) {
+            address depositToken = router.viewStrategyDepositToken(i);
             for (uint256 j; j < lenStables; j++) {
-                address depositToken = router.viewStrategyDepositToken(i);
                 if (depositToken == _tokens[j] && _balances[j] > 0) {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
@@ -367,9 +368,8 @@ contract Batching is Ownable {
         if (supported && supportsCoin(tokenAddress))
             revert AlreadyAddedStablecoin();
 
-        stablecoinsMap[tokenAddress] = supported;
         if (supported) {
-            stablecoins.push(tokenAddress);
+            stablecoins.add(tokenAddress);
         } else {
             uint8 len = uint8(router.viewStrategiesCount());
             // shouldn't disallow tokens that are in use by active strategies
@@ -378,16 +378,7 @@ contract Batching is Ownable {
                     revert CantRemoveTokenOfActiveStrategy();
                 }
             }
-
-            len = uint8(stablecoins.length);
-            // disallow token
-            for (uint256 i = 0; i < len; i++) {
-                if (stablecoins[i] == tokenAddress) {
-                    stablecoins[i] = stablecoins[len - 1];
-                    stablecoins.pop();
-                    break;
-                }
-            }
+            stablecoins.remove(tokenAddress);
         }
     }
 
