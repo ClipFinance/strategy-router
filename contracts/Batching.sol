@@ -10,6 +10,7 @@ import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
+import "./ChainlinkOracle.sol";
 
 import "hardhat/console.sol";
 
@@ -59,13 +60,19 @@ contract Batching is Ownable {
     Exchange public exchange;
     SharesToken public sharesToken;
     StrategyRouter public router;
+    ChainlinkOracle public oracle;
 
     EnumerableSet.AddressSet private stablecoins;
 
-    constructor() { }
+    constructor() {}
 
-    function init(StrategyRouter _router, Exchange _exchange, SharesToken _sharesToken, ReceiptNFT _receiptContract) public onlyOwner {
-        if(address(router) != address(0)) revert();
+    function init(
+        StrategyRouter _router,
+        Exchange _exchange,
+        SharesToken _sharesToken,
+        ReceiptNFT _receiptContract
+    ) public onlyOwner {
+        if (address(router) != address(0)) revert();
         router = _router;
         exchange = _exchange;
         sharesToken = _sharesToken;
@@ -74,7 +81,11 @@ contract Batching is Ownable {
 
     // Universal Functions
 
-    function supportsCoin(address stablecoinAddress) public view returns (bool) {
+    function supportsCoin(address stablecoinAddress)
+        public
+        view
+        returns (bool)
+    {
         return stablecoins.contains(stablecoinAddress);
     }
 
@@ -82,7 +93,6 @@ contract Batching is Ownable {
     function viewStablecoins() public view returns (address[] memory) {
         return stablecoins.values();
     }
-
 
     /// @notice Returns token balances and their sum in the batching.
     /// @notice Shows total batching balance, possibly not total to be deposited into strategies.
@@ -153,12 +163,11 @@ contract Batching is Ownable {
         return _withdrawFromBatching(msgSender, toWithdraw, withdrawToken);
     }
 
-
-    function _withdrawFromBatching(address msgSender, uint256 amount, address withdrawToken)
-        public
-        onlyOwner
-        returns (uint256 withdrawnUniform)
-    {
+    function _withdrawFromBatching(
+        address msgSender,
+        uint256 amount,
+        address withdrawToken
+    ) public onlyOwner returns (uint256 withdrawnUniform) {
         (
             uint256 totalBalance,
             uint256[] memory balances
@@ -197,10 +206,11 @@ contract Batching is Ownable {
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
-    function depositToBatch(address msgSender, address depositToken, uint256 _amount)
-        external
-        onlyOwner
-    {
+    function depositToBatch(
+        address msgSender,
+        address depositToken,
+        uint256 _amount
+    ) external onlyOwner {
         if (!supportsCoin(depositToken)) revert UnsupportedStablecoin();
         if (fromUniform(minDeposit, depositToken) > _amount)
             revert DepositUnderMinimum();
@@ -211,13 +221,14 @@ contract Batching is Ownable {
         // totalTokens += amountUniform;
 
         emit Deposit(msgSender, depositToken, _amount);
-        receiptContract.mint(router.currentCycleId(), amountUniform, msgSender);
+        receiptContract.mint(router.currentCycleId(), amountUniform, depositToken, msgSender);
     }
 
-    function transfer(address token, address to, uint256 amount)
-        external
-        onlyOwner
-    {
+    function transfer(
+        address token,
+        address to,
+        uint256 amount
+    ) external onlyOwner {
         ERC20(token).transfer(to, amount);
     }
 
@@ -239,14 +250,6 @@ contract Batching is Ownable {
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    // function rebalanceBatching()
-    //     external
-    //     onlyOwner
-    //     returns (uint256 totalDeposit, uint256[] memory balances)
-    // {
-    //     return _rebalanceBatching();
-    // }
-
     function rebalanceBatching()
         public
         onlyOwner
@@ -352,12 +355,14 @@ contract Batching is Ownable {
         _balances = new uint256[](lenStrats);
         for (uint256 i; i < lenStrats; i++) {
             _balances[i] = _strategiesBalances[i];
-            totalDeposit += toUniform(_balances[i], router.viewStrategyDepositToken(i));
+            totalDeposit += toUniform(
+                _balances[i],
+                router.viewStrategyDepositToken(i)
+            );
         }
 
         return (totalDeposit, _balances);
     }
-
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.

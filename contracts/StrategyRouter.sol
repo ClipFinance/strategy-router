@@ -594,19 +594,19 @@ contract StrategyRouter is Ownable {
     function _withdrawFromBatching(uint256 amount, address withdrawToken)
         private
     {
-        
         cycles[currentCycleId].totalInBatch -= 
             batching._withdrawFromBatching(msg.sender, amount, withdrawToken);
     }
 
-    // @notice
-    // / @notice On partial withdraw leftover shares transferred to user.
-    // / @notice When receipts don't have enough shares, user has to approve us missing amount of share tokens.
-    // / @notice Receipts are burned.
-    // / @param receiptIds Receipt NFTs ids.
-    // / @param withdrawToken Supported stablecoin that user wish to receive.
-    // / @param shares Amount of shares from receipts to withdraw.
-    // / @dev Only callable by user wallets.
+    /// @notice Allows to withdraw from batching and from strategies at the same time.
+    /// @notice When receipts don't have enough shares, user has to approve us missing amount of share tokens.
+    /// @notice It also can cross withdraw from batching if there is enough.
+    /// @notice This function internally rely on the other withdraw functions, thus inherit some bussines logic.
+    /// @param receiptIdsBatch Receipt NFTs ids from batching.
+    /// @param receiptIdsStrats Receipt NFTs ids from strategies.
+    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param amount Amount to withdraw from NFTs and share tokens holded by user.
+    /// @dev Only callable by user wallets.
     function withdrawUniversal(
         uint256[] calldata receiptIdsBatch,
         uint256[] calldata receiptIdsStrats,

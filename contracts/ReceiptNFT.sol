@@ -14,6 +14,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     struct ReceiptData {
         uint256 cycleId;
         uint256 amount;
+        address token;
     }
 
     uint256 private _tokenIdCounter;
@@ -68,11 +69,13 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     function mint(
         uint256 cycleId, 
         uint256 amount, 
+        address token, 
         address wallet
     ) external onlyManager {
         uint256 _tokenId = _tokenIdCounter;
         receipts[_tokenId] = ReceiptData({
             cycleId: cycleId,
+            token: token,
             amount: amount
         });
         _mint(wallet, _tokenId);
