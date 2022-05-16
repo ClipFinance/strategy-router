@@ -160,9 +160,45 @@ contract Batching is Ownable {
             if (amount == 0) break;
         }
         // console.log("toWithdraw", toWithdraw);
-        return _withdrawFromBatching(msgSender, toWithdraw, withdrawToken);
+        return _withdrawFromBatchingOracle(msgSender, toWithdraw, withdrawToken);
     }
 
+    function _withdrawFromBatchingOracle(
+        address msgSender,
+        uint256 amount,
+        address withdrawToken
+    ) public onlyOwner returns (uint256 withdrawnUniform) {
+        (
+            uint256 totalBalance,
+            uint256[] memory balances
+        ) = viewBatchingBalance();
+        // console.log("total %s, amount %s", totalBalance, amount);
+        if (totalBalance < amount) revert NotEnoughInBatching();
+        // totalTokens -= amount;
+        withdrawnUniform = amount;
+
+        uint256 amountToTransfer;
+        uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
+            address(this)
+        );
+        if (withdrawTokenBalance >= amount) {
+            amountToTransfer = fromUniform(amount, withdrawToken);
+        } else {
+            // uint256 len = strategies.length;
+            for (uint256 i; i < balances.length; i++) {
+                address token = stablecoins.at(i);
+                // split withdraw amount proportionally between strategies
+                uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
+                amountWithdraw = fromUniform(amountWithdraw, token);
+
+                // swap strategies tokens to withdraw token
+                amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
+                amountToTransfer += amountWithdraw;
+            }
+        }
+        // cycles[currentCycleId].totalInBatch -= amount;
+        IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
+    }
     function _withdrawFromBatching(
         address msgSender,
         uint256 amount,
@@ -233,6 +269,12 @@ contract Batching is Ownable {
     }
 
     // Admin functions
+
+    /// @notice Set address of exchange contract.
+    /// @dev Admin function.
+    function setOracle(ChainlinkOracle _oracle) external onlyOwner {
+        oracle = _oracle;
+    }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
