@@ -49,6 +49,10 @@ describe("Test StrategyRouter with fake strategies", function () {
   });
 
   async function setupCore() {
+    // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
+    oracle = await ethers.getContractFactory("FakeOracle");
+    oracle = await oracle.deploy();
+    await oracle.deployed();
 
     // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
     exchange = await ethers.getContractFactory("Exchange");
@@ -61,6 +65,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.deployed();
     await router.setMinUsdPerCycle(parseUniform("1.0"));
     await router.setExchange(exchange.address);
+    await router.setOracle(oracle.address);
 
     // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
     receiptContract = await ethers.getContractAt(

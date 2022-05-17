@@ -10,12 +10,15 @@ import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
-import "./ChainlinkOracle.sol";
+import "./EnumerableSetExtension.sol";
+import "./interfaces/IUsdOracle.sol";
 
 import "hardhat/console.sol";
 
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
+    using EnumerableSetExtension for EnumerableSet.AddressSet;
+
     /// @notice Fires when user deposits in batching.
     /// @param token Supported token that user want to deposit.
     /// @param amount Amount of `token` transferred from user.
@@ -60,7 +63,7 @@ contract Batching is Ownable {
     Exchange public exchange;
     SharesToken public sharesToken;
     StrategyRouter public router;
-    ChainlinkOracle public oracle;
+    IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private stablecoins;
 
@@ -92,6 +95,26 @@ contract Batching is Ownable {
     /// @dev Returns list of supported stablecoins.
     function viewStablecoins() public view returns (address[] memory) {
         return stablecoins.values();
+    }
+
+    function viewBatchingValue()
+        public
+        view
+        returns (uint256 totalBalance, uint256[] memory balances)
+    {
+        balances = new uint256[](stablecoins.length());
+        for (uint256 i; i < balances.length; i++) {
+            address token = stablecoins.at(i);
+            uint256 balance = ERC20(token).balanceOf(address(this));
+            balance = toUniform(balance, token);
+
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                token
+            );
+            balance = ((balance * price) / 10**priceDecimals);
+            balances[i] = balance;
+            totalBalance += balance;
+        }
     }
 
     /// @notice Returns token balances and their sum in the batching.
@@ -130,7 +153,7 @@ contract Batching is Ownable {
         address withdrawToken,
         uint256 amount
     ) public onlyOwner returns (uint256 withdrawnUniform) {
-        // console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
+        console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
 
         if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
@@ -148,19 +171,24 @@ contract Batching is Ownable {
             );
             // only for receipts in batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
+
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                receipt.token
+            );
             if (amount >= receipt.amount) {
-                toWithdraw += receipt.amount;
+                toWithdraw += ((receipt.amount * price) / 10**priceDecimals);
                 amount -= receipt.amount;
                 receiptContract.burn(receiptId);
             } else {
-                toWithdraw += amount;
+                toWithdraw += ((amount * price) / 10**priceDecimals);
                 receiptContract.setAmount(receiptId, receipt.amount - amount);
                 amount = 0;
             }
             if (amount == 0) break;
         }
-        // console.log("toWithdraw", toWithdraw);
-        return _withdrawFromBatchingOracle(msgSender, toWithdraw, withdrawToken);
+        console.log("toWithdraw", toWithdraw);
+        _withdrawFromBatchingOracle(msgSender, toWithdraw, withdrawToken);
+        return toWithdraw;
     }
 
     function _withdrawFromBatchingOracle(
@@ -168,37 +196,71 @@ contract Batching is Ownable {
         uint256 amount,
         address withdrawToken
     ) public onlyOwner returns (uint256 withdrawnUniform) {
-        (
-            uint256 totalBalance,
-            uint256[] memory balances
-        ) = viewBatchingBalance();
+        (uint256 totalBalance, uint256[] memory balances) = viewBatchingValue();
         // console.log("total %s, amount %s", totalBalance, amount);
         if (totalBalance < amount) revert NotEnoughInBatching();
         // totalTokens -= amount;
         withdrawnUniform = amount;
 
         uint256 amountToTransfer;
-        uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
-            address(this)
-        );
-        if (withdrawTokenBalance >= amount) {
-            amountToTransfer = fromUniform(amount, withdrawToken);
-        } else {
-            // uint256 len = strategies.length;
-            for (uint256 i; i < balances.length; i++) {
-                address token = stablecoins.at(i);
-                // split withdraw amount proportionally between strategies
-                uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-                amountWithdraw = fromUniform(amountWithdraw, token);
+        // try withdraw requested token directly
+        if (balances[stablecoins.indexOf(withdrawToken)] >= amount) {
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                withdrawToken
+            );
+            amountToTransfer = (amount * 10**priceDecimals) / price;
+            amount = 0;
+        }
 
-                // swap strategies tokens to withdraw token
-                amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
-                amountToTransfer += amountWithdraw;
+        // try withdraw token that which balance is enough to do only 1 swap
+        if(amount != 0) {
+
+            for (uint256 i; i < balances.length; i++) {
+                if(balances[i] >= amount) {
+                    address token = stablecoins.at(i);
+                    (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                        token
+                    );
+                    amountToTransfer = (amount * 10**priceDecimals) / price;
+                    amountToTransfer = fromUniform(amountToTransfer, token);
+                    amountToTransfer = _trySwap(amountToTransfer, token, withdrawToken);
+                    amount = 0;
+                }
             }
         }
-        // cycles[currentCycleId].totalInBatch -= amount;
+
+        if(amount != 0) {
+            for (uint256 i; i < balances.length; i++) {
+                address token = stablecoins.at(i);
+                if (balances[i] >= amount) {
+                    (uint256 price, uint8 priceDecimals) = oracle
+                        .getAssetUsdPrice(token);
+                    amountToTransfer = (amount * 10**priceDecimals) / price;
+                    amountToTransfer = fromUniform(amountToTransfer, token);
+                    amountToTransfer = _trySwap(
+                        amountToTransfer,
+                        token,
+                        withdrawToken
+                    );
+                    amount = 0;
+                } else {
+                    (uint256 price, uint8 priceDecimals) = oracle
+                        .getAssetUsdPrice(token);
+                    amountToTransfer = (balances[i] * 10**priceDecimals) / price;
+                    amountToTransfer = fromUniform(amountToTransfer, token);
+                    amountToTransfer = _trySwap(
+                        amountToTransfer,
+                        token,
+                        withdrawToken
+                    );
+                    amount -= balances[i];
+                    balances[i] = 0;
+                }
+            }
+        }
         IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
     }
+
     function _withdrawFromBatching(
         address msgSender,
         uint256 amount,
@@ -257,7 +319,12 @@ contract Batching is Ownable {
         // totalTokens += amountUniform;
 
         emit Deposit(msgSender, depositToken, _amount);
-        receiptContract.mint(router.currentCycleId(), amountUniform, depositToken, msgSender);
+        receiptContract.mint(
+            router.currentCycleId(),
+            amountUniform,
+            depositToken,
+            msgSender
+        );
     }
 
     function transfer(
@@ -270,9 +337,9 @@ contract Batching is Ownable {
 
     // Admin functions
 
-    /// @notice Set address of exchange contract.
+    /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(ChainlinkOracle _oracle) external onlyOwner {
+    function setOracle(IUsdOracle _oracle) external onlyOwner {
         oracle = _oracle;
     }
 

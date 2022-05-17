@@ -54,6 +54,11 @@ describe("Test StrategyRouter with two real strategies", function () {
 
   it("Deploy StrategyRouter", async function () {
 
+    // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
+    oracle = await ethers.getContractFactory("FakeOracle");
+    oracle = await oracle.deploy();
+    await oracle.deployed();
+
     // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
     exchange = await ethers.getContractFactory("Exchange");
     exchange = await exchange.deploy();
@@ -65,6 +70,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.deployed();
     await router.setMinUsdPerCycle(parseUniform("1.0"));
     await router.setExchange(exchange.address);
+    await router.setOracle(oracle.address);
 
     // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
     batching = await ethers.getContractAt(

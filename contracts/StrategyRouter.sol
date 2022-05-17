@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
+import "./interfaces/IUsdOracle.sol";
 import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
@@ -103,6 +104,7 @@ contract StrategyRouter is Ownable {
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
+    IUsdOracle public oracle;
     SharesToken public sharesToken;
     Batching public batching;
     address public feeAddress;
@@ -114,7 +116,12 @@ contract StrategyRouter is Ownable {
         receiptContract = new ReceiptNFT();
         sharesToken = new SharesToken();
         batching = new Batching();
-        batching.init(StrategyRouter(address(this)), exchange, sharesToken, receiptContract);
+        batching.init(
+            StrategyRouter(address(this)),
+            exchange,
+            sharesToken,
+            receiptContract
+        );
         receiptContract.setManager(address(this));
         receiptContract.setManager(address(batching));
         cycles[0].startAt = block.timestamp;
@@ -187,7 +194,11 @@ contract StrategyRouter is Ownable {
 
             uint256 newShares = receivedByStrats /
                 cycles[_currentCycleId].pricePerShare;
-            console.log("newShares, receivedByStrats", newShares, receivedByStrats);
+            console.log(
+                "newShares, receivedByStrats",
+                newShares,
+                receivedByStrats
+            );
             sharesToken.mint(address(this), newShares);
         }
 
@@ -297,9 +308,13 @@ contract StrategyRouter is Ownable {
         receipt.amount =
             (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
             cycles[receipt.cycleId].totalInBatch;
-        
-        console.log("diff, rec amt", cycles[receipt.cycleId].totalInBatch, receipt.amount);
-        
+
+        console.log(
+            "diff, rec amt",
+            cycles[receipt.cycleId].totalInBatch,
+            receipt.amount
+        );
+
         shares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
     }
 
@@ -413,7 +428,11 @@ contract StrategyRouter is Ownable {
         }
 
         uint256 amountWithdraw = sharesToAmount(shares);
-        console.log(shares, sharesToken.balanceOf(address(this)), unlockedShares);
+        console.log(
+            shares,
+            sharesToken.balanceOf(address(this)),
+            unlockedShares
+        );
         sharesToken.burn(address(this), shares);
         _withdrawFromStrategies(amountWithdraw, withdrawToken);
     }
@@ -549,8 +568,14 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256 amount
     ) public OnlyEOW {
-        cycles[currentCycleId].totalInBatch -= 
-            batching.withdrawFromBatching(msg.sender, receiptIds, withdrawToken, amount);
+        // TODO: need to deal with totalInBatch somehow
+        // cycles[currentCycleId].totalInBatch -= batching.withdrawFromBatching(
+        batching.withdrawFromBatching(
+            msg.sender,
+            receiptIds,
+            withdrawToken,
+            amount
+        );
     }
 
     /// @notice Withdraw from batching while receipts are in strategies.
@@ -594,8 +619,11 @@ contract StrategyRouter is Ownable {
     function _withdrawFromBatching(uint256 amount, address withdrawToken)
         private
     {
-        cycles[currentCycleId].totalInBatch -= 
-            batching._withdrawFromBatching(msg.sender, amount, withdrawToken);
+        cycles[currentCycleId].totalInBatch -= batching._withdrawFromBatching(
+            msg.sender,
+            amount,
+            withdrawToken
+        );
     }
 
     /// @notice Allows to withdraw from batching and from strategies at the same time.
@@ -709,7 +737,17 @@ contract StrategyRouter is Ownable {
         external
         OnlyEOW
     {
-        IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
+        IERC20(depositToken).transferFrom(
+            msg.sender,
+            address(batching),
+            _amount
+        );
+
+        // NOTICE having totalInBatch as a value might be a bad idea
+        // (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+        //     depositToken
+        // );
+        // uint256 usdValue =
         cycles[currentCycleId].totalInBatch += toUniform(_amount, depositToken);
         batching.depositToBatch(msg.sender, depositToken, _amount);
     }
@@ -723,6 +761,13 @@ contract StrategyRouter is Ownable {
         onlyOwner
     {
         batching.setSupportedStablecoin(tokenAddress, supported);
+    }
+
+    /// @notice Set address of oracle contract.
+    /// @dev Admin function.
+    function setOracle(IUsdOracle _oracle) external onlyOwner {
+        oracle = _oracle;
+        batching.setOracle(_oracle);
     }
 
     /// @notice Set address of exchange contract.

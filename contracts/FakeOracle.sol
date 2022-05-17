@@ -4,10 +4,11 @@ pragma solidity ^0.8.4;
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import "@chainlink/contracts/src/v0.8/Denominations.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
 
-contract FakeOracle is Ownable {
+contract FakeOracle is IUsdOracle, Ownable {
     error StaleChainlinkPrice();
     error BadPrice();
 
@@ -24,9 +25,9 @@ contract FakeOracle is Ownable {
     mapping(address => mapping(address => Price)) prices;
 
     constructor() {
-        prices[UST][Denominations.USD] = Price(1000000, 6);
-        prices[USDC][Denominations.USD] = Price(100000000, 8);
-        prices[BUSD][Denominations.USD] = Price(10000000000, 10);
+        prices[UST][Denominations.USD] = Price(999_990, 6); // 0.99$
+        prices[USDC][Denominations.USD] = Price(100_100_000, 8); // 1.001$
+        prices[BUSD][Denominations.USD] = Price(10_000_000_000, 10);
     }
 
     /**
@@ -35,6 +36,7 @@ contract FakeOracle is Ownable {
     function getAssetUsdPrice(address base)
         public
         view
+        override
         returns (uint256 price, uint8 decimals)
     {
         price = prices[base][Denominations.USD].price;
