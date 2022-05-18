@@ -63,7 +63,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
     router = await StrategyRouter.deploy();
     await router.deployed();
-    await router.setMinUsdPerCycle(parseUniform("1.0"));
+    await router.setMinUsdPerCycle(parseUniform("0.9"));
     await router.setExchange(exchange.address);
     await router.setOracle(oracle.address);
 

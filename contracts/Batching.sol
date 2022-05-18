@@ -209,10 +209,11 @@ contract Batching is Ownable {
                 withdrawToken
             );
             amountToTransfer = (amount * 10**priceDecimals) / price;
+            amountToTransfer = fromUniform(amountToTransfer, withdrawToken);
             amount = 0;
         }
 
-        // try withdraw token that which balance is enough to do only 1 swap
+        // try withdraw token which balance is enough to do only 1 swap
         if(amount != 0) {
 
             for (uint256 i; i < balances.length; i++) {
@@ -225,36 +226,48 @@ contract Batching is Ownable {
                     amountToTransfer = fromUniform(amountToTransfer, token);
                     amountToTransfer = _trySwap(amountToTransfer, token, withdrawToken);
                     amount = 0;
+                    break;
                 }
             }
         }
 
+        // swap different tokens until withraw amount is fulfilled
         if(amount != 0) {
             for (uint256 i; i < balances.length; i++) {
                 address token = stablecoins.at(i);
-                if (balances[i] >= amount) {
+                uint256 toSwap;
+                if (balances[i] < amount) {
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getAssetUsdPrice(token);
-                    amountToTransfer = (amount * 10**priceDecimals) / price;
-                    amountToTransfer = fromUniform(amountToTransfer, token);
-                    amountToTransfer = _trySwap(
-                        amountToTransfer,
+
+                    // convert usd value into token amount
+                    toSwap = (balances[i] * 10**priceDecimals) / price;
+                    // adjust decimals of the token amount
+                    toSwap = fromUniform(toSwap, token);
+                    // swap for requested token
+                    amountToTransfer += _trySwap(
+                        toSwap,
+                        token,
+                        withdrawToken
+                    );
+                    // reduce total withdraw usd value
+                    amount -= balances[i];
+                    balances[i] = 0;
+                } else {
+                    (uint256 price, uint8 priceDecimals) = oracle
+                        .getAssetUsdPrice(token);
+                    // convert usd value into token amount
+                    toSwap = (amount * 10**priceDecimals) / price;
+                    // adjust decimals of the token amount
+                    toSwap = fromUniform(toSwap, token);
+                    // swap for requested token
+                    amountToTransfer += _trySwap(
+                        toSwap,
                         token,
                         withdrawToken
                     );
                     amount = 0;
-                } else {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
-                    amountToTransfer = (balances[i] * 10**priceDecimals) / price;
-                    amountToTransfer = fromUniform(amountToTransfer, token);
-                    amountToTransfer = _trySwap(
-                        amountToTransfer,
-                        token,
-                        withdrawToken
-                    );
-                    amount -= balances[i];
-                    balances[i] = 0;
+                    break;
                 }
             }
         }
@@ -316,7 +329,6 @@ contract Batching is Ownable {
         // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
 
         uint256 amountUniform = toUniform(_amount, depositToken);
-        // totalTokens += amountUniform;
 
         emit Deposit(msgSender, depositToken, _amount);
         receiptContract.mint(

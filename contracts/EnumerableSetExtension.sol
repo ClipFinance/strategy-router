@@ -9,6 +9,8 @@ import "./interfaces/IUsdOracle.sol";
 import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 library EnumerableSetExtension {
+
+    /// @dev Function will revert if address is not in set.
     function indexOf(EnumerableSet.AddressSet storage set, address value)
         internal
         view

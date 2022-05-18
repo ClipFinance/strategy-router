@@ -25,9 +25,9 @@ contract FakeOracle is IUsdOracle, Ownable {
     mapping(address => mapping(address => Price)) prices;
 
     constructor() {
-        prices[UST][Denominations.USD] = Price(999_990, 6); // 0.99$
+        prices[UST][Denominations.USD] = Price(999_990, 6); // 0.999990$
         prices[USDC][Denominations.USD] = Price(100_100_000, 8); // 1.001$
-        prices[BUSD][Denominations.USD] = Price(10_000_000_000, 10);
+        prices[BUSD][Denominations.USD] = Price(10_000_000_000, 10); // 1$
     }
 
     /**
