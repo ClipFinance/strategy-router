@@ -158,7 +158,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.depositToBatch(ust.address, parseUst("100"))
 
     await router.depositToStrategies()
-    let strategiesBalance = await router.viewStrategiesBalance()
+    let strategiesBalance = await router.viewStrategiesValue()
     console.log(await usdc.balanceOf(owner.address));
     console.log(await ust.balanceOf(owner.address));
     expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
@@ -226,6 +226,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.crossWithdrawFromBatching([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("40"));
+
+    console.log(await router.viewBatchingValue());
   });
 
   it("crossWithdrawFromStrategies", async function () {
@@ -242,6 +244,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.crossWithdrawFromStrategies([3], usdc.address, MaxUint256);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+
+    console.log(await router.viewStrategiesValue());
   });
 
   it("withdrawShares", async function () {
@@ -270,6 +274,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     await router.crossWithdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+
+    console.log(await router.viewStrategiesValue());
   });
 
   it("withdrawUniversal - withdraw from batching", async function () {
@@ -344,12 +350,12 @@ describe("Test StrategyRouter with fake strategies", function () {
 
   it("Remove strategy", async function () {
 
-    console.log("strategies balance", await router.viewStrategiesBalance());
+    // console.log("strategies balance", await router.viewStrategiesBalance());
 
     // deposit to strategies
     await router.depositToBatch(ust.address, parseUst("10"));
     await router.depositToStrategies();
-    console.log("strategies balance", await router.viewStrategiesBalance());
+    // console.log("strategies balance", await router.viewStrategiesBalance());
     
     // deploy new farm
     const Farm = await ethers.getContractFactory("MockFarm");
