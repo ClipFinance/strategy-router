@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract SharesToken is Ownable, ERC20 {
     constructor() ERC20("Clip-Finance Shares", "CF") {}
 
+
     function routerTransferFrom(
         address from,
         address to,

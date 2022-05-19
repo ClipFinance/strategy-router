@@ -161,7 +161,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let strategiesBalance = await router.viewStrategiesValue()
     console.log(await usdc.balanceOf(owner.address));
     console.log(await ust.balanceOf(owner.address));
-    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("2"));
   });
 
   it("withdrawFromStrategies", async function () {
@@ -186,9 +186,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.receiptsToShares([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
-    await expect(router.withdrawFromStrategies([2], usdc.address, withdrawShares)).to.be.reverted;
 
-    await sharesToken.approve(router.address, sharesBalance);
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
@@ -219,9 +217,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.receiptsToShares([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
-    await expect(router.crossWithdrawFromBatching([2], usdc.address, withdrawShares)).to.be.reverted;
 
-    await sharesToken.approve(router.address, sharesBalance);
+
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawFromBatching([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
@@ -254,7 +251,6 @@ describe("Test StrategyRouter with fake strategies", function () {
 
     let receiptsShares = await router.receiptsToShares([1]);
     await router.unlockShares([1]);
-    // await sharesToken.approve(router.address, receiptsShares);
     
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(receiptsShares, usdc.address);

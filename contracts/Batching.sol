@@ -38,26 +38,16 @@ contract Batching is Ownable {
     error CantRemoveTokenOfActiveStrategy();
     error UnsupportedStablecoin();
     error NotReceiptOwner();
-    error CycleNotClosed();
     error CycleClosed();
-    error InsufficientShares();
-    error DuplicateStrategy();
-    error NotCallableByContracts();
-    error CycleNotClosableYet();
     error DepositUnderMinimum();
-    error BadPercent();
     error AmountNotSpecified();
-    error PleaseWithdrawFromBatching();
     error NotEnoughInBatching();
-    error CantRemoveLastStrategy();
-    error NothingToRebalance();
 
     uint8 public constant UNIFORM_DECIMALS = 18;
-    // used in rebalance function
-    uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17; // UNIFORM_DECIMALS, so 1e17 == 0.1
+    // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
+    uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
     uint256 public minDeposit;
-    // uint256 public totalTokens;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -117,42 +107,21 @@ contract Batching is Ownable {
         }
     }
 
-    /// @notice Returns token balances and their sum in the batching.
-    /// @notice Shows total batching balance, possibly not total to be deposited into strategies.
-    ///         because strategies might not take all token supported by router.
-    /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
-    /// @return totalBalance Total tokens in the batching.
-    /// @return balances Array of token balances in the batching.
-    // function viewBatchingBalance()
-    //     public
-    //     view
-    //     returns (uint256 totalBalance, uint256[] memory balances)
-    // {
-    //     balances = new uint256[](stablecoins.length());
-    //     for (uint256 i; i < balances.length; i++) {
-    //         address token = stablecoins.at(i);
-    //         uint256 balance = ERC20(token).balanceOf(address(this));
-    //         balance = toUniform(balance, token);
-    //         balances[i] = balance;
-    //         totalBalance += balance;
-    //     }
-    // }
-
     // User Functions
 
-    /// @notice Withdraw from batching while receipts are in batching.
+    /// @notice Withdraw stablecoins from batching while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param amount Uniform amount from receipt to withdraw, only for current cycle. Put max uint to withdraw all.
+    /// @param amount Amount of USD to withdraw.
     /// @dev Only callable by user wallets.
     function withdrawFromBatching(
         address msgSender,
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256 amount
-    ) public onlyOwner returns (uint256 withdrawnUniform) {
+    ) public onlyOwner {
         console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
 
         if (amount == 0) revert AmountNotSpecified();
@@ -171,36 +140,37 @@ contract Batching is Ownable {
             );
             // only for receipts in batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 receipt.token
             );
-            if (amount >= receipt.amount) {
-                toWithdraw += ((receipt.amount * price) / 10**priceDecimals);
-                amount -= receipt.amount;
+            uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+            if (amount >= receiptValue) {
+                toWithdraw += receiptValue;
+                amount -= receiptValue;
                 receiptContract.burn(receiptId);
             } else {
-                toWithdraw += ((amount * price) / 10**priceDecimals);
-                receiptContract.setAmount(receiptId, receipt.amount - amount);
+                toWithdraw += amount;
+                uint256 newReceiptAmount = receipt.amount * (receiptValue-amount) / receiptValue;
+                if(newReceiptAmount > 0)
+                    receiptContract.setAmount(receiptId, newReceiptAmount);
+                else
+                    receiptContract.burn(receiptId);
                 amount = 0;
             }
             if (amount == 0) break;
         }
         console.log("toWithdraw", toWithdraw);
-        _withdrawFromBatchingOracle(msgSender, toWithdraw, withdrawToken);
-        return toWithdraw;
+        _withdrawFromBatching(msgSender, toWithdraw, withdrawToken);
     }
 
-    function _withdrawFromBatchingOracle(
+    function _withdrawFromBatching(
         address msgSender,
         uint256 amount,
         address withdrawToken
-    ) public onlyOwner returns (uint256 withdrawnUniform) {
+    ) public onlyOwner {
         (uint256 totalBalance, uint256[] memory balances) = viewBatchingValue();
         // console.log("total %s, amount %s", totalBalance, amount);
         if (totalBalance < amount) revert NotEnoughInBatching();
-        // totalTokens -= amount;
-        withdrawnUniform = amount;
 
         uint256 amountToTransfer;
         // try withdraw requested token directly
@@ -273,43 +243,6 @@ contract Batching is Ownable {
         }
         IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
     }
-
-    // function _withdrawFromBatching(
-    //     address msgSender,
-    //     uint256 amount,
-    //     address withdrawToken
-    // ) public onlyOwner returns (uint256 withdrawnUniform) {
-    //     (
-    //         uint256 totalBalance,
-    //         uint256[] memory balances
-    //     ) = viewBatchingBalance();
-    //     // console.log("total %s, amount %s", totalBalance, amount);
-    //     if (totalBalance < amount) revert NotEnoughInBatching();
-    //     // totalTokens -= amount;
-    //     withdrawnUniform = amount;
-
-    //     uint256 amountToTransfer;
-    //     uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
-    //         address(this)
-    //     );
-    //     if (withdrawTokenBalance >= amount) {
-    //         amountToTransfer = fromUniform(amount, withdrawToken);
-    //     } else {
-    //         // uint256 len = strategies.length;
-    //         for (uint256 i; i < balances.length; i++) {
-    //             address token = stablecoins.at(i);
-    //             // split withdraw amount proportionally between strategies
-    //             uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-    //             amountWithdraw = fromUniform(amountWithdraw, token);
-
-    //             // swap strategies tokens to withdraw token
-    //             amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
-    //             amountToTransfer += amountWithdraw;
-    //         }
-    //     }
-    //     // cycles[currentCycleId].totalInBatch -= amount;
-    //     IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
-    // }
 
     /// @notice Deposit stablecoin into batching.
     /// @notice Tokens not deposited into strategies immediately.
@@ -450,7 +383,7 @@ contract Batching is Ownable {
                         ? _tokens[i - lenStrats]
                         : router.viewStrategyDepositToken(i);
 
-                    // its not worth to swap too small amounts
+                    // no need to swap small amounts
                     if (
                         toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
                     ) {
