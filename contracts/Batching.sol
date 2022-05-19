@@ -123,20 +123,20 @@ contract Batching is Ownable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total tokens in the batching.
     /// @return balances Array of token balances in the batching.
-    function viewBatchingBalance()
-        public
-        view
-        returns (uint256 totalBalance, uint256[] memory balances)
-    {
-        balances = new uint256[](stablecoins.length());
-        for (uint256 i; i < balances.length; i++) {
-            address token = stablecoins.at(i);
-            uint256 balance = ERC20(token).balanceOf(address(this));
-            balance = toUniform(balance, token);
-            balances[i] = balance;
-            totalBalance += balance;
-        }
-    }
+    // function viewBatchingBalance()
+    //     public
+    //     view
+    //     returns (uint256 totalBalance, uint256[] memory balances)
+    // {
+    //     balances = new uint256[](stablecoins.length());
+    //     for (uint256 i; i < balances.length; i++) {
+    //         address token = stablecoins.at(i);
+    //         uint256 balance = ERC20(token).balanceOf(address(this));
+    //         balance = toUniform(balance, token);
+    //         balances[i] = balance;
+    //         totalBalance += balance;
+    //     }
+    // }
 
     // User Functions
 
@@ -274,42 +274,42 @@ contract Batching is Ownable {
         IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
     }
 
-    function _withdrawFromBatching(
-        address msgSender,
-        uint256 amount,
-        address withdrawToken
-    ) public onlyOwner returns (uint256 withdrawnUniform) {
-        (
-            uint256 totalBalance,
-            uint256[] memory balances
-        ) = viewBatchingBalance();
-        // console.log("total %s, amount %s", totalBalance, amount);
-        if (totalBalance < amount) revert NotEnoughInBatching();
-        // totalTokens -= amount;
-        withdrawnUniform = amount;
+    // function _withdrawFromBatching(
+    //     address msgSender,
+    //     uint256 amount,
+    //     address withdrawToken
+    // ) public onlyOwner returns (uint256 withdrawnUniform) {
+    //     (
+    //         uint256 totalBalance,
+    //         uint256[] memory balances
+    //     ) = viewBatchingBalance();
+    //     // console.log("total %s, amount %s", totalBalance, amount);
+    //     if (totalBalance < amount) revert NotEnoughInBatching();
+    //     // totalTokens -= amount;
+    //     withdrawnUniform = amount;
 
-        uint256 amountToTransfer;
-        uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
-            address(this)
-        );
-        if (withdrawTokenBalance >= amount) {
-            amountToTransfer = fromUniform(amount, withdrawToken);
-        } else {
-            // uint256 len = strategies.length;
-            for (uint256 i; i < balances.length; i++) {
-                address token = stablecoins.at(i);
-                // split withdraw amount proportionally between strategies
-                uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
-                amountWithdraw = fromUniform(amountWithdraw, token);
+    //     uint256 amountToTransfer;
+    //     uint256 withdrawTokenBalance = ERC20(withdrawToken).balanceOf(
+    //         address(this)
+    //     );
+    //     if (withdrawTokenBalance >= amount) {
+    //         amountToTransfer = fromUniform(amount, withdrawToken);
+    //     } else {
+    //         // uint256 len = strategies.length;
+    //         for (uint256 i; i < balances.length; i++) {
+    //             address token = stablecoins.at(i);
+    //             // split withdraw amount proportionally between strategies
+    //             uint256 amountWithdraw = (amount * balances[i]) / totalBalance;
+    //             amountWithdraw = fromUniform(amountWithdraw, token);
 
-                // swap strategies tokens to withdraw token
-                amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
-                amountToTransfer += amountWithdraw;
-            }
-        }
-        // cycles[currentCycleId].totalInBatch -= amount;
-        IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
-    }
+    //             // swap strategies tokens to withdraw token
+    //             amountWithdraw = _trySwap(amountWithdraw, token, withdrawToken);
+    //             amountToTransfer += amountWithdraw;
+    //         }
+    //     }
+    //     // cycles[currentCycleId].totalInBatch -= amount;
+    //     IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
+    // }
 
     /// @notice Deposit stablecoin into batching.
     /// @notice Tokens not deposited into strategies immediately.
@@ -498,7 +498,7 @@ contract Batching is Ownable {
             stablecoins.add(tokenAddress);
         } else {
             uint8 len = uint8(router.viewStrategiesCount());
-            // shouldn't disallow tokens that are in use by active strategies
+            // shouldn't remove tokens that are in use by active strategies
             for (uint256 i = 0; i < len; i++) {
                 if (router.viewStrategyDepositToken(i) == tokenAddress) {
                     revert CantRemoveTokenOfActiveStrategy();

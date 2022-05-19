@@ -328,13 +328,13 @@ contract StrategyRouter is Ownable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total tokens in the batching.
     /// @return balances Array of token balances in the batching.
-    function viewBatchingBalance()
-        public
-        view
-        returns (uint256 totalBalance, uint256[] memory balances)
-    {
-        return batching.viewBatchingBalance();
-    }
+    // function viewBatchingBalance()
+    //     public
+    //     view
+    //     returns (uint256 totalBalance, uint256[] memory balances)
+    // {
+    //     return batching.viewBatchingBalance();
+    // }
 
     function viewBatchingValue()
         public
@@ -359,7 +359,6 @@ contract StrategyRouter is Ownable {
         (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
             receipt.token
         );
-        // TODO do the same price calcs in other places with 'receipt.amount'
         // calculate usd value
         receipt.amount = receipt.amount * price / 10**priceDecimals;
         console.log( "receipt.amount", receipt.amount);
@@ -398,6 +397,8 @@ contract StrategyRouter is Ownable {
         returns (uint256 amount)
     {
         (uint256 strategiesBalance, ) = viewStrategiesValue();
+        // uint256 debtShares = cycles[currentCycleId].totalWithdrawnUniform;
+        // uint256 debtValue = shares * currentPricePerShare;
         uint256 currentPricePerShare = (strategiesBalance -
             cycles[currentCycleId].totalWithdrawnUniform) /
             sharesToken.totalSupply();
@@ -755,97 +756,97 @@ contract StrategyRouter is Ownable {
     /// @param withdrawToken Supported stablecoin that user wish to receive.
     /// @param amount Amount to withdraw from NFTs and share tokens holded by user.
     /// @dev Only callable by user wallets.
-    function withdrawUniversal(
-        uint256[] calldata receiptIdsBatch,
-        uint256[] calldata receiptIdsStrats,
-        address withdrawToken,
-        uint256 amount
-    ) external OnlyEOW {
-        // // console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
-        if (amount == 0) revert AmountNotSpecified();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+    // function withdrawUniversal(
+    //     uint256[] calldata receiptIdsBatch,
+    //     uint256[] calldata receiptIdsStrats,
+    //     address withdrawToken,
+    //     uint256 amount
+    // ) external OnlyEOW {
+    //     // // console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
+    //     if (amount == 0) revert AmountNotSpecified();
+    //     if (supportsCoin(withdrawToken) == false)
+    //         revert UnsupportedStablecoin();
 
-        uint256 fromBatchAmount;
-        uint256 _currentCycleId = currentCycleId;
-        for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
-            uint256 receiptId = receiptIdsBatch[i];
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
-                receiptId
-            );
-            fromBatchAmount += receipt.amount;
-        }
+    //     uint256 fromBatchAmount;
+    //     uint256 _currentCycleId = currentCycleId;
+    //     for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
+    //         uint256 receiptId = receiptIdsBatch[i];
+    //         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+    //             receiptId
+    //         );
+    //         fromBatchAmount += receipt.amount;
+    //     }
 
-        if (fromBatchAmount > amount) fromBatchAmount = amount;
+    //     if (fromBatchAmount > amount) fromBatchAmount = amount;
 
-        if (fromBatchAmount > 0) {
-            amount -= fromBatchAmount;
-            (uint256 totalBalance, ) = viewBatchingBalance();
+    //     if (fromBatchAmount > 0) {
+    //         amount -= fromBatchAmount;
+    //         (uint256 totalBalance, ) = viewBatchingBalance();
 
-            if (fromBatchAmount <= totalBalance) {
-                // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
-                withdrawFromBatching(
-                    receiptIdsBatch,
-                    withdrawToken,
-                    fromBatchAmount
-                );
-            } else {
-                if (totalBalance > 0) {
-                    // console.log("withdrawFromBatching totalBalance", totalBalance);
-                    withdrawFromBatching(
-                        receiptIdsBatch,
-                        withdrawToken,
-                        totalBalance
-                    );
-                    fromBatchAmount -= totalBalance;
-                }
-                if (
-                    cycles[_currentCycleId].totalWithdrawnUniform <
-                    fromBatchAmount
-                ) revert PleaseWithdrawFromBatching();
-                // console.log("crossWithdrawFromStrategies", fromBatchAmount);
-                crossWithdrawFromStrategies(
-                    receiptIdsBatch,
-                    withdrawToken,
-                    fromBatchAmount
-                );
-            }
-        }
-        // console.log(amount);
+    //         if (fromBatchAmount <= totalBalance) {
+    //             // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
+    //             withdrawFromBatching(
+    //                 receiptIdsBatch,
+    //                 withdrawToken,
+    //                 fromBatchAmount
+    //             );
+    //         } else {
+    //             if (totalBalance > 0) {
+    //                 // console.log("withdrawFromBatching totalBalance", totalBalance);
+    //                 withdrawFromBatching(
+    //                     receiptIdsBatch,
+    //                     withdrawToken,
+    //                     totalBalance
+    //                 );
+    //                 fromBatchAmount -= totalBalance;
+    //             }
+    //             if (
+    //                 cycles[_currentCycleId].totalWithdrawnUniform <
+    //                 fromBatchAmount
+    //             ) revert PleaseWithdrawFromBatching();
+    //             // console.log("crossWithdrawFromStrategies", fromBatchAmount);
+    //             crossWithdrawFromStrategies(
+    //                 receiptIdsBatch,
+    //                 withdrawToken,
+    //                 fromBatchAmount
+    //             );
+    //         }
+    //     }
+    //     // console.log(amount);
 
-        if (amount == 0) return;
+    //     if (amount == 0) return;
 
-        // shares related code
-        uint256 unlockedShares = _unlockShares(receiptIdsStrats);
-        sharesToken.transfer(msg.sender, unlockedShares);
-        // shares to withdraw calculated using user input amount
-        uint256 shares = amountToShares(amount);
-        // if user trying to withdraw more than he have, don't allow
-        uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
-        if (sharesBalance < shares) shares = sharesBalance;
+    //     // shares related code
+    //     uint256 unlockedShares = _unlockShares(receiptIdsStrats);
+    //     sharesToken.transfer(msg.sender, unlockedShares);
+    //     // shares to withdraw calculated using user input amount
+    //     uint256 shares = amountToShares(amount);
+    //     // if user trying to withdraw more than he have, don't allow
+    //     uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
+    //     if (sharesBalance < shares) shares = sharesBalance;
 
-        uint256 fromStratsAmount = sharesToAmount(shares);
+    //     uint256 fromStratsAmount = sharesToAmount(shares);
 
-        (uint256 totalBalance, ) = viewBatchingBalance();
+    //     (uint256 totalBalance, ) = viewBatchingBalance();
 
-        if (fromStratsAmount <= totalBalance) {
-            crossWithdrawShares(shares, withdrawToken);
-            // console.log("crossWithdrawShares", shares);
-        } else {
-            if (totalBalance > 0) {
-                uint256 _withdrawShares = (shares * totalBalance) /
-                    fromStratsAmount;
-                shares -= _withdrawShares;
-                uint256 _withdrawAmount = sharesToAmount(_withdrawShares);
-                sharesToken.burn(msg.sender, _withdrawShares);
-                // console.log("_withdrawFromBatching", _withdrawAmount);
-                _withdrawFromBatching(_withdrawAmount, withdrawToken);
-                cycles[currentCycleId].totalWithdrawnUniform += _withdrawAmount;
-            }
-            // console.log("withdrawShares", shares);
-            if (shares > 0) withdrawShares(shares, withdrawToken);
-        }
-    }
+    //     if (fromStratsAmount <= totalBalance) {
+    //         crossWithdrawShares(shares, withdrawToken);
+    //         // console.log("crossWithdrawShares", shares);
+    //     } else {
+    //         if (totalBalance > 0) {
+    //             uint256 _withdrawShares = (shares * totalBalance) /
+    //                 fromStratsAmount;
+    //             shares -= _withdrawShares;
+    //             uint256 _withdrawAmount = sharesToAmount(_withdrawShares);
+    //             sharesToken.burn(msg.sender, _withdrawShares);
+    //             // console.log("_withdrawFromBatching", _withdrawAmount);
+    //             _withdrawFromBatching(_withdrawAmount, withdrawToken);
+    //             cycles[currentCycleId].totalWithdrawnUniform += _withdrawAmount;
+    //         }
+    //         // console.log("withdrawShares", shares);
+    //         if (shares > 0) withdrawShares(shares, withdrawToken);
+    //     }
+    // }
 
     /// @notice Deposit stablecoin into batching.
     /// @notice Tokens not deposited into strategies immediately.
