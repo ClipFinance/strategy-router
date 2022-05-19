@@ -131,7 +131,7 @@ contract StrategyRouter is Ownable {
     ///         batch usd value has reached `minUsdPerCycle`.
     /// @dev Only callable by user wallets.
     function depositToStrategies() external OnlyEOW {
-        console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
+        // console.log("~~~~~~~~~~~~~ depositToStrategies ~~~~~~~~~~~~~");
         uint256 _currentCycleId = currentCycleId;
         (uint256 totalValue, ) = viewBatchingValue();
         uint256 stratsDebtInShares = cycles[_currentCycleId]
@@ -139,7 +139,7 @@ contract StrategyRouter is Ownable {
         uint256 stratsDebtValue;
         if(stratsDebtInShares > 0)
             stratsDebtValue = sharesToAmount(stratsDebtInShares);
-        console.log("totalValue", totalValue);
+        // console.log("totalValue", totalValue);
         if (
             cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
             totalValue+stratsDebtValue < minUsdPerCycle
@@ -172,7 +172,7 @@ contract StrategyRouter is Ownable {
                     (toUniform(depositAmounts[i], strategyAssetAddress) *
                         price) /
                     10**priceDecimals;
-                console.log(depositAmounts[i]);
+                // console.log(depositAmounts[i]);
 
                 // transfer tokens from batching into strategies
                 batching.transfer(
@@ -194,12 +194,12 @@ contract StrategyRouter is Ownable {
         // receivedByStrats += stratsDebtValue;
         // balanceAfterCompound -= stratsDebtValue;
 
-        console.log(
-            balanceAfterCompound,
-            balanceAfterDeposit,
-            receivedByStrats,
-            totalValueDeposited
-        );
+        // console.log(
+        //     balanceAfterCompound,
+        //     balanceAfterDeposit,
+        //     receivedByStrats,
+        //     totalValueDeposited
+        // );
 
         uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
@@ -214,11 +214,11 @@ contract StrategyRouter is Ownable {
 
             uint256 newShares = receivedByStrats /
                 cycles[_currentCycleId].pricePerShare;
-            console.log(
-                "newShares, receivedByStrats",
-                newShares,
-                receivedByStrats
-            );
+            // console.log(
+            //     "newShares, receivedByStrats",
+            //     newShares,
+            //     receivedByStrats
+            // );
             sharesToken.mint(address(this), newShares);
         }
 
@@ -575,105 +575,109 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].stratsDebtInShares += shares;
     }
 
-    /// @notice Allows to withdraw from batching and from strategies at the same time.
-    /// @notice It also can cross withdraw from batching if there is enough.
+    /// @notice Allows to withdraw stablecoins from batching and from strategies at the same time.
+    /// @notice It also can cross withdraw if possible.
     /// @notice This function internally rely on the other withdraw functions, thus inherit some bussines logic.
-    /// @param receiptIdsBatch Receipt NFTs ids from batching.
-    /// @param receiptIdsStrats Receipt NFTs ids from strategies.
+    /// @param receiptIdsBatch ReceiptNFTs ids from batching.
+    /// @param receiptIdsStrats ReceiptNFTs ids from strategies.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param amount Amount to withdraw from NFTs and share tokens holded by user.
+    /// @param amount USD value to withdraw by receipts and shares.
     /// @dev Only callable by user wallets.
-    // function withdrawUniversal(
-    //     uint256[] calldata receiptIdsBatch,
-    //     uint256[] calldata receiptIdsStrats,
-    //     address withdrawToken,
-    //     uint256 amount
-    // ) external OnlyEOW {
-    //     // // console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
-    //     if (amount == 0) revert AmountNotSpecified();
-    //     if (supportsCoin(withdrawToken) == false)
-    //         revert UnsupportedStablecoin();
+    function withdrawUniversal(
+        uint256[] calldata receiptIdsBatch,
+        uint256[] calldata receiptIdsStrats,
+        address withdrawToken,
+        uint256 amount
+    ) external OnlyEOW {
+        // // console.log("~~~~~~~~~~~~~ crossWithdrawFromBatching ~~~~~~~~~~~~~");
+        if (amount == 0) revert AmountNotSpecified();
+        if (supportsCoin(withdrawToken) == false)
+            revert UnsupportedStablecoin();
 
-    //     uint256 fromBatchAmount;
-    //     uint256 _currentCycleId = currentCycleId;
-    //     for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
-    //         uint256 receiptId = receiptIdsBatch[i];
-    //         ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
-    //             receiptId
-    //         );
-    //         fromBatchAmount += receipt.amount;
-    //     }
+        uint256 fromBatchAmount;
+        uint256 _currentCycleId = currentCycleId;
+        for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
+            uint256 receiptId = receiptIdsBatch[i];
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+                receiptId
+            );
+            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                receipt.token
+            );
+            uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+            fromBatchAmount += receiptValue;
+        }
 
-    //     if (fromBatchAmount > amount) fromBatchAmount = amount;
+        if (fromBatchAmount > amount) fromBatchAmount = amount;
 
-    //     if (fromBatchAmount > 0) {
-    //         amount -= fromBatchAmount;
-    //         (uint256 totalBalance, ) = viewBatchingBalance();
+        if (fromBatchAmount > 0) {
+            amount -= fromBatchAmount;
+            (uint256 totalBalance, ) = viewBatchingValue();
 
-    //         if (fromBatchAmount <= totalBalance) {
-    //             // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
-    //             withdrawFromBatching(
-    //                 receiptIdsBatch,
-    //                 withdrawToken,
-    //                 fromBatchAmount
-    //             );
-    //         } else {
-    //             if (totalBalance > 0) {
-    //                 // console.log("withdrawFromBatching totalBalance", totalBalance);
-    //                 withdrawFromBatching(
-    //                     receiptIdsBatch,
-    //                     withdrawToken,
-    //                     totalBalance
-    //                 );
-    //                 fromBatchAmount -= totalBalance;
-    //             }
-    //             if (
-    //                 cycles[_currentCycleId].stratsDebtInShares <
-    //                 fromBatchAmount
-    //             ) revert PleaseWithdrawFromBatching();
-    //             // console.log("crossWithdrawFromStrategies", fromBatchAmount);
-    //             crossWithdrawFromStrategies(
-    //                 receiptIdsBatch,
-    //                 withdrawToken,
-    //                 fromBatchAmount
-    //             );
-    //         }
-    //     }
-    //     // console.log(amount);
+            if (fromBatchAmount <= totalBalance) {
+                // console.log("withdrawFromBatching fromBatchAmount", fromBatchAmount);
+                withdrawFromBatching(
+                    receiptIdsBatch,
+                    withdrawToken,
+                    fromBatchAmount
+                );
+            } else {
+                if (totalBalance > 0) {
+                    // console.log("withdrawFromBatching totalBalance", totalBalance);
+                    withdrawFromBatching(
+                        receiptIdsBatch,
+                        withdrawToken,
+                        totalBalance
+                    );
+                    fromBatchAmount -= totalBalance;
+                }
+                if (
+                    cycles[_currentCycleId].stratsDebtInShares <
+                    amountToShares(fromBatchAmount)
+                ) revert PleaseWithdrawFromBatching();
+                // console.log("crossWithdrawFromStrategies", fromBatchAmount);
+                crossWithdrawFromStrategies(
+                    receiptIdsBatch,
+                    withdrawToken,
+                    fromBatchAmount
+                );
+            }
+        }
+        // console.log(amount);
 
-    //     if (amount == 0) return;
+        if (amount == 0) return;
 
-    //     // shares related code
-    //     uint256 unlockedShares = _unlockShares(receiptIdsStrats);
-    //     sharesToken.transfer(msg.sender, unlockedShares);
-    //     // shares to withdraw calculated using user input amount
-    //     uint256 shares = amountToShares(amount);
-    //     // if user trying to withdraw more than he have, don't allow
-    //     uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
-    //     if (sharesBalance < shares) shares = sharesBalance;
+        // shares related code
+        uint256 unlockedShares = _unlockShares(receiptIdsStrats);
+        sharesToken.transfer(msg.sender, unlockedShares);
+        // shares to withdraw calculated using user input amount
+        uint256 shares = amountToShares(amount);
+        // if user trying to withdraw more than he have, don't allow
+        uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
+        if (sharesBalance < shares) shares = sharesBalance;
 
-    //     uint256 fromStratsAmount = sharesToAmount(shares);
+        uint256 fromStratsAmount = sharesToAmount(shares);
 
-    //     (uint256 totalBalance, ) = viewBatchingBalance();
+        (uint256 totalBalance, ) = viewBatchingValue();
 
-    //     if (fromStratsAmount <= totalBalance) {
-    //         crossWithdrawShares(shares, withdrawToken);
-    //         // console.log("crossWithdrawShares", shares);
-    //     } else {
-    //         if (totalBalance > 0) {
-    //             uint256 _withdrawShares = (shares * totalBalance) /
-    //                 fromStratsAmount;
-    //             shares -= _withdrawShares;
-    //             uint256 _withdrawAmount = sharesToAmount(_withdrawShares);
-    //             sharesToken.burn(msg.sender, _withdrawShares);
-    //             // console.log("_withdrawFromBatching", _withdrawAmount);
-    //             _withdrawFromBatching(_withdrawAmount, withdrawToken);
-    //             cycles[currentCycleId].stratsDebtInShares += _withdrawAmount;
-    //         }
-    //         // console.log("withdrawShares", shares);
-    //         if (shares > 0) withdrawShares(shares, withdrawToken);
-    //     }
-    // }
+        if (fromStratsAmount <= totalBalance) {
+            crossWithdrawShares(shares, withdrawToken);
+            // console.log("crossWithdrawShares", shares);
+        } else {
+            if (totalBalance > 0) {
+                uint256 _withdrawShares = (shares * totalBalance) /
+                    fromStratsAmount;
+                shares -= _withdrawShares;
+                uint256 _withdrawAmount = sharesToAmount(_withdrawShares);
+                sharesToken.burn(msg.sender, _withdrawShares);
+                // console.log("_withdrawFromBatching", _withdrawAmount);
+                _withdrawFromBatching(_withdrawAmount, withdrawToken);
+                cycles[currentCycleId].stratsDebtInShares += _withdrawShares;
+            }
+            // console.log("withdrawShares", shares);
+            if (shares > 0) withdrawShares(shares, withdrawToken);
+        }
+    }
 
     /// @notice Deposit stablecoin into batching.
     /// @notice Tokens not deposited into strategies immediately.
@@ -1076,19 +1080,19 @@ contract StrategyRouter is Ownable {
         );
         // calculate usd value
         receipt.amount = (receipt.amount * price) / 10**priceDecimals;
-        console.log("receipt.amount", receipt.amount);
+        // console.log("receipt.amount", receipt.amount);
         // adjust according to what was actually deposited into strategies
         receipt.amount =
             (receipt.amount * cycles[receipt.cycleId].receivedByStrats) /
             cycles[receipt.cycleId].totalDeposited;
-        console.log("receipt.amount", receipt.amount);
+        // console.log("receipt.amount", receipt.amount);
 
-        console.log(
-            "totalDeposited %s, receivedByStrats %s, receipt.amount(after calc)",
-            cycles[receipt.cycleId].totalDeposited,
-            cycles[receipt.cycleId].receivedByStrats,
-            receipt.amount
-        );
+        // console.log(
+        //     "totalDeposited %s, receivedByStrats %s, receipt.amount(after calc)",
+        //     cycles[receipt.cycleId].totalDeposited,
+        //     cycles[receipt.cycleId].receivedByStrats,
+        //     receipt.amount
+        // );
 
         shares = receipt.amount / cycles[receipt.cycleId].pricePerShare;
     }
