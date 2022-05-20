@@ -68,7 +68,7 @@ async function main() {
 
 
   // ~~~~~~~~~~~ DEPLOY Biswap ust-busd strategy ~~~~~~~~~~~ 
-  strategyBiswap = await ethers.getContractFactory("biswap_ust_busd");
+  strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
   strategyBiswap = await strategyBiswap.deploy(router.address);
   await strategyBiswap.deployed();
   await strategyBiswap.transferOwnership(router.address);

@@ -10,18 +10,25 @@ MaxUint256 = ethers.constants.MaxUint256;
 
 provider = ethers.provider;
 parseUsdc = (args) => parseUnits(args, 18);
-parseUst = (args) => parseUnits(args, 18);
+parseUsdt = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 
 module.exports = { logFarmLPs, getTokens, skipBlocks, skipCycleAndBlocks, 
                     printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256, 
-                    parseUst, parseUsdc, parseUniform, provider }
+                    parseUsdt, parseUsdc, parseUniform, provider, getUSDC}
 
 async function logFarmLPs() {
   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
   console.log("acryptos farm lp tokens %s", userInfo.amount);
   userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
   console.log("biswap farm lp tokens %s", userInfo.amount);
+}
+
+async function getUSDC() {
+    USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
+    usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
+    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address); 
+    return usdc;
 }
 
 async function getTokens(token, holder, amount, to) {

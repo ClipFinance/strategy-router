@@ -111,10 +111,10 @@ describe("Trying to find source of bug", function () {
 
   });
 
-  it("Deploy biswap_ust_busd", async function () {
+  it("Deploy biswap_usdc_usdt", async function () {
 
     // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
-    strategyBiswap = await ethers.getContractFactory("biswap_ust_busd");
+    strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
     strategyBiswap = await strategyBiswap.deploy(router.address);
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);

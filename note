@@ -1,26 +1,3 @@
---------- rebalance function --------- 
-# this algorythm should swap only necessary amounts to tempAsset instead of swapping whole balance of each strategy
- 
-var strats = [33, 33, 33]
-var total = strats.reduce((e, acc) => acc+e);
-var bal = [50, 25, 25]
-var toadd = [0, 0, 0];
-var temp = 0;
-for (let i = 0; i < 3; i++) {
-    let desiredBalance = total * bal[i] / 100;
-    if(desiredBalance > strats[i]) {
-        toadd[i] = desiredBalance - strats[i];
-    } else if(desiredBalance < strats[i]) {
-        let sell = strats[i] - desiredBalance;
-        temp += sell;
-        strats[i] -= sell;
-    }
-}
-var totalToAdd = toadd.reduce((e,v) => v+e)
-for (let i = 0; i < 3; i++) {
-    let curAdd = temp * toadd[i] / totalToAdd;
-    strats[i] += curAdd;
-}
 
 --------- exchange contract with routing --------- 
 1) Needs a function to route swap through predefined dex such as pancakeswap or acryptos, maybe some other in future.
