@@ -11,24 +11,38 @@ MaxUint256 = ethers.constants.MaxUint256;
 provider = ethers.provider;
 parseUsdc = (args) => parseUnits(args, 18);
 parseUsdt = (args) => parseUnits(args, 18);
+parseBusd = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 
-module.exports = { logFarmLPs, getTokens, skipBlocks, skipCycleAndBlocks, 
+module.exports = {  getTokens, skipBlocks, skipCycleAndBlocks, 
                     printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256, 
-                    parseUsdt, parseUsdc, parseUniform, provider, getUSDC}
+                    parseUsdt, parseUsdc, parseBusd, parseUniform, provider, getUSDC, getBUSD}
 
-async function logFarmLPs() {
-  userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
-  console.log("acryptos farm lp tokens %s", userInfo.amount);
-  userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
-  console.log("biswap farm lp tokens %s", userInfo.amount);
+// async function logFarmLPs() {
+//   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
+//   console.log("acryptos farm lp tokens %s", userInfo.amount);
+//   userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
+//   console.log("biswap farm lp tokens %s", userInfo.amount);
+// }
+
+async function getBUSD() {
+    let tokenAddress = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
+    let tokenHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
+    return await _getToken(tokenAddress, tokenHolder);
 }
 
 async function getUSDC() {
-    USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address); 
-    return usdc;
+    let tokenAddress = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
+    let tokenHolder = "0x6782472a11987e6f4a8afb10def25b498cb622db";
+    return await _getToken(tokenAddress, tokenHolder); 
+}
+
+async function _getToken(tokenAddress, tokenHolder) {
+    let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
+    let decimals = await tokenContract.decimals();
+    let parse = (args) => parseUnits(args, decimals);
+    tokenContract = await getTokens(tokenAddress, tokenHolder, parse("500000"), owner.address); 
+    return tokenContract;
 }
 
 async function getTokens(token, holder, amount, to) {
