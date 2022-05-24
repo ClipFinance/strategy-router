@@ -2,7 +2,7 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const { getTokens, MaxUint256 } = require("./utils");
+const { getTokens, MaxUint256, getBUSD, getUSDC } = require("./utils/utils");
 
 describe("Test StrategyRouter with fake strategies", function () {
 
@@ -15,20 +15,8 @@ describe("Test StrategyRouter with fake strategies", function () {
       "0x10ED43C718714eb63d5aA57B78B54704E256024E"
     );
 
-    // ~~~~~~~~~~~ GET BUSD ON MAINNET ~~~~~~~~~~~ 
-    BUSD = "0xe9e7cea3dedca5984780bafc599bd69add087d56";
-    busd = await ethers.getContractAt("ERC20", BUSD);
-    // ~~~~~~~~~~~ GET IAcryptoSPool ON MAINNET ~~~~~~~~~~~ 
-    ACS4UST = "0x99c92765EfC472a9709Ced86310D64C4573c4b77";
-    acsUst = await ethers.getContractAt("IAcryptoSPool", ACS4UST);
-    // ~~~~~~~~~~~ GET UST TOKENS ON MAINNET ~~~~~~~~~~~ 
-    UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
-    ustHolder = "0x05faf555522fa3f93959f86b41a3808666093210";
-    ust = await getTokens(UST, ustHolder, parseUst("500000"), owner.address);
-    // ~~~~~~~~~~~ GET USDC TOKENS ON MAINNET ~~~~~~~~~~~ 
-    USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    usdcHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address);
+    usdc = await getUSDC();
+    ust = await getBUSD();
 
   };
 
@@ -159,8 +147,6 @@ describe("Test StrategyRouter with fake strategies", function () {
 
     await router.depositToStrategies()
     let strategiesBalance = await router.viewStrategiesValue()
-    console.log(await usdc.balanceOf(owner.address));
-    console.log(await ust.balanceOf(owner.address));
     expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("2"));
   });
 
@@ -191,7 +177,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("1"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
   });
   
   it("crossWithdrawFromBatching", async function () {
@@ -203,7 +189,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let receiptsShares = await router.receiptsToShares([1]);
     await router.crossWithdrawFromBatching([1], usdc.address, receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
   });
 
   it("crossWithdrawFromBatching both nft and shares", async function () {
@@ -222,9 +208,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawFromBatching([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("40"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("400"));
 
-    console.log(await router.viewBatchingValue());
   });
 
   it("crossWithdrawFromStrategies", async function () {
@@ -240,9 +225,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawFromStrategies([3], usdc.address, MaxUint256);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
 
-    console.log(await router.viewStrategiesValue());
   });
 
   it("withdrawShares", async function () {
@@ -255,7 +239,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("250"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("2500"));
   });
 
   it("crossWithdrawShares", async function () {
@@ -269,9 +253,8 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
 
-    console.log(await router.viewStrategiesValue());
   });
 
   it("withdrawUniversal - withdraw from batching", async function () {
@@ -282,7 +265,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([2], [], usdc.address, parseUst("100000"));
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("2000"));
   });
 
   it("withdrawUniversal - withdraw shares (by receipt)", async function () {
@@ -296,7 +279,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [1], usdc.address, parseUst("100000"));
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
   });
 
   it("withdrawUniversal - withdraw shares (no receipt)", async function () {
@@ -311,7 +294,7 @@ describe("Test StrategyRouter with fake strategies", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [], usdc.address, amountFromShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("20"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
   });
 
   it("withdrawUniversal - withdraw batch, shares and shares by receipt", async function () {
@@ -332,26 +315,21 @@ describe("Test StrategyRouter with fake strategies", function () {
     let amountWithdraw = amountFromShares.add(amountReceiptBatch).add(amountReceiptStrats);
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    console.log(amountWithdraw);
     await router.withdrawUniversal([3], [2], usdc.address, amountWithdraw);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("30000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("30000"), parseUsdc("300"));
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(receiptContract.viewReceipt(1)).to.be.reverted;
     expect(receiptContract.viewReceipt(2)).to.be.reverted;
     expect(receiptContract.viewReceipt(3)).to.be.reverted;
-    // console.log("strategies balance", await router.viewStrategiesBalance());
-    // console.log("batch balance", await router.viewBatchingBalance());
   });
 
   it("Remove strategy", async function () {
 
-    // console.log("strategies balance", await router.viewStrategiesBalance());
 
     // deposit to strategies
     await router.depositToBatch(ust.address, parseUst("10"));
     await router.depositToStrategies();
-    // console.log("strategies balance", await router.viewStrategiesBalance());
     
     // deploy new farm
     const Farm = await ethers.getContractFactory("MockFarm");

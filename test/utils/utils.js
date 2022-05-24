@@ -12,11 +12,12 @@ provider = ethers.provider;
 parseUsdc = (args) => parseUnits(args, 18);
 parseUsdt = (args) => parseUnits(args, 18);
 parseBusd = (args) => parseUnits(args, 18);
+parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 
 module.exports = {  getTokens, skipBlocks, skipCycleAndBlocks, 
                     printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256, 
-                    parseUsdt, parseUsdc, parseBusd, parseUniform, provider, getUSDC, getBUSD}
+                    parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT}
 
 // async function logFarmLPs() {
 //   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
@@ -34,6 +35,12 @@ async function getBUSD() {
 async function getUSDC() {
     let tokenAddress = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
     let tokenHolder = "0x6782472a11987e6f4a8afb10def25b498cb622db";
+    return await _getToken(tokenAddress, tokenHolder); 
+}
+
+async function getUSDT() {
+    let tokenAddress = "0x55d398326f99059fF775485246999027B3197955";
+    let tokenHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
     return await _getToken(tokenAddress, tokenHolder); 
 }
 

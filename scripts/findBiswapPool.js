@@ -2,7 +2,8 @@ const hre = require("hardhat");
 
 /**
  * Helper script to find index of a pool inside of the Biswap's MasterChef contract.
- * USDC-USDT id 4
+ * USDC-USDT id:4 lp:0x1483767E665B3591677Fd49F724bf7430C18Bf83
+ * BUSD-USDT id:1 lp:0xDA8ceb724A06819c0A5cDb4304ea0cB27F8304cF
  */
 
 async function main() {
@@ -31,7 +32,7 @@ async function main() {
       if(poolInfo.lpToken === pair) {
         found.push(i);
         console.log("found pool index:", i);
-        // break;
+        break;
       }
     } catch (error) {
         if(found.length == 0) console.log("POOL NOT FOUND");

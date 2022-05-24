@@ -11,7 +11,7 @@ parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
-describe("Trying to find source of bug", function () {
+describe("Trying to find better swap formula for add liquidity", function () {
 
 
   it("Snapshot evm", async function () {
@@ -87,9 +87,6 @@ describe("Trying to find source of bug", function () {
     CYCLE_DURATION = Number(await router.cycleDuration());
     INITIAL_SHARES = await router.INITIAL_SHARES();
 
-    // console.log(await exchange.estimateGas.test(parseUst("10"), ust.address, usdc.address));
-    // console.log(await exchange.test(parseUsdc("1000"), usdc.address, ust.address));
-    // console.log(await exchange.test(parseUst("1000"), ust.address, usdc.address));
   });
 
   it("Deploy acryptos_ust", async function () {
@@ -153,7 +150,7 @@ describe("Trying to find source of bug", function () {
 
       let {reserve0, reserve1} = await pair.getReserves();
       let ratio = reserve0.mul(parseEther("1")).div(reserve1);
-      console.log("reserves ratio", formatEther(ratio));
+      // console.log("reserves ratio", formatEther(ratio));
       // console.log("ratio", formatEther(ratio.mul(100)));
 
       // let ret = total.mul(reserve0).div(reserve0.add(reserve1));

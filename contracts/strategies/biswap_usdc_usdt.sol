@@ -41,7 +41,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
     function deposit(uint256 amount) external override onlyOwner {
 
-        // TODO: Is there a way to swap tokens to get perfect ratio to addLiquidity?
+        // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
 
         // swap a bit more to account for swap fee (0.06% on acryptos)
         uint256 usdtAmount = (amount * 5003) / 10000;
