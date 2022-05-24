@@ -38,6 +38,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("Deploy StrategyRouter", async function () {
 
     // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
+    // oracle = await ethers.getContractFactory("ChainlinkOracle");
     oracle = await ethers.getContractFactory("FakeOracle");
     oracle = await oracle.deploy();
     await oracle.deployed();

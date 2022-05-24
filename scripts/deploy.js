@@ -1,9 +1,5 @@
 const hre = require("hardhat");
-const { expect, should, use } = require("chai");
-const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const { getTokens, skipCycleTime, printStruct, logFarmLPs, BLOCKS_MONTH, skipBlocks, BLOCKS_DAY } = require("../test/utils");
 const { parseUsdc } = require("../test/utils/utils");
 
 // deploy script for testing on mainnet
@@ -35,6 +31,12 @@ async function main() {
   busd = await ethers.getContractAt("ERC20", "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56");
   usdc = await ethers.getContractAt("ERC20", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d");
 
+  // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
+  oracle = await ethers.getContractFactory("ChainlinkOracle");
+  oracle = await oracle.deploy();
+  await oracle.deployed();
+  console.log("ChainlinkOracle", oracle.address);
+
   // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
   exchange = await ethers.getContractFactory("Exchange");
   exchange = await exchange.deploy();
@@ -55,7 +57,7 @@ async function main() {
   await router.setExchange(exchange.address);
   await router.setFeePercent(FEE_PERCENT);
   await router.setFeeAddress(FEE_ADDRESS);
-  await router.setOracle(); throw Error()
+  await router.setOracle(oracle.address);
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
@@ -97,7 +99,7 @@ async function main() {
 
   // vvvvvvvvvvvvvvvvvvvvvvvvv VERIFICATION vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
   console.log("  - Verification will start in a minute...\n");
-  await delay(46000);
+  // await delay(46000);
 
 
   let deployedContracts = [
@@ -109,7 +111,8 @@ async function main() {
     await router.batching(),
     await router.sharesToken(),
     strategyBusd,
-    strategyUsdc
+    strategyUsdc,
+    oracle
   ];
 
   for (let i = 0; i < deployedContracts.length; i++) {

@@ -4,7 +4,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/contracts/src/v0.8/Denominations.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract ChainlinkOracle is Ownable {
     error StaleChainlinkPrice();
@@ -48,10 +48,11 @@ contract ChainlinkOracle is Ownable {
         ) = feed.latestRoundData();
 
         // console.log("getAssetUsdPrice updatedAt %s, current block: %s", updatedAt, block.timestamp);
+        // console.log(base, uint256(_price), updatedAt, block.timestamp);
 
         if (updatedAt <= block.timestamp - 24 hours)
             revert StaleChainlinkPrice();
-        if (price <= 0) revert BadPrice();
+        if (_price <= 0) revert BadPrice();
 
         return (uint256(_price), feed.decimals());
     }
