@@ -4,11 +4,12 @@ const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 const { getTokens, skipCycleTime, printStruct, logFarmLPs, BLOCKS_MONTH, skipBlocks, BLOCKS_DAY } = require("../test/utils");
+const { parseUsdc } = require("../test/utils/utils");
 
 // deploy script for testing on mainnet
 // to test on hardhat network:
 //   remove block pinning from config and uncomment 'accounts'
-//   in .env set account with bnb and at least 0.1 ust
+//   in .env set account with bnb and at least INITIAL_DEPOSIT usdc
 
 async function main() {
 
@@ -16,14 +17,10 @@ async function main() {
 
   [owner] = await ethers.getSigners();
 
-  // save deployment args in runtime, to simplify verification in deploy.js
-  // for some reason this snippet breaks gas-reporter, so need to find a better way to do it
   setupVerificationHelper();
+
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   provider = ethers.provider;
-  parseUsdc = (args) => parseUnits(args, 18);
-  parseUst = (args) => parseUnits(args, 18);
-  parseUniform = (args) => parseUnits(args, 18);
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
@@ -32,10 +29,11 @@ async function main() {
   MIN_DEPOSIT = parseUniform("0.0001");
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
   FEE_PERCENT = 1000;
+  INITIAL_DEPOSIT = parseUsdc("0.1");
 
-  // ~~~~~~~~~~~ GET UST ADDRESS ON MAINNET ~~~~~~~~~~~ 
-  UST = "0x23396cf899ca06c4472205fc903bdb4de249d6fc";
-  ust = await ethers.getContractAt("ERC20", UST);
+  // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
+  busd = await ethers.getContractAt("ERC20", "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56");
+  usdc = await ethers.getContractAt("ERC20", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d");
 
   // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
   exchange = await ethers.getContractFactory("Exchange");
@@ -57,43 +55,42 @@ async function main() {
   await router.setExchange(exchange.address);
   await router.setFeePercent(FEE_PERCENT);
   await router.setFeeAddress(FEE_ADDRESS);
+  await router.setOracle(); throw Error()
 
-  // ~~~~~~~~~~~ DEPLOY Acryptos UST strategy ~~~~~~~~~~~ 
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
-  strategyAcryptos = await ethers.getContractFactory("acryptos_ust");
-  strategyAcryptos = await strategyAcryptos.deploy(router.address);
-  await strategyAcryptos.deployed();
-  await strategyAcryptos.transferOwnership(router.address);
-  console.log("strategyAcryptos", strategyAcryptos.address);
+  strategyBusd = await ethers.getContractFactory("biswap_busd_usdt");
+  strategyBusd = await strategyBusd.deploy(router.address);
+  await strategyBusd.deployed();
+  await strategyBusd.transferOwnership(router.address);
+  console.log("strategyBusd", strategyBusd.address);
 
 
-  // ~~~~~~~~~~~ DEPLOY Biswap ust-busd strategy ~~~~~~~~~~~ 
-  strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
-  strategyBiswap = await strategyBiswap.deploy(router.address);
-  await strategyBiswap.deployed();
-  await strategyBiswap.transferOwnership(router.address);
-  console.log("strategyBiswap", strategyBiswap.address);
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+  strategyUsdc = await ethers.getContractFactory("biswap_usdc_usdt");
+  strategyUsdc = await strategyUsdc.deploy(router.address);
+  await strategyUsdc.deployed();
+  await strategyUsdc.transferOwnership(router.address);
+  console.log("strategyUsdc", strategyUsdc.address);
 
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("Setting supported stablecoin...");
-  await router.setSupportedStablecoin(ust.address, true);
+  await router.setSupportedStablecoin(busd.address, true);
+  await router.setSupportedStablecoin(usdc.address, true);
 
   console.log("Adding strategies...");
-  await router.addStrategy(strategyAcryptos.address, ust.address, 5000);
-  await router.addStrategy(strategyBiswap.address, ust.address, 5000);
+  await router.addStrategy(strategyBusd.address, busd.address, 5000);
+  await router.addStrategy(strategyUsdc.address, usdc.address, 5000);
 
 
-  // admin initial deposit seems to be fix for a problem, 
-  // if you deposit and withdraw multiple times (without initial deposit)
-  // then pps and shares become broken (they increasing because of dust always left on farms)
-  console.log("Approving ust for initial deposit...");
-  if((await ust.allowance(owner.address, router.address)).lt(parseUst("0.1"))) {
-    await ust.approve(router.address, parseUst("0.1"));
-    console.log("UST is approved...");
+  console.log("Approving for initial deposit...");
+  if((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
+    await usdc.approve(router.address, INITIAL_DEPOSIT);
+    console.log("usdc approved...");
   }
   console.log("Initial deposit to batch...");
-  await router.depositToBatch(ust.address, parseUst("0.1"));
+  await router.depositToBatch(usdc.address, INITIAL_DEPOSIT);
   console.log("Initial deposit to strategies...");
   await router.depositToStrategies();
 
@@ -109,9 +106,10 @@ async function main() {
     // these two deployed by StrategyRouter and they don't have constructor args
     // thus we can use their address with args set to [] for verification
     await router.receiptContract(),
+    await router.batching(),
     await router.sharesToken(),
-    strategyAcryptos,
-    strategyBiswap
+    strategyBusd,
+    strategyUsdc
   ];
 
   for (let i = 0; i < deployedContracts.length; i++) {
