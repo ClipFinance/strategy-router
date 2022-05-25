@@ -13,7 +13,7 @@ async function main() {
 
   [owner] = await ethers.getSigners();
 
-  setupVerificationHelper();
+  await setupVerificationHelper();
 
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   provider = ethers.provider;
@@ -115,6 +115,10 @@ async function main() {
     oracle
   ];
 
+  await verify(deployedContracts);
+}
+
+async function verify(deployedContracts) {
   for (let i = 0; i < deployedContracts.length; i++) {
     try {
       const contract = deployedContracts[i];
@@ -133,10 +137,9 @@ async function main() {
       console.log(error)
     }
   }
-
 }
 
-function setupVerificationHelper() {
+async function setupVerificationHelper() {
   let oldDeploy = hre.ethers.ContractFactory.prototype.deploy;
   hre.ethers.ContractFactory.prototype.deploy = async function (...args) {
     let contract = await oldDeploy.call(this, ...args);

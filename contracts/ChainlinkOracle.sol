@@ -47,9 +47,6 @@ contract ChainlinkOracle is Ownable {
 
         ) = feed.latestRoundData();
 
-        // console.log("getAssetUsdPrice updatedAt %s, current block: %s", updatedAt, block.timestamp);
-        // console.log(base, uint256(_price), updatedAt, block.timestamp);
-
         if (updatedAt <= block.timestamp - 24 hours)
             revert StaleChainlinkPrice();
         if (_price <= 0) revert BadPrice();
