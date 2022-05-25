@@ -2,7 +2,7 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("./utils");
+const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("../utils");
 
 module.exports = function strategyTest(strategyName, parseAmount, getDepositToken) {
   describe(`Test ${strategyName} strategy`, function () {

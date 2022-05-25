@@ -1,18 +1,10 @@
 const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-
-// ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
-provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 18);
-parseUst = (args) => parseUnits(args, 18);
-parseUniform = (args) => parseUnits(args, 18);
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
 describe("Test ReceiptNFT.walletOfOwner function", function () {
   it("Snapshot evm", async function () {
-    snapshotId = await provider.send("evm_snapshot");
+    snapshotId = await ethers.provider.send("evm_snapshot");
   });
   it("Deploy ReceiptNFT", async function () {
     receiptContract = await ethers.getContractFactory("ReceiptNFT");
@@ -54,13 +46,13 @@ describe("Test ReceiptNFT.walletOfOwner function", function () {
   // });
 
   it("Revert evm", async function () {
-    await provider.send("evm_revert", [snapshotId]);
+    await ethers.provider.send("evm_revert", [snapshotId]);
   });
 });
 
 async function skipCycleTime() {
-  await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  await provider.send("evm_mine");
+  await ethers.provider.send("evm_increaseTime", [CYCLE_DURATION]);
+  await ethers.provider.send("evm_mine");
 }
 function printStruct(struct) {
   let obj = struct;
