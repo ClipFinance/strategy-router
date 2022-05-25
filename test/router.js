@@ -4,7 +4,30 @@ const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib
 const { ethers, waffle } = require("hardhat");
 const { getTokens, MaxUint256 } = require("./utils");
 
+// ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
+provider = ethers.provider;
+parseUsdc = (args) => parseUnits(args, 18);
+parseUst = (args) => parseUnits(args, 18);
+parseUniform = (args) => parseUnits(args, 18);
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+
 describe("Test StrategyRouter with fake strategies", function () {
+
+  before(async function () {
+    await setupTokens();
+    await setupCore();
+    await setupFarms();
+    await setupSettings();
+    await adminInitialDeposit();
+  });
+
+  beforeEach(async function () {
+    snapshotId = await provider.send("evm_snapshot");
+  });
+
+  afterEach(async function () {
+    await provider.send("evm_revert", [snapshotId]);
+  });
 
   async function setupTokens() {
 
@@ -31,22 +54,6 @@ describe("Test StrategyRouter with fake strategies", function () {
     usdc = await getTokens(USDC, usdcHolder, parseUsdc("500000"), owner.address);
 
   };
-
-  before(async function () {
-    await setupTokens();
-    await setupCore();
-    await setupFarms();
-    await setupSettings();
-    await adminInitialDeposit();
-  });
-
-  beforeEach(async function () {
-    snapshotId = await provider.send("evm_snapshot");
-  });
-
-  afterEach(async function () {
-    await provider.send("evm_revert", [snapshotId]);
-  });
 
   async function setupCore() {
     // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
