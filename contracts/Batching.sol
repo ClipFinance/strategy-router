@@ -242,7 +242,7 @@ contract Batching is Ownable {
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function depositToBatch(
-        address msgSender,
+        address depositor,
         address depositToken,
         uint256 _amount
     ) external onlyOwner {
@@ -252,12 +252,12 @@ contract Batching is Ownable {
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
-        emit Deposit(msgSender, depositToken, _amount);
+        emit Deposit(depositor, depositToken, _amount);
         receiptContract.mint(
             router.currentCycleId(),
             amountUniform,
             depositToken,
-            msgSender
+            depositor
         );
     }
 
