@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import "@chainlink/contracts/src/v0.8/Denominations.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./interfaces/IUsdOracle.sol";
+import "../interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
 
