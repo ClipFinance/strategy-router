@@ -23,13 +23,13 @@ contract Exchange is Ownable {
     error RoutedSwapFailed();
     
     // acryptos ACS meta pool token ids
-    int128 public constant UST_ID = 0;
+    // int128 public constant UST_ID = 0;
     int128 public constant BUSD_ID = 1;
     int128 public constant BUSDT_ID = 2;
     int128 public constant DAI_ID = 3;
     int128 public constant USDC_ID = 4;
 
-    address public constant UST = 0x23396cF899Ca06c4472205fC903bDB4de249D6fC;
+    // address public constant UST = 0x23396cF899Ca06c4472205fC903bDB4de249D6fC;
     address public constant BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     address public constant BUSDT = 0x55d398326f99059fF775485246999027B3197955;
     address public constant DAI = 0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3;
@@ -43,16 +43,16 @@ contract Exchange is Ownable {
 
     IUniswapV2Router02 public pancakeRouter =
         IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-    // for now we only support one metapool: UST-BUSD-USDT-DAI-USDC
+    // metapool: UST-BUSD-USDT-DAI-USDC (NOTICE ust is unused)
     IAcryptoSPool public poolACS4UST =
         IAcryptoSPool(0x99c92765EfC472a9709Ced86310D64C4573c4b77);
 
     constructor() {
-        _setDexType(UST, BUSD, DexType.acryptosACS4UST);
-        _setDexType(UST, BUSDT, DexType.acryptosACS4UST);
-        _setDexType(UST, DAI, DexType.acryptosACS4UST);
-        _setDexType(UST, USDC, DexType.acryptosACS4UST);
-        _setCoinId(address(poolACS4UST), UST, UST_ID);
+        _setDexType(BUSD, BUSDT, DexType.acryptosACS4UST);
+        _setDexType(BUSD, USDC, DexType.acryptosACS4UST);
+        _setDexType(USDC, BUSDT, DexType.acryptosACS4UST);
+
+        // _setCoinId(address(poolACS4UST), UST, UST_ID);
         _setCoinId(address(poolACS4UST), BUSD, BUSD_ID);
         _setCoinId(address(poolACS4UST), BUSDT, BUSDT_ID);
         _setCoinId(address(poolACS4UST), DAI, DAI_ID);

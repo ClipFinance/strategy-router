@@ -13,7 +13,7 @@ import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -122,8 +122,6 @@ contract Batching is Ownable {
         address withdrawToken,
         uint256 amount
     ) public onlyOwner {
-        console.log("~~~~~~~~~~~~~ withdrawFromBatching ~~~~~~~~~~~~~");
-
         if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
@@ -143,23 +141,23 @@ contract Batching is Ownable {
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 receipt.token
             );
-            uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+            uint256 receiptValue = ((receipt.amount * price) /
+                10**priceDecimals);
             if (amount >= receiptValue) {
                 toWithdraw += receiptValue;
                 amount -= receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 toWithdraw += amount;
-                uint256 newReceiptAmount = receipt.amount * (receiptValue-amount) / receiptValue;
-                if(newReceiptAmount > 0)
+                uint256 newReceiptAmount = (receipt.amount *
+                    (receiptValue - amount)) / receiptValue;
+                if (newReceiptAmount > 0)
                     receiptContract.setAmount(receiptId, newReceiptAmount);
-                else
-                    receiptContract.burn(receiptId);
+                else receiptContract.burn(receiptId);
                 amount = 0;
             }
             if (amount == 0) break;
         }
-        console.log("toWithdraw", toWithdraw);
         _withdrawFromBatching(msgSender, toWithdraw, withdrawToken);
     }
 
@@ -169,7 +167,6 @@ contract Batching is Ownable {
         address withdrawToken
     ) public onlyOwner {
         (uint256 totalBalance, uint256[] memory balances) = viewBatchingValue();
-        // console.log("total %s, amount %s", totalBalance, amount);
         if (totalBalance < amount) revert NotEnoughInBatching();
 
         uint256 amountToTransfer;
@@ -184,17 +181,19 @@ contract Batching is Ownable {
         }
 
         // try withdraw token which balance is enough to do only 1 swap
-        if(amount != 0) {
-
+        if (amount != 0) {
             for (uint256 i; i < balances.length; i++) {
-                if(balances[i] >= amount) {
+                if (balances[i] >= amount) {
                     address token = stablecoins.at(i);
-                    (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
-                        token
-                    );
+                    (uint256 price, uint8 priceDecimals) = oracle
+                        .getAssetUsdPrice(token);
                     amountToTransfer = (amount * 10**priceDecimals) / price;
                     amountToTransfer = fromUniform(amountToTransfer, token);
-                    amountToTransfer = _trySwap(amountToTransfer, token, withdrawToken);
+                    amountToTransfer = _trySwap(
+                        amountToTransfer,
+                        token,
+                        withdrawToken
+                    );
                     amount = 0;
                     break;
                 }
@@ -202,7 +201,7 @@ contract Batching is Ownable {
         }
 
         // swap different tokens until withraw amount is fulfilled
-        if(amount != 0) {
+        if (amount != 0) {
             for (uint256 i; i < balances.length; i++) {
                 address token = stablecoins.at(i);
                 uint256 toSwap;
@@ -215,11 +214,7 @@ contract Batching is Ownable {
                     // adjust decimals of the token amount
                     toSwap = fromUniform(toSwap, token);
                     // swap for requested token
-                    amountToTransfer += _trySwap(
-                        toSwap,
-                        token,
-                        withdrawToken
-                    );
+                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
                     // reduce total withdraw usd value
                     amount -= balances[i];
                     balances[i] = 0;
@@ -231,11 +226,7 @@ contract Batching is Ownable {
                     // adjust decimals of the token amount
                     toSwap = fromUniform(toSwap, token);
                     // swap for requested token
-                    amountToTransfer += _trySwap(
-                        toSwap,
-                        token,
-                        withdrawToken
-                    );
+                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
                     amount = 0;
                     break;
                 }
@@ -258,8 +249,6 @@ contract Batching is Ownable {
         if (!supportsCoin(depositToken)) revert UnsupportedStablecoin();
         if (fromUniform(minDeposit, depositToken) > _amount)
             revert DepositUnderMinimum();
-
-        // console.log("~~~~~~~~~~~~~ depositToBatch ~~~~~~~~~~~~~");
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
@@ -309,8 +298,27 @@ contract Batching is Ownable {
         onlyOwner
         returns (uint256 totalDeposit, uint256[] memory balances)
     {
-        // console.log("~~~~~~~~~~~~~ rebalance batching ~~~~~~~~~~~~~");
-
+        /*
+        1 store supported-stables (set of unique addrs)
+            [a,b,c]
+        2 store their balances
+            [1,1,1]
+        3 store their sum with uniform decimals
+            3
+        4 create array of length = supported_stables + strategeis_stables (e.g. [a])
+            [a,b,c] + [a] = 4
+        5 store in that array balances from step 2, duplicated tokens should be ignored
+            [1, 0, 1, 1] (instead of [1,1...] we got [1,0...] because first two are both token a)
+        6 get desired balance for every strategy using their weights
+            [3] (our 1 strategy will get 100%)
+        6 store amounts that we need to sell or buy for each balance in order to match desired balances
+            toSell [0, 0, 1, 1] 
+            toBuy  [2, 0, 0, 0] (here we have 1 strategy so it takes 100% weight)
+            these arrays contain amounts with tokens' decimals
+        7 now sell 'toSell' amounts of respective tokens for 'toBuy' tokens
+            (token to amount connection is derived by index in the array)
+            (also track new strategies balances for cases where 1 token is shared by multiple strategies)
+    */
         uint256 totalInBatch;
 
         uint256 lenStables = stablecoins.length();
@@ -336,10 +344,6 @@ contract Batching is Ownable {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
                     break;
-                } else if (
-                    depositToken == _tokens[j] /* && _balances[j] == 0 */
-                ) {
-                    break;
                 }
             }
         }
@@ -350,7 +354,7 @@ contract Batching is Ownable {
 
         uint256[] memory toAdd = new uint256[](lenStrats);
         uint256[] memory toSell = new uint256[](_strategiesBalances.length);
-        for (uint256 i; i < lenStrats; ) {
+        for (uint256 i; i < lenStrats; i++) {
             uint256 desiredBalance = (totalInBatch *
                 router.viewStrategyPercentWeight(i)) / 1e18;
             desiredBalance = fromUniform(
@@ -363,7 +367,6 @@ contract Batching is Ownable {
                 } else if (desiredBalance < _strategiesBalances[i]) {
                     toSell[i] = _strategiesBalances[i] - desiredBalance;
                 }
-                i++;
             }
         }
 
@@ -375,33 +378,47 @@ contract Batching is Ownable {
             for (uint256 j; j < lenStrats; j++) {
                 if (toSell[i] == 0) break;
                 if (toAdd[j] > 0) {
-                    uint256 curSell = toSell[i] > toAdd[j]
-                        ? toAdd[j]
-                        : toSell[i];
-
+                    // if toSell's 'i' greater than strats-1 (e.g. strats 2, stables 2, i=2, 2>2-1==true)
+                    // then take supported_stablecoin[2-2=0]
+                    // otherwise take strategy_stablecoin[0 or 1]
                     address sellToken = i > lenStrats - 1
                         ? _tokens[i - lenStrats]
                         : router.viewStrategyDepositToken(i);
+                    address buyToken = router.viewStrategyDepositToken(j);
+
+                    uint256 sellUniform = toUniform(toSell[i], sellToken);
+                    uint256 addUniform = toUniform(toAdd[j], buyToken);
+                    // curSell should have sellToken decimals
+                    uint256 curSell = sellUniform > addUniform
+                        ? changeDecimals(
+                            addUniform,
+                            UNIFORM_DECIMALS,
+                            ERC20(sellToken).decimals()
+                        )
+                        : toSell[i];
 
                     // no need to swap small amounts
                     if (
                         toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
                     ) {
-                        unchecked {
-                            toSell[i] = 0;
-                            toAdd[j] -= curSell;
-                        }
+                        toSell[i] = 0;
+                        toAdd[j] -= changeDecimals(
+                            curSell,
+                            ERC20(sellToken).decimals(),
+                            ERC20(buyToken).decimals()
+                        );
                         break;
                     }
-                    address buyToken = router.viewStrategyDepositToken(j);
                     uint256 received = _trySwap(curSell, sellToken, buyToken);
 
                     _strategiesBalances[i] -= curSell;
                     _strategiesBalances[j] += received;
-                    unchecked {
-                        toSell[i] -= curSell;
-                        toAdd[j] -= curSell;
-                    }
+                    toSell[i] -= curSell;
+                    toAdd[j] -= changeDecimals(
+                        curSell,
+                        ERC20(sellToken).decimals(),
+                        ERC20(buyToken).decimals()
+                    );
                 }
             }
         }
@@ -431,7 +448,7 @@ contract Batching is Ownable {
             stablecoins.add(tokenAddress);
         } else {
             uint8 len = uint8(router.viewStrategiesCount());
-            // shouldn't remove tokens that are in use by active strategies
+            // don't remove tokens that are in use by active strategies
             for (uint256 i = 0; i < len; i++) {
                 if (router.viewStrategyDepositToken(i) == tokenAddress) {
                     revert CantRemoveTokenOfActiveStrategy();
@@ -471,7 +488,6 @@ contract Batching is Ownable {
                 IERC20(to),
                 address(this)
             );
-            // console.log("swapped amount %s, got %s", amount, result);
             return result;
         }
         return amount;

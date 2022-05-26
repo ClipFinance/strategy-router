@@ -9,34 +9,33 @@ import "../interfaces/IZapDepositer.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
-// import "hardhat/console.sol";
 
 
-contract biswap_usdc_usdt is Ownable, IStrategy {
-    ERC20 public constant USDC =
-        ERC20(0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d);
+contract biswap_busd_usdt is Ownable, IStrategy {
+    ERC20 public constant BUSD =
+        ERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
     ERC20 public constant USDT =
         ERC20(0x55d398326f99059fF775485246999027B3197955);
     ERC20 public constant bsw =
         ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
     ERC20 public constant lpToken =
-        ERC20(0x1483767E665B3591677Fd49F724bf7430C18Bf83);
+        ERC20(0xDA8ceb724A06819c0A5cDb4304ea0cB27F8304cF);
     IBiswapFarm public constant farm =
         IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
     IUniswapV2Router02 public constant biswapRouter =
         IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
     StrategyRouter public immutable strategyRouter;
-    uint256 private constant _poolId = 4;
+    uint256 private constant poolId = 1;
 
     uint256 private immutable LEFTOVER_TRESHOLD_BUSD = 10**USDT.decimals(); // 1USDT 
-    uint256 private immutable LEFTOVER_TRESHOLD_UST = 10**USDC.decimals(); // 1USDC 
+    uint256 private immutable LEFTOVER_TRESHOLD_UST = 10**BUSD.decimals(); // 1BUSD 
 
     constructor(StrategyRouter _strategyRouter) {
         strategyRouter = _strategyRouter;
     }
 
     function depositToken() external pure override returns (address) {
-        return address(USDC);
+        return address(BUSD);
     }
 
     function deposit(uint256 amount) external override onlyOwner {
@@ -45,19 +44,19 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         // swap a bit more to account for swap fee (0.06% on acryptos)
         uint256 usdtAmount = (amount * 5003) / 10000;
-        uint256 usdcAmount = amount - usdtAmount;
+        uint256 busdAmount = amount - usdtAmount;
 
         Exchange exchange = strategyRouter.exchange();
-        USDC.transfer(address(exchange), usdtAmount);
-        usdtAmount = exchange.swapRouted(usdtAmount, USDC, USDT, address(this));
+        BUSD.transfer(address(exchange), usdtAmount);
+        usdtAmount = exchange.swapRouted(usdtAmount, BUSD, USDT, address(this));
 
-        USDC.approve(address(biswapRouter), usdcAmount);
+        BUSD.approve(address(biswapRouter), busdAmount);
         USDT.approve(address(biswapRouter), usdtAmount);
         (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
             .addLiquidity(
-                address(USDC),
+                address(BUSD),
                 address(USDT),
-                usdcAmount,
+                busdAmount,
                 usdtAmount,
                 0,
                 0,
@@ -66,7 +65,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
             );
 
         lpToken.approve(address(farm), liquidity);
-        farm.deposit(_poolId, liquidity);
+        farm.deposit(poolId, liquidity);
     }
 
     function withdraw(uint256 amount)
@@ -87,7 +86,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         uint256 amountBusd;
         uint256 amountUstToBusd = amount - amountUst;
 
-        (_reserve0, _reserve1) = token0 == address(USDC)
+        (_reserve0, _reserve1) = token0 == address(BUSD)
             ? (_reserve0, _reserve1)
             : (_reserve1, _reserve0);
 
@@ -96,10 +95,10 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         uint256 liquidity = (lpToken.totalSupply() * (amountUst + amountBusd)) /
             (balance0 + balance1);
 
-        farm.withdraw(_poolId, liquidity);
+        farm.withdraw(poolId, liquidity);
         lpToken.approve(address(biswapRouter), liquidity);
         (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
-            address(USDC),
+            address(BUSD),
             address(USDT),
             lpToken.balanceOf(address(this)),
             0,
@@ -110,28 +109,28 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         USDT.transfer(address(exchange), amountB);
-        amountA += exchange.swapRouted(amountB, USDT, USDC, address(this));
-        USDC.transfer(msg.sender, amountA);
+        amountA += exchange.swapRouted(amountB, USDT, BUSD, address(this));
+        BUSD.transfer(msg.sender, amountA);
         amountWithdrawn = amountA;
     }
 
     function compound() external override onlyOwner {
-        farm.withdraw(_poolId, 0);
+        farm.withdraw(poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
 
         if (bswAmount > 0) {
             fix_leftover(0);
             sellReward(bswAmount);
-            uint256 balanceUst = USDC.balanceOf(address(this));
+            uint256 balanceUst = BUSD.balanceOf(address(this));
             uint256 balanceBusd = USDT.balanceOf(address(this));
 
-            USDC.approve(address(biswapRouter), balanceUst);
+            BUSD.approve(address(biswapRouter), balanceUst);
             USDT.approve(address(biswapRouter), balanceBusd);
 
             (uint256 amountA, uint256 amountB, uint256 liquidity) = biswapRouter
                 .addLiquidity(
-                    address(USDC),
+                    address(BUSD),
                     address(USDT),
                     balanceUst,
                     balanceBusd,
@@ -143,16 +142,16 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(farm), lpAmount);
-            farm.deposit(_poolId, lpAmount);
+            farm.deposit(poolId, lpAmount);
         }
     }
 
     function totalTokens() external view override returns (uint256) {
-        (uint256 liquidity, ) = farm.userInfo(_poolId, address(this));
+        (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
         uint256 _totalSupply = lpToken.totalSupply();
         // this formula is from remove_liquidity -> burn of uniswapV2pair
-        uint256 amountUst = (liquidity * USDC.balanceOf(address(lpToken))) /
+        uint256 amountUst = (liquidity * BUSD.balanceOf(address(lpToken))) /
             _totalSupply;
         uint256 amountBusd = (liquidity * USDT.balanceOf(address(lpToken))) /
             _totalSupply;
@@ -168,7 +167,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
                 ? (_reserve0, _reserve1)
                 : (_reserve1, _reserve0);
 
-            // convert amountBusd to amount USDC 
+            // convert amountBusd to amount BUSD 
             amountUst += biswapRouter.quote(amountBusd, _reserve0, _reserve1);
         }
 
@@ -181,13 +180,13 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        (uint256 amount, ) = farm.userInfo(_poolId, address(this));
+        (uint256 amount, ) = farm.userInfo(poolId, address(this));
         if (amount > 0) {
-            farm.withdraw(_poolId, amount);
+            farm.withdraw(poolId, amount);
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(biswapRouter), lpAmount);
             (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
-                address(USDC),
+                address(BUSD),
                 address(USDT),
                 lpToken.balanceOf(address(this)),
                 0,
@@ -197,7 +196,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
             );
         }
 
-        uint256 amountUst = USDC.balanceOf(address(this));
+        uint256 amountUst = BUSD.balanceOf(address(this));
         uint256 amountBusd = USDT.balanceOf(address(this));
 
         if (amountBusd > 0) {
@@ -206,12 +205,12 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
             amountUst += exchange.swapRouted(
                 amountBusd,
                 USDT,
-                USDC,
+                BUSD,
                 address(this)
             );
         }
         if (amountUst > 0) {
-            USDC.transfer(msg.sender, amountUst);
+            BUSD.transfer(msg.sender, amountUst);
             amountWithdrawn = amountUst;
         }
     }
@@ -220,26 +219,26 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
     function fix_leftover(uint256 amoungIgnore) private {
         Exchange exchange = strategyRouter.exchange();
         uint256 usdtAmount = USDT.balanceOf(address(this));
-        uint256 usdcAmount = USDC.balanceOf(address(this)) - amoungIgnore;
+        uint256 busdAmount = BUSD.balanceOf(address(this)) - amoungIgnore;
         uint256 toSwap;
         if (
-            usdtAmount > usdcAmount &&
-            (toSwap = usdtAmount - usdcAmount) > LEFTOVER_TRESHOLD_BUSD
+            usdtAmount > busdAmount &&
+            (toSwap = usdtAmount - busdAmount) > LEFTOVER_TRESHOLD_BUSD
         ) {
             toSwap = (toSwap * 5003) / 1e4;
             USDT.transfer(address(exchange), toSwap);
-            exchange.swapRouted(toSwap, USDT, USDC, address(this));
+            exchange.swapRouted(toSwap, USDT, BUSD, address(this));
         } else if (
-            usdcAmount > usdtAmount &&
-            (toSwap = usdcAmount - usdtAmount) > LEFTOVER_TRESHOLD_UST
+            busdAmount > usdtAmount &&
+            (toSwap = busdAmount - usdtAmount) > LEFTOVER_TRESHOLD_UST
         ) {
             toSwap = (toSwap * 5003) / 1e4;
-            USDC.transfer(address(exchange), toSwap);
-            exchange.swapRouted(toSwap, USDC, USDT, address(this));
+            BUSD.transfer(address(exchange), toSwap);
+            exchange.swapRouted(toSwap, BUSD, USDT, address(this));
         }
     }
 
-    // swap bsw for USDC & USDT in proportions 50/50
+    // swap bsw for BUSD & USDT in proportions 50/50
     function sellReward(uint256 amountA)
         private
         returns (uint256 receivedUst, uint256 receivedBusd)
@@ -253,7 +252,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         bsw.transfer(address(exchange), ustPart);
-        receivedUst = exchange.swapRouted(ustPart, bsw, USDC, address(this));
+        receivedUst = exchange.swapRouted(ustPart, bsw, BUSD, address(this));
 
         bsw.transfer(address(exchange), busdPart);
         receivedBusd = exchange.swapRouted(busdPart, bsw, USDT, address(this));
@@ -267,12 +266,8 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         uint256 fee = (amount * feePercent) / 1e4;
         if (fee > 0 && feeAddress != address(0)) {
             bsw.transfer(address(exchange), fee);
-            exchange.swapRouted(fee, bsw, USDC, feeAddress);
+            exchange.swapRouted(fee, bsw, BUSD, feeAddress);
         }
         return amount - fee;
-    }
-
-    function poolId() public view returns(uint256) {
-        return _poolId;
     }
 }

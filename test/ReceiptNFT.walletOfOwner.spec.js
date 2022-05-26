@@ -5,30 +5,32 @@ const { ethers, waffle } = require("hardhat");
 describe("Test ReceiptNFT.walletOfOwner function", function () {
   it("Snapshot evm", async function () {
     snapshotId = await ethers.provider.send("evm_snapshot");
+    [owner, joe] = await ethers.getSigners();
   });
   it("Deploy ReceiptNFT", async function () {
     receiptContract = await ethers.getContractFactory("ReceiptNFT");
     receiptContract = await receiptContract.deploy();
     arrayToNubmer = arr => arr.map(n => n.toNumber());
+    await receiptContract.setManager(owner.address);
   });
   it("Wallet with 0 tokens", async function () {
     expect(await receiptContract.walletOfOwner(owner.address)).to.be.empty;
   });
   it("Wallet with 1 token", async function () {
-    await receiptContract.mint(0, 0, owner.address);
+    await mintReceipt(owner.address);
     expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
     expect(await receiptContract.walletOfOwner(joe.address)).to.be.empty;
   });
   it("Two wallets with 1 token", async function () {
-    await receiptContract.mint(0, 0, joe.address);
+    await mintReceipt(joe.address);
     expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([0]);
     expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([1]);
   });
   it("Two wallets with more tokens", async function () {
-    await receiptContract.mint(0, 0, owner.address);
-    await receiptContract.mint(0, 0, joe.address);
-    await receiptContract.mint(0, 0, owner.address);
-    await receiptContract.mint(0, 0, joe.address);
+    await mintReceipt(owner.address);
+    await mintReceipt(joe.address);
+    await mintReceipt(owner.address);
+    await mintReceipt(joe.address);
     expect(arrayToNubmer(await receiptContract.walletOfOwner(owner.address))).to.be.eql([4, 2, 0]);
     expect(arrayToNubmer(await receiptContract.walletOfOwner(joe.address))).to.be.eql([5, 3, 1]);
   });
@@ -50,10 +52,10 @@ describe("Test ReceiptNFT.walletOfOwner function", function () {
   });
 });
 
-async function skipCycleTime() {
-  await ethers.provider.send("evm_increaseTime", [CYCLE_DURATION]);
-  await ethers.provider.send("evm_mine");
+async function mintReceipt(to) {
+  await receiptContract.mint(0, 0, ethers.constants.AddressZero, to);
 }
+
 function printStruct(struct) {
   let obj = struct;
   let out = {};
