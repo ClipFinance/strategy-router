@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract SharesToken is Ownable, ERC20 {
     constructor() ERC20("Clip-Finance Shares", "CF") {}
 
-
+    /// @dev Helper function to serve infinite approval to the StrategyRouter.
     function routerTransferFrom(
         address from,
         address to,

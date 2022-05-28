@@ -119,8 +119,7 @@ contract StrategyRouter is Ownable {
             sharesToken,
             receiptContract
         );
-        receiptContract.setManager(address(this));
-        receiptContract.setManager(address(batching));
+        receiptContract.init(address(this), address(batching));
         cycles[0].startAt = block.timestamp;
     }
 

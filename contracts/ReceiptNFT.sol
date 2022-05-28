@@ -2,14 +2,15 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+// import "@openzeppelin/contracts/access/Ownable.sol";
 
 // import "hardhat/console.sol";
 
-contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
+contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
 
     error NonexistenToken();
     error NotManager();
+    error AlreadyInitialized();
     
     struct ReceiptData {
         uint256 cycleId;
@@ -18,6 +19,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
     }
 
     uint256 private _tokenIdCounter;
+    bool private initialized;
 
     mapping(uint256 => ReceiptData) public receipts;
     mapping(address => bool) public managers;
@@ -29,7 +31,40 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
 
     constructor () { }
 
+    function init(address strategyRouter, address batching) external {
+        if(initialized == true) revert AlreadyInitialized();
+        managers[strategyRouter] = true;
+        managers[batching] = true;
+        initialized = true;
+    } 
 
+    function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
+        if (_exists(tokenId) == false) revert NonexistenToken();
+        receipts[tokenId].amount = amount;
+    }     
+
+    function mint(
+        uint256 cycleId, 
+        uint256 amount, 
+        address token, 
+        address wallet
+    ) external onlyManager {
+        uint256 _tokenId = _tokenIdCounter;
+        receipts[_tokenId] = ReceiptData({
+            cycleId: cycleId,
+            token: token,
+            amount: amount
+        });
+        _mint(wallet, _tokenId);
+        _tokenIdCounter++;
+    }
+
+    function burn(uint256 tokenId) external onlyManager {
+        _burn(tokenId);
+        delete receipts[tokenId];
+    } 
+
+    /// @notice Get receipt data recorded in NFT.
     function viewReceipt(uint256 tokenId) 
         external 
         view 
@@ -56,35 +91,5 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT"), Ownable {
             tokenId++;
         }
     }
-
-    function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
-        if (_exists(tokenId) == false) revert NonexistenToken();
-        receipts[tokenId].amount = amount;
-    }     
-    
-    function setManager(address _manager) external onlyOwner {
-        managers[_manager] = true;
-    } 
-
-    function mint(
-        uint256 cycleId, 
-        uint256 amount, 
-        address token, 
-        address wallet
-    ) external onlyManager {
-        uint256 _tokenId = _tokenIdCounter;
-        receipts[_tokenId] = ReceiptData({
-            cycleId: cycleId,
-            token: token,
-            amount: amount
-        });
-        _mint(wallet, _tokenId);
-        _tokenIdCounter++;
-    }
-
-    function burn(uint256 tokenId) external onlyManager {
-        _burn(tokenId);
-        delete receipts[tokenId];
-    } 
 
 }

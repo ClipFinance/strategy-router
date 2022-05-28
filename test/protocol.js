@@ -3,19 +3,14 @@ const { BigNumber } = require("ethers");
 const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { adminInitialDeposit, commonSetup } = require("./utils/commonSetup");
-const { printStruct, skipCycleAndBlocks, MaxUint256 } = require("./utils/utils");
+const { printStruct, skipCycleAndBlocks, MaxUint256, parseUsdc, parseBusd } = require("./utils/utils");
 
-// ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
-provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 18);
-parseUsdc = (args) => parseUnits(args, 18);
-parseUniform = (args) => parseUnits(args, 18);
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
 describe("Test StrategyRouter with two real strategies", function () {
 
   before(async function () {
 
+    provider = ethers.provider;
     snapshotId = await provider.send("evm_snapshot");
 
     await commonSetup();
@@ -35,6 +30,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
 
+    
     await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
     await router.addStrategy(strategyBiswap.address, usdc.address, 5000);
 
