@@ -15,62 +15,49 @@ parseBusd = (args) => parseUnits(args, 18);
 parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 
-module.exports = {  getTokens, skipBlocks, skipCycleAndBlocks, 
-                    printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256, 
-                    parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT}
-
-// async function logFarmLPs() {
-//   userInfo = await farmAcryptos.userInfo(lpTokenAcryptos.address, strategyAcryptos.address);
-//   console.log("acryptos farm lp tokens %s", userInfo.amount);
-//   userInfo = await farmBiswap.userInfo(poolIdBiswap, strategyBiswap.address);
-//   console.log("biswap farm lp tokens %s", userInfo.amount);
-// }
+module.exports = {
+  getTokens, skipBlocks, skipCycleAndBlocks,
+  printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
+  parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT
+}
 
 async function getBUSD() {
-    let tokenAddress = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
-    let tokenHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    return await _getToken(tokenAddress, tokenHolder);
+  return await getTokens(hre.networkVariables.busd, hre.networkVariables.busdHolder);
 }
 
 async function getUSDC() {
-    let tokenAddress = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
-    let tokenHolder = "0x6782472a11987e6f4a8afb10def25b498cb622db";
-    return await _getToken(tokenAddress, tokenHolder); 
+  return await getTokens(hre.networkVariables.usdc, hre.networkVariables.usdcHolder);
 }
 
 async function getUSDT() {
-    let tokenAddress = "0x55d398326f99059fF775485246999027B3197955";
-    let tokenHolder = "0xf977814e90da44bfa03b6295a0616a897441acec";
-    return await _getToken(tokenAddress, tokenHolder); 
+  return await getTokens(hre.networkVariables.usdt, hre.networkVariables.usdtHolder);
 }
 
-async function _getToken(tokenAddress, tokenHolder) {
-    let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
-    let decimals = await tokenContract.decimals();
-    let parse = (args) => parseUnits(args, decimals);
-    tokenContract = await getTokens(tokenAddress, tokenHolder, parse("500000"), owner.address); 
-    return tokenContract;
-}
-
-async function getTokens(token, holder, amount, to) {
-  token = await ethers.getContractAt("ERC20", token);
+// 'getTokens' functions are helpers to retrieve tokens during tests. 
+// Simply saying to draw fake balance for test wallet.
+async function getTokens(tokenAddress, holderAddress) {
+  let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
+  let decimals = await tokenContract.decimals();
+  let parse = (args) => parseUnits(args, decimals);
+  let tokenAmount = parse("500000");
+  let to = owner.address;
 
   await hre.network.provider.request({
     method: "hardhat_impersonateAccount",
-    params: [holder],
+    params: [holderAddress],
   });
-  holder = await ethers.getSigner(holder);
-  // set eth in case if holder has 0 eth.
+  let holder = await ethers.getSigner(holderAddress);
+  // set eth in case if holderAddress has 0 eth.
   await network.provider.send("hardhat_setBalance", [
     holder.address.toString(),
     "0x" + Number(parseEther("10000").toHexString(2)).toString(2),
   ]);
-  await token.connect(holder).transfer(
+  await tokenContract.connect(holder).transfer(
     to,
-    amount
+   tokenAmount 
   );
 
-  return token;
+  return tokenContract;
 }
 
 async function skipBlocks(blocksNum) {
@@ -85,7 +72,7 @@ async function skipCycleAndBlocks() {
 }
 
 // Usually tuples returned by solidity (or ethers.js) contain duplicated data
-// one data is named variables and second unnamed.
+// one data is named variables and second unnamed (e.g. {var:5, 5}).
 // This helper should remove such duplication and print result in console.
 function printStruct(struct) {
   let obj = struct;

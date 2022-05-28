@@ -2,41 +2,21 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
+const { commonSetup } = require("./commonSetup");
 const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("./utils");
 
 module.exports = function strategyTest(strategyName, parseAmount, getDepositToken) {
   describe(`Test ${strategyName} strategy`, function () {
 
-    it("Snapshot evm", async function () {
+    before(async function () {
       snapshotId = await provider.send("evm_snapshot");
-    });
-
-    it("Define globals", async function () {
-
-      [owner, joe, bob] = await ethers.getSigners();
-      // ~~~~~~~~~~~ GET EXCHANGE ROUTER ~~~~~~~~~~~ 
-      uniswapRouter = await ethers.getContractAt(
-        "IUniswapV2Router02",
-        "0x3a6d8ca21d1cf76f653a67577fa0d27453350dd8"
-      );
-
+      await commonSetup();
+      [owner, feeAddress] = await ethers.getSigners();
       depositToken = await getDepositToken();
     });
 
-    it("Deploy Exchange and router", async function () {
-      // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
-      exchange = await ethers.getContractFactory("Exchange");
-      exchange = await exchange.deploy();
-      await exchange.deployed();
-
-      // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
-      const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
-      router = await StrategyRouter.deploy();
-      await router.deployed();
-      await router.setMinUsdPerCycle(parseUniform("1.0"));
-      await router.setExchange(exchange.address);
-      await router.setFeePercent(2000);
-      await router.setFeeAddress(bob.address);
+    after(async function () {
+      await provider.send("evm_revert", [snapshotId]);
     });
 
     it(`deploy ${strategyName}`, async function () {
@@ -93,9 +73,9 @@ module.exports = function strategyTest(strategyName, parseAmount, getDepositToke
 
       // compound, should incsrease totalTokens
       let oldBalance = await strategy.totalTokens();
-      let oldFeeBalance = await depositToken.balanceOf(bob.address);
+      let oldFeeBalance = await depositToken.balanceOf(feeAddress.address);
       await strategy.compound();
-      let newFeeBalance = await depositToken.balanceOf(bob.address);
+      let newFeeBalance = await depositToken.balanceOf(feeAddress.address);
       let newBalance = await strategy.totalTokens();
 
       expect(newFeeBalance).to.be.gt(oldFeeBalance);
@@ -108,10 +88,6 @@ module.exports = function strategyTest(strategyName, parseAmount, getDepositToke
 
       expect(await strategy.totalTokens()).to.be.within(0, parseAmount("1"));
       expect(newBalance.sub(oldBalance)).to.be.closeTo(amountDeposit, parseAmount("100"));
-    });
-
-    it("Revert evm", async function () {
-      await provider.send("evm_revert", [snapshotId]);
     });
   });
 }

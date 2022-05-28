@@ -1,19 +1,14 @@
-const { expect, should, use } = require("chai");
+const { expect } = require("chai");
 const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
-const { ethers, waffle } = require("hardhat");
+const { parseUnits } = require("ethers/lib/utils");
+const { ethers } = require("hardhat");
 
-// ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
-provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 18);
-parseUst = (args) => parseUnits(args, 18);
-parseUniform = (args) => parseUnits(args, 18);
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 
 describe("Test ReceiptNFT.walletOfOwner function", function () {
   it("Snapshot evm", async function () {
     snapshotId = await provider.send("evm_snapshot");
     [owner, joe] = await ethers.getSigners();
+    provider = ethers.provider;
   });
   it("Deploy ReceiptNFT", async function () {
     receiptContract = await ethers.getContractFactory("ReceiptNFT");
@@ -62,15 +57,4 @@ describe("Test ReceiptNFT.walletOfOwner function", function () {
 
 async function mintReceipt(to) {
   await receiptContract.mint(0, 0, ethers.constants.AddressZero, to);
-}
-
-function printStruct(struct) {
-  let obj = struct;
-  let out = {};
-  for (let key in obj) {
-    if (!Number.isInteger(Number(key))) {
-      out[key] = obj[key];
-    }
-  }
-  console.log(out);
 }

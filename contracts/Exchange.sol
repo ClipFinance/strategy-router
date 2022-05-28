@@ -3,106 +3,77 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "./interfaces/IMainRegistry.sol";
-import "./interfaces/IExchangeRegistry.sol";
-import "./interfaces/IAcryptoSPool.sol";
+import "./interfaces/ICurvePool.sol";
 import "./StrategyRouter.sol";
 
 // import "hardhat/console.sol";
 
-enum DexType {
-    // pancakeswap with WETH as intermediary, default option
-    pancakeSwapThroughWETH,
-    // tokenA to tokenB direct swap on pancake
-    pancakeDirectSwap,
-    // ACS4UST metapool
-    acryptosACS4UST
-}
-
 contract Exchange is Ownable {
     error RoutedSwapFailed();
-    
-    // acryptos ACS meta pool token ids
-    // int128 public constant UST_ID = 0;
-    int128 public constant BUSD_ID = 1;
-    int128 public constant BUSDT_ID = 2;
-    int128 public constant DAI_ID = 3;
-    int128 public constant USDC_ID = 4;
+    error RouteNotFound();
 
-    // address public constant UST = 0x23396cF899Ca06c4472205fC903bDB4de249D6fC;
-    address public constant BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
-    address public constant BUSDT = 0x55d398326f99059fF775485246999027B3197955;
-    address public constant DAI = 0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3;
-    address public constant USDC = 0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d;
+    enum DexType {
+        // pancakeswap with WETH as intermediary, default option
+        pancakeSwapThroughWETH,
+        // tokenA to tokenB direct swap on pancake
+        pancakeDirectSwap,
+        // ACS4UST metapool
+        acryptosACS4UST
+    }
 
     // in dexTypes tokens addresses should be sorted in ascending order
     // tokenA -> tokenB -> DexType
-    mapping(address => mapping(address => DexType)) dexTypes;
-    // curve-like pool -> token -> coin id from pool
-    mapping(address => mapping(address => int128)) coinIds;
+    mapping(address => mapping(address => DexType)) public dexTypes;
 
-    IUniswapV2Router02 public pancakeRouter =
-        IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-    // metapool: UST-BUSD-USDT-DAI-USDC (NOTICE ust is unused)
-    IAcryptoSPool public poolACS4UST =
-        IAcryptoSPool(0x99c92765EfC472a9709Ced86310D64C4573c4b77);
+    // tokenA -> tokenB -> pool to use as exchange
+    mapping(address => mapping(address => address)) public pools;
+    // curve-like pool -> token -> id of the token in the pool
+    mapping(address => mapping(address => int128)) public coinIds;
 
-    constructor() {
-        _setDexType(BUSD, BUSDT, DexType.acryptosACS4UST);
-        _setDexType(BUSD, USDC, DexType.acryptosACS4UST);
-        _setDexType(USDC, BUSDT, DexType.acryptosACS4UST);
+    IUniswapV2Router02 public uniswapRouter;
 
-        // _setCoinId(address(poolACS4UST), UST, UST_ID);
-        _setCoinId(address(poolACS4UST), BUSD, BUSD_ID);
-        _setCoinId(address(poolACS4UST), BUSDT, BUSDT_ID);
-        _setCoinId(address(poolACS4UST), DAI, DAI_ID);
-        _setCoinId(address(poolACS4UST), USDC, USDC_ID);
-    }
+    constructor() {}
 
-    function sortTokens(address tokenA, address tokenB)
-        internal
-        pure
-        returns (address token0, address token1)
-    {
-        (token0, token1) = tokenA < tokenB
-            ? (tokenA, tokenB)
-            : (tokenB, tokenA);
-    }
-
-    /// @notice Choose how pair of tokens should be swapped.
+    /// @notice Choose DEX where pair of tokens should be swapped.
     /// @notice Order of tokens doesn't matter.
     function setDexType(
-        address tokenA,
-        address tokenB,
-        DexType _type
+        address[] calldata tokensA,
+        address[] calldata tokensB,
+        DexType[] calldata _types
     ) external onlyOwner {
-        _setDexType(tokenA, tokenB, _type);
+        for (uint256 i = 0; i < tokensA.length; i++) {
+            (address token0, address token1) = sortTokens(
+                tokensA[i],
+                tokensB[i]
+            );
+            dexTypes[token0][token1] = _types[i];
+        }
     }
 
-    function _setDexType(
+    /// @notice Set uniswap02-like router.
+    function setUniswapRouter(address _uniswapRouter) external onlyOwner {
+        uniswapRouter = IUniswapV2Router02(_uniswapRouter);
+    }
+
+    /// @notice Set curve-like pool to user to swap pair.
+    function setCurvePool(
         address tokenA,
         address tokenB,
-        DexType _type
-    ) private {
+        address pool
+    ) external onlyOwner {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        dexTypes[token0][token1] = _type;
+        pools[token0][token1] = pool;
     }
 
-    /// @notice Save coin ids of tokens from acryptos pool.
-    function setCoinId(
-        address _poolACS4UST,
-        address token,
-        int128 coinId
+    /// @notice Cache pool's token ids.
+    function setCoinIds(
+        address _curvePool,
+        address[] calldata tokens,
+        int128[] calldata _coinIds
     ) external onlyOwner {
-        _setCoinId(_poolACS4UST, token, coinId);
-    }
-
-    function _setCoinId(
-        address _poolACS4UST,
-        address token,
-        int128 coinId
-    ) private {
-        coinIds[address(_poolACS4UST)][token] = coinId;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            coinIds[address(_curvePool)][tokens[i]] = _coinIds[i];
+        }
     }
 
     function getDexType(address tokenA, address tokenB)
@@ -114,21 +85,30 @@ contract Exchange is Ownable {
         return dexTypes[token0][token1];
     }
 
+    function getAcryptosPool(address tokenA, address tokenB)
+        internal
+        view
+        returns (address)
+    {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        return pools[token0][token1];
+    }
+
     function swapRouted(
         uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB,
+        address tokenA,
+        address tokenB,
         address to
     ) public returns (uint256 amountReceived) {
         DexType _dexType = getDexType(address(tokenA), address(tokenB));
         amountReceived = swap(amountA, tokenA, tokenB, _dexType, to);
-        if(amountReceived == 0) revert RoutedSwapFailed();
+        if (amountReceived == 0) revert RoutedSwapFailed();
     }
 
     function swap(
         uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB,
+        address tokenA,
+        address tokenB,
         DexType _dexType,
         address to
     ) public returns (uint256 amountReceivedTokenB) {
@@ -140,23 +120,23 @@ contract Exchange is Ownable {
             return _swapOnAcryptosUST(amountA, tokenA, tokenB, to);
         }
 
-        revert("No swap route");
+        revert RouteNotFound();
     }
 
     function _swapOnPancakeWithWETH(
         uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB,
+        address tokenA,
+        address tokenB,
         address to
     ) private returns (uint256 amountReceivedTokenB) {
-        tokenA.approve(address(pancakeRouter), amountA);
+        IERC20(tokenA).approve(address(uniswapRouter), amountA);
 
         address[] memory path = new address[](3);
         path[0] = address(tokenA);
-        path[1] = pancakeRouter.WETH();
+        path[1] = uniswapRouter.WETH();
         path[2] = address(tokenB);
 
-        uint256 received = pancakeRouter.swapExactTokensForTokens(
+        uint256 received = uniswapRouter.swapExactTokensForTokens(
             amountA,
             0,
             path,
@@ -164,24 +144,24 @@ contract Exchange is Ownable {
             block.timestamp
         )[path.length - 1];
 
-        tokenB.transfer(to, received);
+        IERC20(tokenB).transfer(to, received);
 
         return received;
-    }    
-    
+    }
+
     function _swapOnPancakeDirect(
         uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB,
+        address tokenA,
+        address tokenB,
         address to
     ) private returns (uint256 amountReceivedTokenB) {
-        tokenA.approve(address(pancakeRouter), amountA);
+        IERC20(tokenA).approve(address(uniswapRouter), amountA);
 
         address[] memory path = new address[](2);
         path[0] = address(tokenA);
         path[1] = address(tokenB);
 
-        uint256 received = pancakeRouter.swapExactTokensForTokens(
+        uint256 received = uniswapRouter.swapExactTokensForTokens(
             amountA,
             0,
             path,
@@ -189,32 +169,43 @@ contract Exchange is Ownable {
             block.timestamp
         )[path.length - 1];
 
-        tokenB.transfer(to, received);
+        IERC20(tokenB).transfer(to, received);
 
         return received;
     }
 
     function _swapOnAcryptosUST(
         uint256 amountA,
-        IERC20 tokenA,
-        IERC20 tokenB,
+        address tokenA,
+        address tokenB,
         address to
     ) private returns (uint256 amountReceivedTokenB) {
-        tokenA.approve(address(poolACS4UST), amountA);
+        address pool = getAcryptosPool(tokenA, tokenB);
+        IERC20(tokenA).approve(address(pool), amountA);
 
-        int128 _tokenAIndex = coinIds[address(poolACS4UST)][address(tokenA)];
-        int128 _tokenBIndex = coinIds[address(poolACS4UST)][address(tokenB)];
+        int128 _tokenAIndex = coinIds[address(pool)][tokenA];
+        int128 _tokenBIndex = coinIds[address(pool)][tokenB];
 
         // console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
-        uint256 received = poolACS4UST.exchange_underlying(
+        uint256 received = ICurvePool(pool).exchange_underlying(
             _tokenAIndex,
             _tokenBIndex,
             amountA,
             0
         );
 
-        tokenB.transfer(to, received);
+        IERC20(tokenB).transfer(to, received);
 
         return received;
+    }
+
+    function sortTokens(address tokenA, address tokenB)
+        internal
+        pure
+        returns (address token0, address token1)
+    {
+        (token0, token1) = tokenA < tokenB
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
     }
 }

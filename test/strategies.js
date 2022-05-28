@@ -3,7 +3,7 @@ const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 const strategyTest = require("./utils/strategyTest");
-const { getTokens, skipBlocks, BLOCKS_MONTH, parseUsdc, parseBusd, getUSDC, getBUSD } = require("./utils/utils");
+const { parseUsdc, parseBusd, getUSDC, getBUSD } = require("./utils/utils");
 
 describe("Test strategies", function () {
 

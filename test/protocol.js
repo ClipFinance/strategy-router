@@ -1,8 +1,9 @@
-const { expect, should, use } = require("chai");
+const { expect } = require("chai");
 const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
-const { ethers, waffle } = require("hardhat");
-const { getTokens, MONTH_SECONDS, printStruct, skipCycleAndBlocks, MaxUint256, getBUSD, getUSDC } = require("./utils/utils");
+const { parseEther, parseUnits } = require("ethers/lib/utils");
+const { ethers } = require("hardhat");
+const { adminInitialDeposit, commonSetup } = require("./utils/commonSetup");
+const { printStruct, skipCycleAndBlocks, MaxUint256 } = require("./utils/utils");
 
 // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~ 
 provider = ethers.provider;
@@ -13,110 +14,37 @@ parseUniform = (args) => parseUnits(args, 18);
 
 describe("Test StrategyRouter with two real strategies", function () {
 
+  before(async function () {
 
-  it("Snapshot evm", async function () {
     snapshotId = await provider.send("evm_snapshot");
+
+    await commonSetup();
+
+    // setup supported stables
+    await router.setSupportedStablecoin(usdc.address, true);
+    await router.setSupportedStablecoin(busd.address, true);
+
+    // deploy strategies with real farms
+    strategyBiswap2 = await ethers.getContractFactory("biswap_busd_usdt");
+    strategyBiswap2 = await strategyBiswap2.deploy(router.address);
+    await strategyBiswap2.deployed();
+    await strategyBiswap2.transferOwnership(router.address);
+
+    strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
+    strategyBiswap = await strategyBiswap.deploy(router.address);
+    await strategyBiswap.deployed();
+    await strategyBiswap.transferOwnership(router.address);
+
+    await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
+    await router.addStrategy(strategyBiswap.address, usdc.address, 5000);
+
+    await adminInitialDeposit();
   });
 
   after(async function () {
     await provider.send("evm_revert", [snapshotId]);
   });
 
-  it("Define globals", async function () {
-
-    [owner, joe, bob] = await ethers.getSigners();
-    // ~~~~~~~~~~~ GET EXCHANGE ROUTER ~~~~~~~~~~~ 
-    uniswapRouter = await ethers.getContractAt(
-      "IUniswapV2Router02",
-      "0x10ED43C718714eb63d5aA57B78B54704E256024E"
-    );
-
-    busd = await getBUSD();
-    usdc = await getUSDC();
-  });
-
-  it("Deploy StrategyRouter", async function () {
-
-    // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
-    // oracle = await ethers.getContractFactory("ChainlinkOracle");
-    oracle = await ethers.getContractFactory("FakeOracle");
-    oracle = await oracle.deploy();
-    await oracle.deployed();
-
-    // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
-    exchange = await ethers.getContractFactory("Exchange");
-    exchange = await exchange.deploy();
-    await exchange.deployed();
-
-    // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
-    const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
-    router = await StrategyRouter.deploy();
-    await router.deployed();
-    await router.setMinUsdPerCycle(parseUniform("1.0"));
-    await router.setExchange(exchange.address);
-    await router.setOracle(oracle.address);
-
-    // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
-    batching = await ethers.getContractAt(
-      "Batching",
-      await router.batching()
-    );
-    receiptContract = await ethers.getContractAt(
-      "ReceiptNFT",
-      await router.receiptContract()
-    );
-    sharesToken = await ethers.getContractAt(
-      "SharesToken",
-      await router.sharesToken()
-    );
-    exchange = await ethers.getContractAt(
-      "Exchange",
-      await router.exchange()
-    );
-
-    await router.setCycleDuration(MONTH_SECONDS);
-    CYCLE_DURATION = Number(await router.cycleDuration());
-    INITIAL_SHARES = Number(await router.INITIAL_SHARES());
-
-  });
-
-  it("Deploy biswap_busd_usdt", async function () {
-
-    // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-    strategyBiswap2 = await ethers.getContractFactory("biswap_busd_usdt");
-    strategyBiswap2 = await strategyBiswap2.deploy(router.address);
-    await strategyBiswap2.deployed();
-    await strategyBiswap2.transferOwnership(router.address);
-  });
-
-  it("Deploy biswap_usdc_usdt", async function () {
-
-    // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-    strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
-    strategyBiswap = await strategyBiswap.deploy(router.address);
-    await strategyBiswap.deployed();
-    await strategyBiswap.transferOwnership(router.address);
-  });
-
-  it("Add strategies and stablecoins", async function () {
-    await router.setSupportedStablecoin(busd.address, true);
-    await router.setSupportedStablecoin(usdc.address, true);
-
-    await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
-    await router.addStrategy(strategyBiswap.address, usdc.address, 5000);
-  });
-
-
-  it("Admin initial deposit", async function () {
-    await usdc.approve(router.address, parseUsdc("1000000"));
-
-    await router.depositToBatch(usdc.address, parseUsdc("100"));
-    await skipCycleAndBlocks();
-    await router.depositToStrategies();
-    await skipCycleAndBlocks();
-
-    expect(await sharesToken.totalSupply()).to.be.equal(INITIAL_SHARES);
-  });
 
   it("User deposit", async function () {
 
@@ -156,12 +84,11 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Deposit to strategies", async function () {
-    await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-    await provider.send("evm_mine");
+    await skipCycleAndBlocks();
 
     await router.depositToStrategies();
     expect((await router.viewStrategiesValue()).totalBalance).to.be.closeTo(
-      parseUniform("200"),
+      parseUniform("100"),
       parseUniform("1.5")
     );
   });
@@ -171,13 +98,12 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Deposit to strategies", async function () {
-    await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-    await provider.send("evm_mine");
+    await skipCycleAndBlocks();
 
     await router.depositToStrategies();
 
     expect((await router.viewStrategiesValue()).totalBalance).to.be.closeTo(
-      parseUniform("300"),
+      parseUniform("200"),
       parseUniform("2.0")
     );
   });
@@ -225,7 +151,6 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
   });
 
   it("Farms should be empty on withdraw all multiple times", async function () {
@@ -249,7 +174,6 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
 
   });
 
@@ -291,7 +215,6 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
   });
 
   it("Test rebalance function", async function () {
@@ -319,8 +242,6 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToBatch(usdc.address, parseUsdc("100000"));
     // deposit to strategies
     await skipCycleAndBlocks();
-    // await provider.send("evm_increaseTime", [CYCLE_DURATION]);
-    // await provider.send("evm_mine");
     await router.depositToStrategies();
 
     // user deposit
@@ -366,8 +287,6 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(await sharesToken.balanceOf(router.address)).to.be.within(0, 10);
-    expect(await sharesToken.balanceOf(joe.address)).to.be.equal(0);
-
   });
 
 });

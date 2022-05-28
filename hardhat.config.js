@@ -1,4 +1,5 @@
 const { parseEther } = require("ethers/lib/utils");
+const { extendEnvironment } = require("hardhat/config");
 
 require("dotenv").config();
 require("@nomiclabs/hardhat-waffle");
@@ -6,6 +7,26 @@ require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
 require('solidity-docgen');
+
+const networkVariables = require('./networkVariables');
+
+// Fill networkVariables object with settings and addresses based on current network or fork.
+extendEnvironment((hre) => {
+  if(hre.network.name == 'hardhat') {
+    if(hre.network.config.forking.enabled) {
+      switch (hre.network.config.forking.url) {
+        case process.env.BNB_URL:
+          // console.log(networkVariables);
+          hre.networkVariables = networkVariables['bnb'];
+          break;
+      }
+    }
+  } else {
+    hre.networkVariables = networkVariables[hre.network.name];
+  }
+  if(!hre.networkVariables) throw Error("network variables are missing");
+  // console.log(hre.networkVariables);
+});
 
 /**
  * @type import('hardhat/config').HardhatUserConfig

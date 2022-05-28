@@ -49,7 +49,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         USDC.transfer(address(exchange), usdtAmount);
-        usdtAmount = exchange.swapRouted(usdtAmount, USDC, USDT, address(this));
+        usdtAmount = exchange.swapRouted(usdtAmount, address(USDC), address(USDT), address(this));
 
         USDC.approve(address(biswapRouter), usdcAmount);
         USDT.approve(address(biswapRouter), usdtAmount);
@@ -110,7 +110,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         USDT.transfer(address(exchange), amountB);
-        amountA += exchange.swapRouted(amountB, USDT, USDC, address(this));
+        amountA += exchange.swapRouted(amountB, address(USDT), address(USDC), address(this));
         USDC.transfer(msg.sender, amountA);
         amountWithdrawn = amountA;
     }
@@ -205,8 +205,8 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
             USDT.transfer(address(exchange), amountBusd);
             amountUst += exchange.swapRouted(
                 amountBusd,
-                USDT,
-                USDC,
+                address(USDT),
+                address(USDC),
                 address(this)
             );
         }
@@ -228,14 +228,14 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         ) {
             toSwap = (toSwap * 5003) / 1e4;
             USDT.transfer(address(exchange), toSwap);
-            exchange.swapRouted(toSwap, USDT, USDC, address(this));
+            exchange.swapRouted(toSwap, address(USDT), address(USDC), address(this));
         } else if (
             usdcAmount > usdtAmount &&
             (toSwap = usdcAmount - usdtAmount) > LEFTOVER_TRESHOLD_UST
         ) {
             toSwap = (toSwap * 5003) / 1e4;
             USDC.transfer(address(exchange), toSwap);
-            exchange.swapRouted(toSwap, USDC, USDT, address(this));
+            exchange.swapRouted(toSwap, address(USDC), address(USDT), address(this));
         }
     }
 
@@ -253,10 +253,10 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         bsw.transfer(address(exchange), ustPart);
-        receivedUst = exchange.swapRouted(ustPart, bsw, USDC, address(this));
+        receivedUst = exchange.swapRouted(ustPart, address(bsw), address(USDC), address(this));
 
         bsw.transfer(address(exchange), busdPart);
-        receivedBusd = exchange.swapRouted(busdPart, bsw, USDT, address(this));
+        receivedBusd = exchange.swapRouted(busdPart, address(bsw), address(USDT), address(this));
     }
 
     function takeFee(uint256 amount) private returns (uint256 amountAfterFee) {
@@ -267,7 +267,7 @@ contract biswap_usdc_usdt is Ownable, IStrategy {
         uint256 fee = (amount * feePercent) / 1e4;
         if (fee > 0 && feeAddress != address(0)) {
             bsw.transfer(address(exchange), fee);
-            exchange.swapRouted(fee, bsw, USDC, feeAddress);
+            exchange.swapRouted(fee, address(bsw), address(USDC), feeAddress);
         }
         return amount - fee;
     }

@@ -32,6 +32,11 @@ contract Batching is Ownable {
         uint256 amount
     );
 
+    // Events for setters.
+    event SetOracle(address newAddress);
+    event SetExchange(address newAddress);
+    event SetMinDeposit(uint256 newAmount);
+
     /* ERRORS */
 
     error AlreadyAddedStablecoin();
@@ -233,6 +238,7 @@ contract Batching is Ownable {
             }
         }
         IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
+        emit WithdrawFromBatching(msgSender, withdrawToken, amountToTransfer);
     }
 
     /// @notice Deposit stablecoin into batching.
@@ -275,12 +281,14 @@ contract Batching is Ownable {
     /// @dev Admin function.
     function setOracle(IUsdOracle _oracle) external onlyOwner {
         oracle = _oracle;
+        emit SetOracle(address(_oracle));
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
     function setExchange(Exchange newExchange) external onlyOwner {
         exchange = newExchange;
+        emit SetExchange(address(newExchange));
     }
 
     /// @notice Minimum to be deposited in the batching.
@@ -288,6 +296,7 @@ contract Batching is Ownable {
     /// @dev Admin function.
     function setMinDeposit(uint256 amount) external onlyOwner {
         minDeposit = amount;
+        emit SetMinDeposit(amount);
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
@@ -484,8 +493,8 @@ contract Batching is Ownable {
             IERC20(from).transfer(address(exchange), amount);
             result = exchange.swapRouted(
                 amount,
-                IERC20(from),
-                IERC20(to),
+                from,
+                to,
                 address(this)
             );
             return result;

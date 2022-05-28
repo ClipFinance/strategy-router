@@ -2,71 +2,20 @@ const { expect, should, use, assert } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
+const { commonSetup } = require("./utils/commonSetup");
 const { getTokens, getBUSD, getUSDC, getUSDT, parseBusd, parseUsdt, parseUsdc } = require("./utils/utils");
 
 describe("Test rebalance functions", function () {
 
-
-  it("Snapshot evm", async function () {
-    snapshotId = await provider.send("evm_snapshot");
+  before(async function () {
+    snapshotId0 = await provider.send("evm_snapshot");
+    await commonSetup();
+    usdt = await getUSDT();
+    await router.setCycleDuration(1);
   });
 
   after(async function () {
-    await provider.send("evm_revert", [snapshotId]);
-  });
-
-  it("Define globals", async function () {
-
-    [owner, joe, bob] = await ethers.getSigners();
-
-    // ~~~~~~~~~~~ GET TOKENS ON MAINNET ~~~~~~~~~~~ 
-    busd = await getBUSD();
-    usdc = await getUSDC();
-    usdt = await getUSDT();
-
-  });
-
-  it("Deploy StrategyRouter", async function () {
-
-    // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
-    oracle = await ethers.getContractFactory("FakeOracle");
-    oracle = await oracle.deploy();
-    await oracle.deployed();
-
-    // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
-    exchange = await ethers.getContractFactory("Exchange");
-    exchange = await exchange.deploy();
-    await exchange.deployed();
-
-    // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
-    const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
-    router = await StrategyRouter.deploy();
-    await router.deployed();
-    await router.setMinUsdPerCycle(parseUniform("1.0"));
-    await router.setExchange(exchange.address);
-    await router.setOracle(oracle.address);
-
-    // ~~~~~~~~~~~ SETUP GLOBALS ~~~~~~~~~~~ 
-    batching = await ethers.getContractAt(
-      "Batching",
-      await router.batching()
-    );
-    receiptContract = await ethers.getContractAt(
-      "ReceiptNFT",
-      await router.receiptContract()
-    );
-    sharesToken = await ethers.getContractAt(
-      "SharesToken",
-      await router.sharesToken()
-    );
-    exchange = await ethers.getContractAt(
-      "Exchange",
-      await router.exchange()
-    );
-
-    await router.setCycleDuration(1);
-    CYCLE_DURATION = Number(await router.cycleDuration());
-    INITIAL_SHARES = await router.INITIAL_SHARES();
+    await provider.send("evm_revert", [snapshotId0]);
   });
 
   it("Approve router", async function () {
@@ -76,10 +25,11 @@ describe("Test rebalance functions", function () {
   });
 
   it("evm_snapshot", async function () {
-    snapshotId = await provider.send("evm_snapshot");
+      snapshotId = await provider.send("evm_snapshot");
   });
 
   describe("Test rebalanceBatching function", function () {
+
     beforeEach(async () => {
       // console.log("bef each");
       await provider.send("evm_revert", [snapshotId]);

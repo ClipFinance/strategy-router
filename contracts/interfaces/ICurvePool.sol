@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-interface IAcryptoSPool {
+interface ICurvePool {
   function A (  ) external view returns ( uint256 );
   function A_precise (  ) external view returns ( uint256 );
   function get_virtual_price (  ) external view returns ( uint256 );

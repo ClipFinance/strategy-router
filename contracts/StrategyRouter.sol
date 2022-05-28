@@ -1092,8 +1092,8 @@ contract StrategyRouter is Ownable {
             IERC20(from).transfer(address(exchange), amount);
             result = exchange.swapRouted(
                 amount,
-                IERC20(from),
-                IERC20(to),
+                from,
+                to,
                 address(this)
             );
             return result;
