@@ -8,8 +8,8 @@ const { parseUsdc, parseBusd, getUSDC, getBUSD } = require("./utils/utils");
 describe("Test strategies", function () {
 
   let strategies = [
-    { name: "biswap_usdc_usdt", parseAmount: parseUsdc, getDepositToken: getUSDC },
-    { name: "biswap_busd_usdt", parseAmount: parseBusd, getDepositToken: getBUSD },
+    { name: "BiswapUsdcUsdt", parseAmount: parseUsdc, getDepositToken: getUSDC },
+    { name: "BiswapBusdUsdt", parseAmount: parseBusd, getDepositToken: getBUSD },
   ];
 
   for (let i = 0; i < strategies.length; i++) {

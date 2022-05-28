@@ -61,7 +61,7 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
-  strategyBusd = await ethers.getContractFactory("biswap_busd_usdt");
+  strategyBusd = await ethers.getContractFactory("BiswapBusdUsdt");
   strategyBusd = await strategyBusd.deploy(router.address);
   await strategyBusd.deployed();
   await strategyBusd.transferOwnership(router.address);
@@ -69,7 +69,7 @@ async function main() {
 
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-  strategyUsdc = await ethers.getContractFactory("biswap_usdc_usdt");
+  strategyUsdc = await ethers.getContractFactory("BiswapUsdcUsdt");
   strategyUsdc = await strategyUsdc.deploy(router.address);
   await strategyUsdc.deployed();
   await strategyUsdc.transferOwnership(router.address);

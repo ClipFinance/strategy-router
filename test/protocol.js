@@ -25,12 +25,12 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.setSupportedStablecoin(busd.address, true);
 
     // deploy strategies with real farms
-    strategyBiswap2 = await ethers.getContractFactory("biswap_busd_usdt");
+    strategyBiswap2 = await ethers.getContractFactory("BiswapBusdUsdt");
     strategyBiswap2 = await strategyBiswap2.deploy(router.address);
     await strategyBiswap2.deployed();
     await strategyBiswap2.transferOwnership(router.address);
 
-    strategyBiswap = await ethers.getContractFactory("biswap_usdc_usdt");
+    strategyBiswap = await ethers.getContractFactory("BiswapUsdcUsdt");
     strategyBiswap = await strategyBiswap.deploy(router.address);
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
@@ -133,7 +133,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Withdraw from strategies", async function () {
-    await printStruct(await receiptContract.viewReceipt(3));
+
     let oldBalance = await usdc.balanceOf(owner.address);
     let shares = await router.receiptsToShares([3]);
     await router.withdrawFromStrategies([3], usdc.address, shares);
@@ -185,7 +185,7 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToStrategies();
 
     // deploy new strategy
-    const Farm = await ethers.getContractFactory("biswap_busd_usdt");
+    const Farm = await ethers.getContractFactory("BiswapBusdUsdt");
     farm2 = strategyBiswap = await Farm.deploy(router.address);
     await farm2.deployed();
     await farm2.transferOwnership(router.address);
