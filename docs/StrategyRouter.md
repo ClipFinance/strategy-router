@@ -143,10 +143,10 @@ function receiptToShares(uint256 receiptId) public view returns (uint256 shares)
 Returns amount of shares retrievable by receipt.
 Cycle noted in receipt should be closed.
 
-### sharesToAmount
+### sharesToValue
 
 ```solidity
-function sharesToAmount(uint256 shares) public view returns (uint256 amount)
+function sharesToValue(uint256 shares) public view returns (uint256 amount)
 ```
 
 Calculate how much usd shares representing using current price per share.

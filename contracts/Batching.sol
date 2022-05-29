@@ -45,7 +45,6 @@ contract Batching is Ownable {
     error NotReceiptOwner();
     error CycleClosed();
     error DepositUnderMinimum();
-    error AmountNotSpecified();
     error NotEnoughInBatching();
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -119,15 +118,14 @@ contract Batching is Ownable {
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported stablecoin that user wish to receive.
-    /// @param amount Amount of USD to withdraw.
+    /// @param amounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
-    function withdrawFromBatching(
-        address msgSender,
+    function withdraw(
+        address withdrawer,
         uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256 amount
+        uint256[] calldata amounts
     ) public onlyOwner {
-        if (amount == 0) revert AmountNotSpecified();
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
@@ -135,7 +133,7 @@ contract Batching is Ownable {
         uint256 toWithdraw;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != msgSender)
+            if (receiptContract.ownerOf(receiptId) != withdrawer)
                 revert NotReceiptOwner();
 
             ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
@@ -146,28 +144,26 @@ contract Batching is Ownable {
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 receipt.token
             );
-            uint256 receiptValue = ((receipt.amount * price) /
-                10**priceDecimals);
-            if (amount >= receiptValue) {
+
+            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
+                // withdraw whole receipt and burn receipt
+                uint256 receiptValue = ((receipt.amount * price) /
+                    10**priceDecimals);
                 toWithdraw += receiptValue;
-                amount -= receiptValue;
                 receiptContract.burn(receiptId);
             } else {
-                toWithdraw += amount;
-                uint256 newReceiptAmount = (receipt.amount *
-                    (receiptValue - amount)) / receiptValue;
-                if (newReceiptAmount > 0)
-                    receiptContract.setAmount(receiptId, newReceiptAmount);
-                else receiptContract.burn(receiptId);
-                amount = 0;
+                // withdraw only part of receipt and update receipt
+                uint256 amountValue = ((amounts[i] * price) /
+                    10**priceDecimals);
+                toWithdraw += amountValue;
+                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
             }
-            if (amount == 0) break;
         }
-        _withdrawFromBatching(msgSender, toWithdraw, withdrawToken);
+        _withdraw(withdrawer, toWithdraw, withdrawToken);
     }
 
-    function _withdrawFromBatching(
-        address msgSender,
+    function _withdraw(
+        address withdrawer,
         uint256 amount,
         address withdrawToken
     ) public onlyOwner {
@@ -237,8 +233,8 @@ contract Batching is Ownable {
                 }
             }
         }
-        IERC20(withdrawToken).transfer(msgSender, amountToTransfer);
-        emit WithdrawFromBatching(msgSender, withdrawToken, amountToTransfer);
+        IERC20(withdrawToken).transfer(withdrawer, amountToTransfer);
+        emit WithdrawFromBatching(withdrawer, withdrawToken, amountToTransfer);
     }
 
     /// @notice Deposit stablecoin into batching.
@@ -247,8 +243,8 @@ contract Batching is Ownable {
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
-    function depositToBatch(
-        address msgSender,
+    function deposit(
+        address depositor,
         address depositToken,
         uint256 _amount
     ) external onlyOwner {
@@ -258,12 +254,12 @@ contract Batching is Ownable {
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
-        emit Deposit(msgSender, depositToken, _amount);
+        emit Deposit(depositor, depositToken, _amount);
         receiptContract.mint(
             router.currentCycleId(),
             amountUniform,
             depositToken,
-            msgSender
+            depositor
         );
     }
 
@@ -302,7 +298,7 @@ contract Batching is Ownable {
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalanceBatching()
+    function rebalance()
         public
         onlyOwner
         returns (uint256 totalDeposit, uint256[] memory balances)

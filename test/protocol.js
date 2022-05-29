@@ -55,7 +55,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.viewReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1], usdc.address, receipt.amount.div(2));
+    await router.withdrawFromBatching([1], usdc.address, [receipt.amount.div(2)]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -66,7 +66,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
   it("User withdraw other half from current cycle", async function () {
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1], usdc.address, MaxUint256);
+    await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
