@@ -5,7 +5,7 @@ const { ethers, waffle } = require("hardhat");
 const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken, getUSDC, getBUSD } = require("../utils");
 
 
-module.exports = { commonSetup, adminInitialDeposit };
+module.exports = { commonSetup, setupTokens, setupCore, adminInitialDeposit };
 
 async function commonSetup() {
   await setupTokens();

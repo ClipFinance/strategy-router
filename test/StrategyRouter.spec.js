@@ -2,14 +2,15 @@ const { expect, should, use } = require("chai");
 const { BigNumber, logger } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const {commonSetup, adminInitialDeposit} = require("./shared/commonSetup");
+const {setupTokens, setupCore, adminInitialDeposit} = require("./shared/commonSetup");
 const { getTokens, MaxUint256, getBUSD, getUSDC, parseBusd } = require("./utils");
 
 
-describe("Test StrategyRouter with fake strategies", function () {
+describe("Test StrategyRouter", function () {
 
   before(async function () {
-    await commonSetup();
+    await setupTokens();
+    await setupCore();
 
     // setup supported stables
     await router.setSupportedStablecoin(usdc.address, true);
@@ -17,17 +18,17 @@ describe("Test StrategyRouter with fake strategies", function () {
 
     // add two strategies with fake farms
     const FarmUnprofitable = await ethers.getContractFactory("MockFarm");
-    farmUnprofitable = await FarmUnprofitable.deploy(busd.address, 10000);
+    const farmUnprofitable = await FarmUnprofitable.deploy(busd.address, 10000);
     await farmUnprofitable.deployed();
     await farmUnprofitable.transferOwnership(router.address);
 
-    const Farm = await ethers.getContractFactory("MockFarm");
-    farm = await Farm.deploy(usdc.address, 10000);
-    await farm.deployed();
-    await farm.transferOwnership(router.address);
+    const FarmProfitable = await ethers.getContractFactory("MockFarm");
+    const farmProfitable = await FarmProfitable.deploy(usdc.address, 10000);
+    await farmProfitable.deployed();
+    await farmProfitable.transferOwnership(router.address);
 
     await router.addStrategy(farmUnprofitable.address, busd.address, 1000);
-    await router.addStrategy(farm.address, usdc.address, 9000);
+    await router.addStrategy(farmProfitable.address, usdc.address, 9000);
     
     await adminInitialDeposit();
   });
@@ -40,11 +41,31 @@ describe("Test StrategyRouter with fake strategies", function () {
     await provider.send("evm_revert", [snapshotId]);
   });
 
+  // cases to test:
+  // if we have allowance, strategy router deduct funds into batch
+  // batch receiving the funds, mints an nft receipt
+  // we may not have allowance
+  // token is not whitelisted
+  // tokens having different decimals: 18, 6, 2, 0 - even better: array of all decimals 18 to 0
+  // token deposit amount under required minimum
+  // receipt object was created and nft was minted
+  //   token id counter was incremented
+  //   token amount was incremented for depositor
+  //   depositor is assigned as the owner of receipt nft
+
   it("depositToBatch", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     expect(await busd.balanceOf(batching.address)).to.be.equal(parseBusd("100"));
   });
 
+  // deposit 100, withdraw 50
+  // deposit 100, withdraw 150 (more than deposited)
+  // precondition: minimum deposit 50. deposit 50, withdraw 25. what to expect?
+  // withdraw nft that doesn't belong to you
+  // withdraw $1. what is minimum withdrawal amount?
+  // deposit token X, trying to withdraw token Y
+  //   token Y withdrawing amount is larger than deposited token X amount
+  //   token Y withdrawing amount is less than minimum deposit amount
   it("withdrawFromBatching withdout swaps", async function () {
     await router.depositToBatch(usdc.address, parseUsdc("100"))
 
@@ -55,6 +76,11 @@ describe("Test StrategyRouter with fake strategies", function () {
     expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
   });
 
+  // deposit x, withdraw in token y
+  // what if stablecoins value is different
+  // what if oracle gives another stablecoin is different 1000 times? (different rates)
+  // what if token X has 0, 2, 6, 9, 18 decimals, token Y has 0, 2, 6, 9, 18 decimals and vice versa (different decimals)
+  // different rate and decimals
   it("withdrawFromBatching with swaps", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.depositToBatch(busd.address, parseBusd("100"))
