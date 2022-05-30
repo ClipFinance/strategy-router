@@ -53,7 +53,7 @@ module.exports = {
       gas: 20e6 // lets see if this solves problem, as auto gas estimation makes deploy scripts to fail
     },
     bnbTest: {
-      url: process.env.BNB_TEST_URL,
+      url: process.env.BNB_TEST_URL ?? '',
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
       gas: 20e6 // lets see if this solves problem, as auto gas estimation makes deploy scripts to fail
     },
