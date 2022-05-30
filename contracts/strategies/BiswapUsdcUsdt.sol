@@ -26,7 +26,7 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
     IUniswapV2Router02 public constant biswapRouter =
         IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
     StrategyRouter public immutable strategyRouter;
-    uint256 private constant poolId = 4;
+    uint256 private constant _poolId = 4;
 
     uint256 private immutable LEFTOVER_TRESHOLD_BUSD = 10**USDT.decimals(); // 1USDT 
     uint256 private immutable LEFTOVER_TRESHOLD_UST = 10**USDC.decimals(); // 1USDC 
@@ -66,7 +66,7 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
             );
 
         lpToken.approve(address(farm), liquidity);
-        farm.deposit(poolId, liquidity);
+        farm.deposit(_poolId, liquidity);
     }
 
     function withdraw(uint256 amount)
@@ -96,7 +96,7 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
         uint256 liquidity = (lpToken.totalSupply() * (amountUst + amountBusd)) /
             (balance0 + balance1);
 
-        farm.withdraw(poolId, liquidity);
+        farm.withdraw(_poolId, liquidity);
         lpToken.approve(address(biswapRouter), liquidity);
         (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
             address(USDC),
@@ -116,7 +116,7 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
     }
 
     function compound() external override onlyOwner {
-        farm.withdraw(poolId, 0);
+        farm.withdraw(_poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
 
@@ -143,12 +143,12 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
 
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(farm), lpAmount);
-            farm.deposit(poolId, lpAmount);
+            farm.deposit(_poolId, lpAmount);
         }
     }
 
     function totalTokens() external view override returns (uint256) {
-        (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
+        (uint256 liquidity, ) = farm.userInfo(_poolId, address(this));
 
         uint256 _totalSupply = lpToken.totalSupply();
         // this formula is from remove_liquidity -> burn of uniswapV2pair
@@ -181,9 +181,9 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        (uint256 amount, ) = farm.userInfo(poolId, address(this));
+        (uint256 amount, ) = farm.userInfo(_poolId, address(this));
         if (amount > 0) {
-            farm.withdraw(poolId, amount);
+            farm.withdraw(_poolId, amount);
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(biswapRouter), lpAmount);
             (uint256 amountA, uint256 amountB) = biswapRouter.removeLiquidity(
@@ -270,5 +270,9 @@ contract BiswapUsdcUsdt is Ownable, IStrategy {
             exchange.swapRouted(fee, address(bsw), address(USDC), feeAddress);
         }
         return amount - fee;
+    }
+
+    function poolId() public view returns(uint256) {
+        return _poolId;
     }
 }

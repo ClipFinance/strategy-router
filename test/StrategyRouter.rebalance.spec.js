@@ -2,8 +2,8 @@ const { expect, should, use, assert } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { commonSetup } = require("./utils/commonSetup");
-const { getTokens, getBUSD, getUSDC, getUSDT, parseBusd, parseUsdt, parseUsdc } = require("./utils/utils");
+const { commonSetup } = require("./shared/commonSetup");
+const { getTokens, getBUSD, getUSDC, getUSDT, parseBusd, parseUsdt, parseUsdc } = require("./utils");
 
 describe("Test rebalance functions", function () {
 

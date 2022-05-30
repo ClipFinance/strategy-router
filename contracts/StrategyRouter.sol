@@ -655,7 +655,8 @@ contract StrategyRouter is Ownable {
         }
     }
 
-    /// @notice Deposit stablecoin into batching.
+    /// @notice Deposit stablecoin into batching. dApp already asked user to approve spending of the token
+    /// and we have allowance to transfer these funds to Batching smartcontract
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported stablecoin to deposit.
     /// @param _amount Amount to deposit.

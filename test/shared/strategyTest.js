@@ -3,15 +3,16 @@ const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
 const { commonSetup } = require("./commonSetup");
-const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("./utils");
+const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("../utils");
 
 module.exports = function strategyTest(strategyName, parseAmount, getDepositToken) {
   describe(`Test ${strategyName} strategy`, function () {
 
     before(async function () {
+      [owner, feeAddress] = await ethers.getSigners();
+
       snapshotId = await provider.send("evm_snapshot");
       await commonSetup();
-      [owner, feeAddress] = await ethers.getSigners();
       depositToken = await getDepositToken();
     });
 

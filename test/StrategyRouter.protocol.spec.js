@@ -2,8 +2,8 @@ const { expect } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { adminInitialDeposit, commonSetup } = require("./utils/commonSetup");
-const { printStruct, skipCycleAndBlocks, MaxUint256, parseUsdc, parseBusd } = require("./utils/utils");
+const { adminInitialDeposit, commonSetup } = require("./shared/commonSetup");
+const { printStruct, skipCycleAndBlocks, MaxUint256, parseUsdc, parseBusd } = require("./utils");
 
 
 describe("Test StrategyRouter with two real strategies", function () {

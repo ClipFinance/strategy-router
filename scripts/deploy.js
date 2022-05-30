@@ -143,7 +143,7 @@ async function main() {
   let deployedContracts = [
     exchange,
     router,
-    // these two deployed by StrategyRouter and they don't have constructor args
+    // these are deployed by StrategyRouter and they don't have constructor args
     // thus we can use their address with args set to [] for verification
     await router.receiptContract(),
     await router.batching(),

@@ -2,8 +2,8 @@ const { expect, should, use } = require("chai");
 const { BigNumber, logger } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const {commonSetup, adminInitialDeposit} = require("./utils/commonSetup");
-const { getTokens, MaxUint256, getBUSD, getUSDC, parseBusd } = require("./utils/utils");
+const {commonSetup, adminInitialDeposit} = require("./shared/commonSetup");
+const { getTokens, MaxUint256, getBUSD, getUSDC, parseBusd } = require("./utils");
 
 
 describe("Test StrategyRouter with fake strategies", function () {

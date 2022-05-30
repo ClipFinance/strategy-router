@@ -2,8 +2,8 @@ const { expect, should, use } = require("chai");
 const { BigNumber } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const strategyTest = require("./utils/strategyTest");
-const { parseUsdc, parseBusd, getUSDC, getBUSD } = require("./utils/utils");
+const strategyTest = require("./shared/strategyTest");
+const { parseUsdc, parseBusd, getUSDC, getBUSD } = require("./utils");
 
 describe("Test strategies", function () {
 
