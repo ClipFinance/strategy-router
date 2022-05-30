@@ -28,8 +28,8 @@ async function main() {
   INITIAL_DEPOSIT = parseUsdc("0.1");
 
   // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
-  busd = await ethers.getContractAt("ERC20", "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56");
-  usdc = await ethers.getContractAt("ERC20", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d");
+  busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
+  usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
   oracle = await ethers.getContractFactory("ChainlinkOracle");
@@ -42,6 +42,44 @@ async function main() {
   exchange = await exchange.deploy();
   await exchange.deployed();
   console.log("Exchange", exchange.address);
+  await (await exchange.setCurvePool(
+    hre.networkVariables.busd,
+    hre.networkVariables.usdt,
+    hre.networkVariables.acryptosUst4Pool.address
+  )).wait();
+  await (await exchange.setCurvePool(
+    hre.networkVariables.usdc,
+    hre.networkVariables.usdt,
+    hre.networkVariables.acryptosUst4Pool.address
+  )).wait();
+  await (await exchange.setCurvePool(
+    hre.networkVariables.busd,
+    hre.networkVariables.usdc,
+    hre.networkVariables.acryptosUst4Pool.address
+  )).wait();
+  await (await exchange.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
+  await (await exchange.setCoinIds(
+    hre.networkVariables.acryptosUst4Pool.address,
+    hre.networkVariables.acryptosUst4Pool.tokens,
+    hre.networkVariables.acryptosUst4Pool.coinIds
+  )).wait();
+  await (await exchange.setDexType(
+    [
+      hre.networkVariables.busd,
+      hre.networkVariables.busd,
+      hre.networkVariables.usdc,
+    ],
+    [
+      hre.networkVariables.usdt,
+      hre.networkVariables.usdc,
+      hre.networkVariables.usdt,
+    ],
+    [
+      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
+      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
+      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
+    ]
+  )).wait();
 
   // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
   const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
@@ -51,55 +89,55 @@ async function main() {
   console.log("ReceiptNFT", await router.receiptContract());
   console.log("SharesToken", await router.sharesToken());
 
-  await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE);
-  await router.setMinDeposit(MIN_DEPOSIT);
-  await router.setCycleDuration(CYCLE_DURATION);
-  await router.setExchange(exchange.address);
-  await router.setFeePercent(FEE_PERCENT);
-  await router.setFeeAddress(FEE_ADDRESS);
-  await router.setOracle(oracle.address);
+  await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
+  await (await router.setMinDeposit(MIN_DEPOSIT)).wait();
+  await (await router.setCycleDuration(CYCLE_DURATION)).wait();
+  await (await router.setExchange(exchange.address)).wait();
+  await (await router.setFeePercent(FEE_PERCENT)).wait();
+  await (await router.setFeeAddress(FEE_ADDRESS)).wait();
+  await (await router.setOracle(oracle.address)).wait();
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
   strategyBusd = await ethers.getContractFactory("BiswapBusdUsdt");
   strategyBusd = await strategyBusd.deploy(router.address);
   await strategyBusd.deployed();
-  await strategyBusd.transferOwnership(router.address);
   console.log("strategyBusd", strategyBusd.address);
+  await (await strategyBusd.transferOwnership(router.address)).wait();
 
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   strategyUsdc = await ethers.getContractFactory("BiswapUsdcUsdt");
   strategyUsdc = await strategyUsdc.deploy(router.address);
   await strategyUsdc.deployed();
-  await strategyUsdc.transferOwnership(router.address);
   console.log("strategyUsdc", strategyUsdc.address);
+  await (await strategyUsdc.transferOwnership(router.address)).wait();
 
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("Setting supported stablecoin...");
-  await router.setSupportedStablecoin(busd.address, true);
-  await router.setSupportedStablecoin(usdc.address, true);
+  await (await router.setSupportedStablecoin(busd.address, true)).wait();
+  await (await router.setSupportedStablecoin(usdc.address, true)).wait();
 
   console.log("Adding strategies...");
-  await router.addStrategy(strategyBusd.address, busd.address, 5000);
-  await router.addStrategy(strategyUsdc.address, usdc.address, 5000);
+  await (await router.addStrategy(strategyBusd.address, busd.address, 5000)).wait();
+  await (await router.addStrategy(strategyUsdc.address, usdc.address, 5000)).wait();
 
 
   console.log("Approving for initial deposit...");
   if((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
-    await usdc.approve(router.address, INITIAL_DEPOSIT);
+    await (await usdc.approve(router.address, INITIAL_DEPOSIT)).wait();
     console.log("usdc approved...");
   }
   console.log("Initial deposit to batch...");
-  await router.depositToBatch(usdc.address, INITIAL_DEPOSIT);
+  await (await router.depositToBatch(usdc.address, INITIAL_DEPOSIT)).wait();
   console.log("Initial deposit to strategies...");
-  await router.depositToStrategies();
+  await (await router.depositToStrategies()).wait();
 
 
   // vvvvvvvvvvvvvvvvvvvvvvvvv VERIFICATION vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
   console.log("  - Verification will start in a minute...\n");
-  // await delay(46000);
+  await delay(46000);
 
 
   let deployedContracts = [

@@ -31,7 +31,6 @@ function bnbChain() {
   return bnb;
 }
 
-const config = { bnb: bnbChain() }
-// console.log(config.bnb.acryptosUst4Pool);
+const config = { bnb: bnbChain(), bnbTest: bnbChain() };
 
 module.exports = config;

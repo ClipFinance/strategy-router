@@ -19,6 +19,10 @@ extendEnvironment((hre) => {
           // console.log(networkVariables);
           hre.networkVariables = networkVariables['bnb'];
           break;
+        case process.env.BNB_TEST_URL:
+          // console.log(networkVariables);
+          hre.networkVariables = networkVariables['bnbTest'];
+          break;
       }
     }
   } else {
@@ -39,12 +43,17 @@ module.exports = {
         blockNumber: 18089846, // use this only with archival node
         enabled: true
       },
-      allowUnlimitedContractSize: true,
+      // allowUnlimitedContractSize: true,
       // loggingEnabled: false
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
     },
     bnb: {
       url: process.env.BNB_URL,
+      accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+      gas: 20e6 // lets see if this solves problem, as auto gas estimation makes deploy scripts to fail
+    },
+    bnbTest: {
+      url: process.env.BNB_TEST_URL,
       accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
       gas: 20e6 // lets see if this solves problem, as auto gas estimation makes deploy scripts to fail
     },
