@@ -13,7 +13,7 @@ import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -126,7 +126,7 @@ contract Batching is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public onlyOwner {
-        if (supportsCoin(withdrawToken) == false)
+        if (!supportsCoin(withdrawToken))
             revert UnsupportedStablecoin();
 
         uint256 _currentCycleId = router.currentCycleId();
@@ -486,6 +486,7 @@ contract Batching is Ownable {
         address to
     ) private returns (uint256 result) {
         if (from != to) {
+            console.log(amount);
             IERC20(from).transfer(address(exchange), amount);
             result = exchange.swapRouted(
                 amount,
@@ -498,7 +499,7 @@ contract Batching is Ownable {
         return amount;
     }
 
-    /// @dev Change decimal places to `UNIFORM_DECIMALS`.
+    /// @dev Change decimal places from token decimals to `UNIFORM_DECIMALS`.
     function toUniform(uint256 amount, address token)
         private
         view

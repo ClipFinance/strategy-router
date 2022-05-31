@@ -21,8 +21,11 @@ function bnbChain() {
   };
 
   bnb.exchangeTypes = {
+    // pancakeswap with WETH as intermediary, default option
     pancakeWithWeth: 0,
+    // tokenA to tokenB direct swap on pancake
     pancakeDirect: 1,
+    // ACS4UST metapool
     acryptosUst4Pool: 2
   };
 

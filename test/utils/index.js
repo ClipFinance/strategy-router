@@ -18,7 +18,16 @@ parseUniform = (args) => parseUnits(args, 18);
 module.exports = {
   getTokens, skipBlocks, skipCycleAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
-  parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT
+  parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT,
+  deploy
+}
+
+async function deploy(contractName, ...constructorArgs) {
+  // console.log(contractName, "constructorArgs", constructorArgs);
+  // console.log("destructed", ...constructorArgs);
+  let factory = await ethers.getContractFactory(contractName);
+  let contract = await factory.deploy(...constructorArgs);
+  return await contract.deployed();
 }
 
 async function getBUSD() {

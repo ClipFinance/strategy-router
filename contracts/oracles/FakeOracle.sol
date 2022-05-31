@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 import "@chainlink/contracts/src/v0.8/interfaces/FeedRegistryInterface.sol";
 import "@chainlink/contracts/src/v0.8/Denominations.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
@@ -16,6 +17,7 @@ contract FakeOracle is IUsdOracle, Ownable {
         uint8 decimals;
     }
 
+    // addresses from bnb chain!
     address public constant UST = 0x23396cF899Ca06c4472205fC903bDB4de249D6fC;
     address public constant BUSD = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     address public constant BUSDT = 0x55d398326f99059fF775485246999027B3197955;
@@ -27,6 +29,10 @@ contract FakeOracle is IUsdOracle, Ownable {
         prices[UST][Denominations.USD] = Price(999_990, 6); // 0.999990$
         prices[USDC][Denominations.USD] = Price(100_100_000, 8); // 1.001$
         prices[BUSD][Denominations.USD] = Price(10_000_000_000, 10); // 1$
+    }
+
+    function setPrice(address base, uint256 price) public {
+        prices[base][Denominations.USD] = Price(price, ERC20(base).decimals()); 
     }
 
     /**

@@ -1,35 +1,45 @@
 const { expect, should, use } = require("chai");
-const { BigNumber, logger } = require("ethers");
+const { BigNumber, logger, utils } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const {setupTokens, setupCore, adminInitialDeposit} = require("./shared/commonSetup");
-const { getTokens, MaxUint256, getBUSD, getUSDC, parseBusd } = require("./utils");
+const { setupTokens, setupCore, adminInitialDeposit, setupFakeTokens, setupFakeTokensLiquidity, setupTestParams } = require("./shared/commonSetup");
+const { MaxUint256, deploy, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
 
+  let usdc, usdt, busd;
+  let parseUsdc, parseBusd, parseUsdt;
+
   before(async function () {
-    await setupTokens();
     await setupCore();
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+    await setupFakeTokensLiquidity();
+    await setupTestParams();
+
+    // setup infinite allowance
+    await busd.approve(router.address, parseBusd("1000000"));
+    await usdc.approve(router.address, parseUsdc("1000000"));
+    await usdt.approve(router.address, parseUsdt("1000000"));
 
     // setup supported stables
     await router.setSupportedStablecoin(usdc.address, true);
     await router.setSupportedStablecoin(busd.address, true);
+    await router.setSupportedStablecoin(usdt.address, true);
 
-    // add two strategies with fake farms
-    const FarmUnprofitable = await ethers.getContractFactory("MockFarm");
-    const farmUnprofitable = await FarmUnprofitable.deploy(busd.address, 10000);
-    await farmUnprofitable.deployed();
-    await farmUnprofitable.transferOwnership(router.address);
+    // add fake strategies
+    let strategy1 = await deploy("MockStrategy", busd.address, 10000);
+    await strategy1.transferOwnership(router.address);
+    await router.addStrategy(strategy1.address, busd.address, 1000);
 
-    const FarmProfitable = await ethers.getContractFactory("MockFarm");
-    const farmProfitable = await FarmProfitable.deploy(usdc.address, 10000);
-    await farmProfitable.deployed();
-    await farmProfitable.transferOwnership(router.address);
+    let strategy2 = await deploy("MockStrategy", usdc.address, 10000);
+    await strategy2.transferOwnership(router.address);
+    await router.addStrategy(strategy2.address, usdc.address, 9000);
 
-    await router.addStrategy(farmUnprofitable.address, busd.address, 1000);
-    await router.addStrategy(farmProfitable.address, usdc.address, 9000);
-    
+    let strategy3 = await deploy("MockStrategy", usdt.address, 10000);
+    await strategy3.transferOwnership(router.address);
+    await router.addStrategy(strategy3.address, usdt.address, 9000);
+
     await adminInitialDeposit();
   });
 
@@ -41,23 +51,30 @@ describe("Test StrategyRouter", function () {
     await provider.send("evm_revert", [snapshotId]);
   });
 
-  // cases to test:
-  // if we have allowance, strategy router deduct funds into batch
-  // batch receiving the funds, mints an nft receipt
-  // we may not have allowance
-  // token is not whitelisted
-  // tokens having different decimals: 18, 6, 2, 0 - even better: array of all decimals 18 to 0
-  // token deposit amount under required minimum
-  // receipt object was created and nft was minted
-  //   token id counter was incremented
-  //   token amount was incremented for depositor
-  //   depositor is assigned as the owner of receipt nft
-
-  it("depositToBatch", async function () {
-    await router.depositToBatch(busd.address, parseBusd("100"))
-    expect(await busd.balanceOf(batching.address)).to.be.equal(parseBusd("100"));
+  it("depositToBatch no allowance", async function () {
+    // remove allowance
+    await busd.approve(router.address, 0);
+    await expect(router.depositToBatch(busd.address, parseBusd("100"))).to.be.reverted;
   });
 
+  it("depositToBatch token not whitelisted", async function () {
+    await expect(router.depositToBatch(router.address, parseBusd("100")))
+      .to.be.revertedWith("UnsupportedStablecoin");
+  });
+
+  it("depositToBatch", async function () {
+    let depositAmount = parseBusd("100");
+    await router.depositToBatch(busd.address, depositAmount);
+
+    let newReceipt = await receiptContract.viewReceipt(1);
+    expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
+    expect(newReceipt.token).to.be.equal(busd.address);
+    expect(newReceipt.amount).to.be.equal(parseUniform("100"));
+    expect(newReceipt.cycleId).to.be.equal(1);
+    expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
+  });
+
+  // TODO:
   // deposit 100, withdraw 50
   // deposit 100, withdraw 150 (more than deposited)
   // precondition: minimum deposit 50. deposit 50, withdraw 25. what to expect?
@@ -93,7 +110,7 @@ describe("Test StrategyRouter", function () {
 
     // WITHDRAW PART
     oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([2], usdc.address, [parseBusd("50")]);
+    await router.withdrawFromBatching([2], usdc.address, [parseUsdc("50")]);
     newBalance = await usdc.balanceOf(owner.address);
 
     let receipt = await receiptContract.viewReceipt(2);
@@ -149,7 +166,7 @@ describe("Test StrategyRouter", function () {
     let receiptsShares = await router.receiptsToShares([1]);
     await router.crossWithdrawFromBatching([1], usdc.address, receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("500"));
   });
 
   it("crossWithdrawFromBatching both nft and shares", async function () {
@@ -168,7 +185,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawFromBatching([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("400"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("20000"), parseUsdc("2000"));
 
   });
 
@@ -199,7 +216,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("2500"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("10000"));
   });
 
   it("crossWithdrawShares", async function () {
@@ -213,7 +230,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.crossWithdrawShares(receiptsShares, usdc.address);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("500"));
 
   });
 
@@ -223,9 +240,9 @@ describe("Test StrategyRouter", function () {
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawUniversal([2], [], usdc.address, [parseBusd("100000")], 0);
+    await router.withdrawUniversal([2], [], usdc.address, [parseUsdc("100000")], 0);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("2000"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("20000"));
   });
 
   it("withdrawUniversal - withdraw shares (by receipt)", async function () {
@@ -239,7 +256,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [1], usdc.address, [], receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("600"));
   });
 
   it("withdrawUniversal - withdraw shares (no receipt)", async function () {
@@ -254,7 +271,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [], usdc.address, [], receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("200"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("500"));
   });
 
   it("withdrawUniversal - withdraw batch, shares and shares by receipt", async function () {
@@ -273,7 +290,7 @@ describe("Test StrategyRouter", function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([3], [2], usdc.address, [amountReceiptBatch], totalShares);
     let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("30000"), parseUsdc("300"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("30000"), parseUsdc("1000"));
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
     expect(receiptContract.viewReceipt(1)).to.be.reverted;
     expect(receiptContract.viewReceipt(2)).to.be.reverted;
@@ -288,7 +305,7 @@ describe("Test StrategyRouter", function () {
     await router.depositToStrategies();
 
     // deploy new farm
-    const Farm = await ethers.getContractFactory("MockFarm");
+    const Farm = await ethers.getContractFactory("MockStrategy");
     farm2 = await Farm.deploy(usdc.address, 10000);
     await farm2.deployed();
     await farm2.transferOwnership(router.address);

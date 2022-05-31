@@ -666,12 +666,13 @@ contract StrategyRouter is Ownable {
         external
         OnlyEOW
     {
+        batching.deposit(msg.sender, depositToken, _amount);
         IERC20(depositToken).transferFrom(
             msg.sender,
             address(batching),
             _amount
         );
-        batching.deposit(msg.sender, depositToken, _amount);
+
     }
 
     // Admin functions

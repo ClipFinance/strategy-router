@@ -40,7 +40,7 @@ describe("Test rebalance functions", function () {
 
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
       // await expect(router.rebalanceBatching()).to.be.revertedWith("NothingToRebalance()");
@@ -52,7 +52,7 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(busd.address, true);
       await router.setSupportedStablecoin(usdc.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
       await router.depositToBatch(usdt.address, parseUsdt("1"));
@@ -75,8 +75,8 @@ describe("Test rebalance functions", function () {
 
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
       await router.addStrategy(farm2.address, usdt.address, 5000);
 
@@ -99,8 +99,8 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(busd.address, true);
       await router.setSupportedStablecoin(usdc.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
       await router.addStrategy(farm2.address, usdt.address, 5000);
 
@@ -126,8 +126,8 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdt.address, true);
       await router.setSupportedStablecoin(busd.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(busd.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(busd.address, 10000);
       await router.addStrategy(farm2.address, busd.address, 5000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
@@ -153,8 +153,8 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdc.address, true);
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(busd.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(busd.address, 10000);
       await router.addStrategy(farm2.address, busd.address, 5000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
@@ -181,7 +181,7 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdc.address, true);
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
       await router.depositToBatch(usdt.address, 2);
@@ -211,7 +211,7 @@ describe("Test rebalance functions", function () {
 
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
       await expect(router.rebalanceStrategies()).to.be.revertedWith("NothingToRebalance()");
@@ -221,8 +221,8 @@ describe("Test rebalance functions", function () {
 
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
       await router.addStrategy(farm2.address, usdt.address, 5000);
 
@@ -244,8 +244,8 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdt.address, true);
       await router.setSupportedStablecoin(busd.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(busd.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(busd.address, 10000);
       await router.addStrategy(farm2.address, busd.address, 5000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
@@ -270,9 +270,9 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdt.address, true);
       await router.setSupportedStablecoin(busd.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(busd.address, 10000);
-      let farm3 = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(busd.address, 10000);
+      let farm3 = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm2.address, busd.address, 5000);
       await router.addStrategy(farm.address, usdt.address, 5000);
       await router.addStrategy(farm3.address, usdt.address, 5000);
@@ -299,9 +299,9 @@ describe("Test rebalance functions", function () {
       await router.setSupportedStablecoin(usdc.address, true);
       await router.setSupportedStablecoin(usdt.address, true);
 
-      let farm = await createMockFarm(usdt.address, 10000);
-      let farm2 = await createMockFarm(busd.address, 10000);
-      let farm3 = await createMockFarm(usdt.address, 10000);
+      let farm = await createMockStrategy(usdt.address, 10000);
+      let farm2 = await createMockStrategy(busd.address, 10000);
+      let farm3 = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm2.address, busd.address, 5000);
       await router.addStrategy(farm.address, usdt.address, 5000);
       await router.addStrategy(farm3.address, usdt.address, 5000);
@@ -399,8 +399,8 @@ async function getStrategiesBalances() {
   return { total, balances };
 }
 
-async function createMockFarm(asset, profit_percent) {
-  const Farm = await ethers.getContractFactory("MockFarm");
+async function createMockStrategy(asset, profit_percent) {
+  const Farm = await ethers.getContractFactory("MockStrategy");
   let farm = await Farm.deploy(asset, profit_percent);
   await farm.deployed();
   return farm;

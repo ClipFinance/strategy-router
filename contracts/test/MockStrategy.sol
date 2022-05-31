@@ -6,7 +6,7 @@ import "../interfaces/IStrategy.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
-contract MockFarm is Ownable, IStrategy {
+contract MockStrategy is Ownable, IStrategy {
     address private asset;
     uint256 private balance;
     uint256 private mockProfitPercent;
@@ -21,7 +21,7 @@ contract MockFarm is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override {
-        // console.log("MockFarm.deposit", amount, ERC20(asset).balanceOf(address(this)));
+        // console.log("MockStrategy.deposit", amount, ERC20(asset).balanceOf(address(this)));
         balance += amount;
     }
 
