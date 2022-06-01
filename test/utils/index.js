@@ -1,7 +1,5 @@
-const { expect, should, use } = require("chai");
-const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
-const { ethers, waffle } = require("hardhat");
+const { parseEther, parseUnits } = require("ethers/lib/utils");
+const { ethers } = require("hardhat");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
 BLOCKS_MONTH = MONTH_SECONDS / 3;
@@ -45,6 +43,7 @@ async function getUSDT() {
 // 'getTokens' functions are helpers to retrieve tokens during tests. 
 // Simply saying to draw fake balance for test wallet.
 async function getTokens(tokenAddress, holderAddress) {
+  const [owner] = await ethers.getSigners();
   let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
   let decimals = await tokenContract.decimals();
   let parse = (args) => parseUnits(args, decimals);

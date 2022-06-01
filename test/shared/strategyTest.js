@@ -1,35 +1,55 @@
-const { expect, should, use } = require("chai");
+const { expect } = require("chai");
+const { parseUnits } = require("ethers/lib/utils");
+const { ethers } = require("hardhat");
+const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
+const { skipBlocks, BLOCKS_MONTH } = require("../utils");
 const { BigNumber } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
-const { ethers, waffle } = require("hardhat");
-const { commonSetup } = require("./commonSetup");
-const { getTokens, skipBlocks, BLOCKS_MONTH, parseAmount, parseUsdt, getDepositToken } = require("../utils");
 
-module.exports = function strategyTest(strategyName, parseAmount, getDepositToken) {
+
+module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
+
+    let owner, feeAddress;
+    // core contracts
+    let router, oracle, exchange;
+    // strategy's deposit token
+    let depositToken;
+    // helper function to parse deposit token amounts
+    let parseAmount;
+
+    let amountDeposit;
+    let amountWithdraw;
 
     before(async function () {
       [owner, feeAddress] = await ethers.getSigners();
 
       snapshotId = await provider.send("evm_snapshot");
-      await commonSetup();
-      depositToken = await getDepositToken();
+
+      // deploy core contracts
+      ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+
+      // setup params for testing
+      await setupParamsOnBNB(router, oracle, exchange);
+
+      // get stablecoins on bnb chain for testing
+      await setupTokens();
+
+      // deploy strategy to test
+      strategy = await ethers.getContractFactory(strategyName);
+      strategy = await strategy.deploy(router.address);
+      await strategy.deployed();
+
+      depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
+      let decimals = await depositToken.decimals();
+      parseAmount = (amount) => parseUnits(amount, decimals);
     });
 
     after(async function () {
       await provider.send("evm_revert", [snapshotId]);
     });
 
-    it(`deploy ${strategyName}`, async function () {
-      strategy = await ethers.getContractFactory(strategyName);
-      strategy = await strategy.deploy(router.address);
-      await strategy.deployed();
-    });
-
-    let amountDeposit = parseAmount("10000");
-    let amountWithdraw = parseAmount("5000");
-
     it("deposit function", async function () {
+      amountDeposit = parseAmount("10000");
 
       let balanceBefore = await depositToken.balanceOf(owner.address);
       await depositToken.transfer(strategy.address, amountDeposit)
@@ -42,6 +62,7 @@ module.exports = function strategyTest(strategyName, parseAmount, getDepositToke
     });
 
     it("withdraw function", async function () {
+      amountWithdraw = parseAmount("5000");
 
       let balanceBefore = await depositToken.balanceOf(owner.address);
       await strategy.withdraw(amountWithdraw);

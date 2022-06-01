@@ -2,20 +2,38 @@ const { expect, should, use } = require("chai");
 const { BigNumber, logger, utils } = require("ethers");
 const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
 const { ethers, waffle } = require("hardhat");
-const { setupTokens, setupCore, adminInitialDeposit, setupFakeTokens, setupFakeTokensLiquidity, setupTestParams } = require("./shared/commonSetup");
+const { setupTokens, setupCore, adminInitialDeposit, setupFakeTokens, setupFakeTokensLiquidity, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
 const { MaxUint256, deploy, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
 
+  let owner;
+  // mock stablecoins with different decimals
   let usdc, usdt, busd;
+  // helper functions to parse amounts of mock stablecoins
   let parseUsdc, parseBusd, parseUsdt;
+  // core contracts
+  let router, oracle, exchange, batching, receiptContract, sharesToken;
 
   before(async function () {
-    await setupCore();
+
+    [owner] = await ethers.getSigners();
+
+    // deploy core contracts
+    ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+
+    // deploy mock stablecoins 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
-    await setupFakeTokensLiquidity();
-    await setupTestParams();
+
+    // setup fake token liquidity
+    let amount = (1_000_000).toString();
+    await setupTokensLiquidityOnPancake(usdc, busd, amount);
+    await setupTokensLiquidityOnPancake(busd, usdt, amount);
+    await setupTokensLiquidityOnPancake(usdc, usdt, amount);
+
+    // setup params for testing
+    await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));
@@ -28,19 +46,13 @@ describe("Test StrategyRouter", function () {
     await router.setSupportedStablecoin(usdt.address, true);
 
     // add fake strategies
-    let strategy1 = await deploy("MockStrategy", busd.address, 10000);
-    await strategy1.transferOwnership(router.address);
-    await router.addStrategy(strategy1.address, busd.address, 1000);
+    await deployFakeStrategy({ router, stablecoin: busd });
+    await deployFakeStrategy({ router, stablecoin: usdc });
+    await deployFakeStrategy({ router, stablecoin: usdt });
 
-    let strategy2 = await deploy("MockStrategy", usdc.address, 10000);
-    await strategy2.transferOwnership(router.address);
-    await router.addStrategy(strategy2.address, usdc.address, 9000);
-
-    let strategy3 = await deploy("MockStrategy", usdt.address, 10000);
-    await strategy3.transferOwnership(router.address);
-    await router.addStrategy(strategy3.address, usdt.address, 9000);
-
-    await adminInitialDeposit();
+    // admin initial deposit to set initial shares and pps
+    await router.depositToBatch(busd.address, parseBusd("1"));
+    await router.depositToStrategies();
   });
 
   beforeEach(async function () {
