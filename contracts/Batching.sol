@@ -13,7 +13,7 @@ import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -486,7 +486,6 @@ contract Batching is Ownable {
         address to
     ) private returns (uint256 result) {
         if (from != to) {
-            console.log(amount);
             IERC20(from).transfer(address(exchange), amount);
             result = exchange.swapRouted(
                 amount,

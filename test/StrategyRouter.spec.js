@@ -1,9 +1,7 @@
-const { expect, should, use } = require("chai");
-const { BigNumber, logger, utils } = require("ethers");
-const { parseEther, parseUnits, formatEther, formatUnits } = require("ethers/lib/utils");
-const { ethers, waffle } = require("hardhat");
-const { setupTokens, setupCore, adminInitialDeposit, setupFakeTokens, setupFakeTokensLiquidity, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { MaxUint256, deploy, parseUniform } = require("./utils");
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
+const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
+const { MaxUint256, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
@@ -15,6 +13,7 @@ describe("Test StrategyRouter", function () {
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batching, receiptContract, sharesToken;
+  let snapshotId;
 
   before(async function () {
 
