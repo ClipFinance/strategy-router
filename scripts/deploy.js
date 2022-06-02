@@ -1,6 +1,8 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
+const { deploy } = require("../test/utils");
+const fs = require("fs");
 
 // deploy script for testing on mainnet
 // to test on hardhat network:
@@ -33,15 +35,11 @@ async function main() {
   INITIAL_DEPOSIT = parseUsdc("0.1");
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
-  oracle = await ethers.getContractFactory("ChainlinkOracle");
-  oracle = await oracle.deploy();
-  await oracle.deployed();
+  oracle = await deploy("ChainlinkOracle");
   console.log("ChainlinkOracle", oracle.address);
 
   // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
-  exchange = await ethers.getContractFactory("Exchange");
-  exchange = await exchange.deploy();
-  await exchange.deployed();
+  exchange = await deploy("Exchange");
   console.log("Exchange", exchange.address);
   await (await exchange.setCurvePool(
     hre.networkVariables.busd,
@@ -82,10 +80,16 @@ async function main() {
     ]
   )).wait();
 
+  // ~~~~~~~~~~~ DEPLOY StrategyRouterLib ~~~~~~~~~~~ 
+  const routerLib = await deploy("StrategyRouterLib");
   // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~ 
-  const StrategyRouter = await ethers.getContractFactory("StrategyRouter");
+  const StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
+    libraries: {
+      StrategyRouterLib: routerLib.address
+    }
+  });
   router = await StrategyRouter.deploy();
-  await router.deployed();
+  router = await router.deployed();
   console.log("StrategyRouter", router.address);
   console.log("ReceiptNFT", await router.receiptContract());
   console.log("SharesToken", await router.sharesToken());
@@ -100,17 +104,13 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
-  strategyBusd = await ethers.getContractFactory("BiswapBusdUsdt");
-  strategyBusd = await strategyBusd.deploy(router.address);
-  await strategyBusd.deployed();
+  strategyBusd = await deploy("BiswapBusdUsdt", router.address);
   console.log("strategyBusd", strategyBusd.address);
   await (await strategyBusd.transferOwnership(router.address)).wait();
 
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-  strategyUsdc = await ethers.getContractFactory("BiswapUsdcUsdt");
-  strategyUsdc = await strategyUsdc.deploy(router.address);
-  await strategyUsdc.deployed();
+  strategyUsdc = await deploy("BiswapUsdcUsdt", router.address);
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
@@ -126,7 +126,7 @@ async function main() {
 
 
   console.log("Approving for initial deposit...");
-  if((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
+  if ((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
     await (await usdc.approve(router.address, INITIAL_DEPOSIT)).wait();
     console.log("usdc approved...");
   }
@@ -140,10 +140,16 @@ async function main() {
   console.log("  - Verification will start in a minute...\n");
   await delay(46000);
 
+  await safeVerify({
+    address: router.address,
+    constructorArguments: router.constructorArgs,
+    libraries: {
+      StrategyRouterLib: routerLib.address
+    }
+  });
 
   let deployedContracts = [
     exchange,
-    router,
     // these are deployed by StrategyRouter and they don't have constructor args
     // thus we can use their address with args set to [] for verification
     await router.receiptContract(),
@@ -154,30 +160,50 @@ async function main() {
     oracle
   ];
 
-  await verify(deployedContracts);
+  await verifyMultiple(deployedContracts);
 }
 
-async function verify(deployedContracts) {
+async function safeVerify(verifyArgs) {
+  try {
+    await hre.run("verify:verify", verifyArgs);
+  } catch (error) {
+    await handleVerificationError(error);
+  }
+}
+
+async function handleVerificationError(error) {
+  // make common errors less verbose, and remove stacktrace
+  if (error.message.startsWith("The selected network is")) {
+    console.log("hardhat-etherscan warning: unsupported network.", hre.network.name, "\n");
+  } else if (error.message.startsWith("Already verified")) {
+    console.log(error.message, "\n");
+  } else {
+    console.log(error, "\n");
+  }
+}
+
+async function verifyMultiple(deployedContracts) {
   for (let i = 0; i < deployedContracts.length; i++) {
     try {
       const contract = deployedContracts[i];
-      if(typeof contract === "string") {
-        await hre.run("verify:verify", {
+      if (typeof contract === "string") {
+        await safeVerify({
           address: contract,
           constructorArguments: [],
         });
       } else {
-        await hre.run("verify:verify", {
+        await safeVerify({
           address: contract.address,
           constructorArguments: contract.constructorArgs,
         });
       }
     } catch (error) {
-      console.log(error)
+      await handleVerificationError(error);
     }
   }
 }
 
+// Function caches deploy arguments, so that we don't duplicate them manually
 async function setupVerificationHelper() {
   let oldDeploy = hre.ethers.ContractFactory.prototype.deploy;
   hre.ethers.ContractFactory.prototype.deploy = async function (...args) {

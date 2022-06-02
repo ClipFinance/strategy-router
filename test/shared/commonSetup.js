@@ -72,7 +72,7 @@ async function setupCore() {
   let exchange = await deploy("Exchange");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
-  // Deploy StrategyRouter linked to its library
+  // Deploy StrategyRouter 
   let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
      StrategyRouterLib: routerLib.address
