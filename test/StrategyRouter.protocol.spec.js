@@ -1,40 +1,60 @@
 const { expect } = require("chai");
-const { BigNumber } = require("ethers");
-const { parseEther, parseUnits } = require("ethers/lib/utils");
+const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { adminInitialDeposit, commonSetup } = require("./shared/commonSetup");
-const { printStruct, skipCycleAndBlocks, MaxUint256, parseUsdc, parseBusd } = require("./utils");
+const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
+const { skipTimeAndBlocks, MaxUint256, deploy, provider } = require("./utils");
 
 
-describe("Test StrategyRouter with two real strategies", function () {
+describe("Test StrategyRouter with two real strategies on bnb chain", function () {
+
+  let owner;
+  // mock stablecoins with different decimals
+  let usdc, busd;
+  // helper functions to parse amounts of mock stablecoins
+  let parseUsdc, parseBusd;
+  // core contracts
+  let router, oracle, exchange, batching, receiptContract, sharesToken;
+  let cycleDuration;
+  let strategyBiswap, strategyBiswap2;
+
+  let snapshotId;
 
   before(async function () {
 
-    provider = ethers.provider;
+    [owner] = await ethers.getSigners();
     snapshotId = await provider.send("evm_snapshot");
 
-    await commonSetup();
+    // deploy core contracts
+    ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+
+    // setup params for testing
+    await setupParamsOnBNB(router, oracle, exchange);
+    cycleDuration = await router.cycleDuration();
+
+    // get stablecoins on bnb chain for testing
+    ({usdc, busd, parseUsdc, parseBusd} = await setupTokens());
 
     // setup supported stables
     await router.setSupportedStablecoin(usdc.address, true);
     await router.setSupportedStablecoin(busd.address, true);
 
-    // deploy strategies with real farms
-    strategyBiswap2 = await ethers.getContractFactory("BiswapBusdUsdt");
-    strategyBiswap2 = await strategyBiswap2.deploy(router.address);
-    await strategyBiswap2.deployed();
+    // setup infinite allowance
+    await busd.approve(router.address, parseBusd("1000000"));
+    await usdc.approve(router.address, parseUsdc("1000000"));
+
+    // deploy strategies 
+    strategyBiswap2 = await deploy("BiswapBusdUsdt", router.address);
     await strategyBiswap2.transferOwnership(router.address);
 
-    strategyBiswap = await ethers.getContractFactory("BiswapUsdcUsdt");
-    strategyBiswap = await strategyBiswap.deploy(router.address);
-    await strategyBiswap.deployed();
+    strategyBiswap = await deploy("BiswapUsdcUsdt", router.address);
     await strategyBiswap.transferOwnership(router.address);
 
-    
     await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
     await router.addStrategy(strategyBiswap.address, usdc.address, 5000);
 
-    await adminInitialDeposit();
+    // admin initial deposit to set initial shares and pps
+    await router.depositToBatch(busd.address, parseBusd("1"));
+    await router.depositToStrategies();
   });
 
   after(async function () {
@@ -80,7 +100,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Deposit to strategies", async function () {
-    await skipCycleAndBlocks();
+    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
     await router.depositToStrategies();
     expect((await router.viewStrategiesValue()).totalBalance).to.be.closeTo(
@@ -94,7 +114,7 @@ describe("Test StrategyRouter with two real strategies", function () {
   });
 
   it("Deposit to strategies", async function () {
-    await skipCycleAndBlocks();
+    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
     await router.depositToStrategies();
 
@@ -153,7 +173,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     for (let i = 0; i < 5; i++) {
       await router.depositToBatch(usdc.address, parseUsdc("10"));
-      await skipCycleAndBlocks();
+      await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
       await router.depositToStrategies();
       let receipts = await receiptContract.walletOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
@@ -177,7 +197,7 @@ describe("Test StrategyRouter with two real strategies", function () {
 
     // deposit to strategies
     await router.depositToBatch(usdc.address, parseUsdc("10"));
-    await skipCycleAndBlocks();
+    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
     await router.depositToStrategies();
 
     // deploy new strategy
@@ -237,14 +257,14 @@ describe("Test StrategyRouter with two real strategies", function () {
     await router.depositToBatch(usdc.address, parseUsdc("100000"));
     await router.depositToBatch(usdc.address, parseUsdc("100000"));
     // deposit to strategies
-    await skipCycleAndBlocks();
+    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
     await router.depositToStrategies();
 
     // user deposit
     await router.depositToBatch(usdc.address, parseUsdc("100"));
     await router.depositToBatch(usdc.address, parseUsdc("100"));
     // // deposit to strategies
-    await skipCycleAndBlocks();
+    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
     await router.depositToStrategies();
 
     let receipts = await receiptContract.walletOfOwner(owner.address);

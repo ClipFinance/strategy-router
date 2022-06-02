@@ -13,11 +13,15 @@ describe("Test StrategyRouter", function () {
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batching, receiptContract, sharesToken;
+  // revert to test-ready state
   let snapshotId;
+  // revert to fresh fork state
+  let initialSnapshot;
 
   before(async function () {
 
     [owner] = await ethers.getSigners();
+    initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
     ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
@@ -60,6 +64,10 @@ describe("Test StrategyRouter", function () {
 
   afterEach(async function () {
     await provider.send("evm_revert", [snapshotId]);
+  });
+
+  after(async () => {
+    await provider.send("evm_revert", [initialSnapshot]);
   });
 
   it("depositToBatch no allowance", async function () {

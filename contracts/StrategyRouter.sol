@@ -11,6 +11,7 @@ import "./ReceiptNFT.sol";
 import "./Exchange.sol";
 import "./SharesToken.sol";
 import "./Batching.sol";
+import "./StrategyRouterLib.sol";
 
 // import "hardhat/console.sol";
 
@@ -64,8 +65,13 @@ contract StrategyRouter is Ownable {
 
     /// @notice Restrict msg.sender to be externally owned accounts only.
     modifier OnlyEOW() {
-        if (msg.sender != tx.origin) revert NotCallableByContracts();
+        _onlyEOW();
         _;
+    }
+
+    // need this to reduce bytecode size
+    function _onlyEOW() internal view {
+        if (msg.sender != tx.origin) revert NotCallableByContracts();
     }
 
     struct StrategyInfo {
@@ -87,10 +93,10 @@ contract StrategyRouter is Ownable {
         address[] tokens;
     }
 
-    uint8 public constant UNIFORM_DECIMALS = 18;
+    uint8 private constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
-    uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
-    uint256 public constant INITIAL_SHARES = 1e12;
+    uint256 private constant REBALANCE_SWAP_THRESHOLD = 1e17;
+    uint256 private constant INITIAL_SHARES = 1e12;
     address private constant DEAD_ADDRESS =
         0x000000000000000000000000000000000000dEaD;
 
@@ -150,11 +156,18 @@ contract StrategyRouter is Ownable {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getAssetUsdPrice(tokens[i]);
-                    cycles[_currentCycleId].prices[tokens[i]] = changeDecimals(
+                    cycles[_currentCycleId].prices[
+                        tokens[i]
+                    ] = StrategyRouterLib.changeDecimals(
                         price,
                         priceDecimals,
                         UNIFORM_DECIMALS
                     );
+                    // cycles[_currentCycleId].prices[tokens[i]] = changeDecimals(
+                    //     price,
+                    //     priceDecimals,
+                    //     UNIFORM_DECIMALS
+                    // );
                 }
             }
         }
@@ -168,10 +181,7 @@ contract StrategyRouter is Ownable {
         // get total strategies value after compound
         (uint256 balanceAfterCompound, ) = viewStrategiesValue();
         // rebalance tokens in batching and get new balances
-        (
-            uint256 totalDepositUniform,
-            uint256[] memory depositAmounts
-        ) = batching.rebalance();
+        uint256[] memory depositAmounts = batching.rebalance();
 
         // uint256 totalValueDeposited;
         for (uint256 i; i < len; i++) {
@@ -285,19 +295,7 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        balances = new uint256[](strategies.length);
-        for (uint256 i; i < balances.length; i++) {
-            address token = strategies[i].depositToken;
-            uint256 balance = IStrategy(strategies[i].strategyAddress)
-                .totalTokens();
-            balance = toUniform(balance, token);
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
-                token
-            );
-            balance = ((balance * price) / 10**priceDecimals);
-            balances[i] = balance;
-            totalBalance += balance;
-        }
+        (totalBalance, balances) = StrategyRouterLib.viewStrategiesValue(oracle, strategies);
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batching.
@@ -319,9 +317,16 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 shares)
     {
+        ReceiptNFT _receiptContract = receiptContract;
+        uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            shares += receiptToShares(receiptId);
+            shares += StrategyRouterLib.receiptToShares(
+                _receiptContract,
+                cycles,
+                _currentCycleId,
+                receiptId
+            );
         }
     }
 
@@ -515,12 +520,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public OnlyEOW {
-        batching.withdraw(
-            msg.sender,
-            receiptIds,
-            withdrawToken,
-            amounts
-        );
+        batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
     }
 
     /// @notice Withdraw stablecoins from batching while receipts are in strategies.
@@ -672,7 +672,6 @@ contract StrategyRouter is Ownable {
             address(batching),
             _amount
         );
-
     }
 
     // Admin functions
@@ -804,7 +803,8 @@ contract StrategyRouter is Ownable {
                 viewStrategyPercentWeight(i)) / 1e18;
             address strategyAssetAddress = strategies[i].depositToken;
 
-            depositAmount = _trySwap(
+            depositAmount = StrategyRouterLib.trySwap(
+                exchange,
                 depositAmount,
                 removedDepositToken,
                 strategyAssetAddress
@@ -819,24 +819,22 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
-    /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
     function rebalanceBatching()
         external
         onlyOwner
-        returns (uint256 totalDeposit, uint256[] memory balances)
+        returns (uint256[] memory balances)
     {
         return batching.rebalance();
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.
-    /// @return totalInStrategies Total balance of the strategies with uniform decimals.
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies()
         external
         onlyOwner
-        returns (uint256 totalInStrategies, uint256[] memory balances)
+        returns (uint256[] memory balances)
     {
         uint256 totalBalance;
 
@@ -849,7 +847,7 @@ contract StrategyRouter is Ownable {
             _strategiesTokens[i] = strategies[i].depositToken;
             _strategies[i] = strategies[i].strategyAddress;
             _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += toUniform(
+            totalBalance += StrategyRouterLib.toUniform(
                 _strategiesBalances[i],
                 _strategiesTokens[i]
             );
@@ -860,7 +858,10 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             uint256 desiredBalance = (totalBalance *
                 viewStrategyPercentWeight(i)) / 1e18;
-            desiredBalance = fromUniform(desiredBalance, _strategiesTokens[i]);
+            desiredBalance = StrategyRouterLib.fromUniform(
+                desiredBalance,
+                _strategiesTokens[i]
+            );
             unchecked {
                 if (desiredBalance > _strategiesBalances[i]) {
                     toAdd[i] = desiredBalance - _strategiesBalances[i];
@@ -874,32 +875,56 @@ contract StrategyRouter is Ownable {
             for (uint256 j; j < len; j++) {
                 if (toSell[i] == 0) break;
                 if (toAdd[j] > 0) {
-                    uint256 curSell = toSell[i] > toAdd[j]
-                        ? toAdd[j]
+                    address sellToken = _strategiesTokens[i];
+                    address buyToken = _strategiesTokens[j];
+                    uint256 sellUniform = StrategyRouterLib.toUniform(
+                        toSell[i],
+                        sellToken
+                    );
+                    uint256 addUniform = StrategyRouterLib.toUniform(
+                        toAdd[j],
+                        buyToken
+                    );
+                    // curSell should have sellToken decimals
+                    uint256 curSell = sellUniform > addUniform
+                        ? StrategyRouterLib.changeDecimals(
+                            addUniform,
+                            UNIFORM_DECIMALS,
+                            ERC20(sellToken).decimals()
+                        )
                         : toSell[i];
 
-                    address sellToken = _strategiesTokens[i];
-                    if (
-                        toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
-                    ) {
+                    if (sellUniform < REBALANCE_SWAP_THRESHOLD) {
                         unchecked {
                             toSell[i] = 0;
-                            toAdd[j] -= curSell;
+                            toAdd[j] -= StrategyRouterLib.changeDecimals(
+                                curSell,
+                                ERC20(sellToken).decimals(),
+                                ERC20(buyToken).decimals()
+                            );
                         }
                         break;
                     }
-                    address buyToken = _strategiesTokens[j];
 
                     uint256 received = IStrategy(_strategies[i]).withdraw(
                         curSell
                     );
-                    received = _trySwap(received, sellToken, buyToken);
+                    received = StrategyRouterLib.trySwap(
+                        exchange,
+                        received,
+                        sellToken,
+                        buyToken
+                    );
                     ERC20(buyToken).transfer(_strategies[j], received);
                     IStrategy(_strategies[j]).deposit(received);
 
                     unchecked {
                         toSell[i] -= curSell;
-                        toAdd[j] -= curSell;
+                        toAdd[j] -= StrategyRouterLib.changeDecimals(
+                            curSell,
+                            ERC20(sellToken).decimals(),
+                            ERC20(buyToken).decimals()
+                        );
                     }
                 }
             }
@@ -907,13 +932,13 @@ contract StrategyRouter is Ownable {
 
         for (uint256 i; i < len; i++) {
             _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += toUniform(
+            totalBalance += StrategyRouterLib.toUniform(
                 _strategiesBalances[i],
                 _strategiesTokens[i]
             );
         }
 
-        return (totalBalance, _strategiesBalances);
+        return _strategiesBalances;
     }
 
     // Internals
@@ -946,7 +971,10 @@ contract StrategyRouter is Ownable {
                     withdrawToken
                 );
                 amountToTransfer = (amount * 10**priceDecimals) / price;
-                amountToTransfer = fromUniform(amountToTransfer, withdrawToken);
+                amountToTransfer = StrategyRouterLib.fromUniform(
+                    amountToTransfer,
+                    withdrawToken
+                );
                 amountToTransfer = IStrategy(strategies[i].strategyAddress)
                     .withdraw(amountToTransfer);
                 amount = 0;
@@ -962,10 +990,14 @@ contract StrategyRouter is Ownable {
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getAssetUsdPrice(token);
                     amountToTransfer = (amount * 10**priceDecimals) / price;
-                    amountToTransfer = fromUniform(amountToTransfer, token);
+                    amountToTransfer = StrategyRouterLib.fromUniform(
+                        amountToTransfer,
+                        token
+                    );
                     amountToTransfer = IStrategy(strategies[i].strategyAddress)
                         .withdraw(amountToTransfer);
-                    amountToTransfer = _trySwap(
+                    amountToTransfer = StrategyRouterLib.trySwap(
+                        exchange,
                         amountToTransfer,
                         token,
                         withdrawToken
@@ -988,12 +1020,17 @@ contract StrategyRouter is Ownable {
                     // convert usd value into token amount
                     toSwap = (balances[i] * 10**priceDecimals) / price;
                     // adjust decimals of the token amount
-                    toSwap = fromUniform(toSwap, token);
+                    toSwap = StrategyRouterLib.fromUniform(toSwap, token);
                     toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
                         toSwap
                     );
                     // swap for requested token
-                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
+                    amountToTransfer += StrategyRouterLib.trySwap(
+                        exchange,
+                        toSwap,
+                        token,
+                        withdrawToken
+                    );
                     // reduce total withdraw usd value
                     amount -= balances[i];
                     balances[i] = 0;
@@ -1003,12 +1040,17 @@ contract StrategyRouter is Ownable {
                     // convert usd value into token amount
                     toSwap = (amount * 10**priceDecimals) / price;
                     // adjust decimals of the token amount
-                    toSwap = fromUniform(toSwap, token);
+                    toSwap = StrategyRouterLib.fromUniform(toSwap, token);
                     toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
                         toSwap
                     );
                     // swap for requested token
-                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
+                    amountToTransfer += StrategyRouterLib.trySwap(
+                        exchange,
+                        toSwap,
+                        token,
+                        withdrawToken
+                    );
                     amount = 0;
                     break;
                 }
@@ -1028,89 +1070,20 @@ contract StrategyRouter is Ownable {
         private
         returns (uint256 shares)
     {
+        ReceiptNFT _receiptContract = receiptContract;
+        uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != msg.sender)
                 revert NotReceiptOwner();
-            shares += receiptToShares(receiptId);
+            shares += StrategyRouterLib.receiptToShares(
+                _receiptContract,
+                cycles,
+                _currentCycleId,
+                receiptId
+            );
             receiptContract.burn(receiptId);
             emit UnlockShares(msg.sender, receiptId, shares);
         }
-    }
-
-    // returns amount of shares locked by receipt.
-    function receiptToShares(uint256 receiptId)
-        private
-        view
-        returns (uint256 shares)
-    {
-        ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
-            receiptId
-        );
-        if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
-
-        // (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
-        //     receipt.token
-        // );
-
-        // calculate old usd value
-        uint256 oldValue;
-        uint256 oldPrice = cycles[receipt.cycleId].prices[receipt.token];
-        oldValue = (receipt.amount * oldPrice) / 10**UNIFORM_DECIMALS;
-        assert(oldValue > 0);
-        // adjust according to what was actually deposited into strategies
-        uint256 oldValueAdjusted = (oldValue *
-            cycles[receipt.cycleId].receivedByStrats) /
-            cycles[receipt.cycleId].totalDeposited;
-
-        shares = oldValueAdjusted / cycles[receipt.cycleId].pricePerShare;
-    }
-
-    /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.
-    function changeDecimals(
-        uint256 amount,
-        uint8 oldDecimals,
-        uint8 newDecimals
-    ) private pure returns (uint256) {
-        if (oldDecimals < newDecimals) {
-            return amount * (10**(newDecimals - oldDecimals));
-        } else if (oldDecimals > newDecimals) {
-            return amount / (10**(oldDecimals - newDecimals));
-        }
-        return amount;
-    }
-
-    /// @dev Swap tokens if they are different (i.e. not the same token)
-    function _trySwap(
-        uint256 amount,
-        address from,
-        address to
-    ) private returns (uint256 result) {
-        if (from != to) {
-            IERC20(from).transfer(address(exchange), amount);
-            result = exchange.swapRouted(amount, from, to, address(this));
-            return result;
-        }
-        return amount;
-    }
-
-    /// @dev Change decimal places to `UNIFORM_DECIMALS`.
-    function toUniform(uint256 amount, address token)
-        private
-        view
-        returns (uint256)
-    {
-        return
-            changeDecimals(amount, ERC20(token).decimals(), UNIFORM_DECIMALS);
-    }
-
-    /// @dev Convert decimal places from `UNIFORM_DECIMALS` to token decimals.
-    function fromUniform(uint256 amount, address token)
-        private
-        view
-        returns (uint256)
-    {
-        return
-            changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
     }
 }

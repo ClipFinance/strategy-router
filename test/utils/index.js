@@ -7,22 +7,17 @@ BLOCKS_DAY = 60 * 60 * 24 / 3;
 MaxUint256 = ethers.constants.MaxUint256;
 
 provider = ethers.provider;
-parseUsdc = (args) => parseUnits(args, 18);
-parseUsdt = (args) => parseUnits(args, 18);
-parseBusd = (args) => parseUnits(args, 18);
-parseUst = (args) => parseUnits(args, 18);
 parseUniform = (args) => parseUnits(args, 18);
 
 module.exports = {
-  getTokens, skipBlocks, skipCycleAndBlocks,
+  getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
-  parseUsdt, parseUsdc, parseBusd, parseUst, parseUniform, provider, getUSDC, getBUSD, getUSDT,
+  parseUniform, provider, getUSDC, getBUSD, getUSDT,
   deploy
 }
 
+// helper to reduce code duplication, transforms 3 lines of deployemnt into 1
 async function deploy(contractName, ...constructorArgs) {
-  // console.log(contractName, "constructorArgs", constructorArgs);
-  // console.log("destructed", ...constructorArgs);
   let factory = await ethers.getContractFactory(contractName);
   let contract = await factory.deploy(...constructorArgs);
   return await contract.deployed();
@@ -65,22 +60,24 @@ async function getTokens(tokenAddress, holderAddress) {
    tokenAmount 
   );
 
-  return tokenContract;
+  return {tokenContract, parse};
 }
 
+// skip hardhat network blocks
 async function skipBlocks(blocksNum) {
   blocksNum = "0x" + blocksNum.toString(16);
   await hre.network.provider.send("hardhat_mine", [blocksNum]);
 }
 
-async function skipCycleAndBlocks() {
-  await provider.send("evm_increaseTime", [CYCLE_DURATION]);
+// 
+async function skipTimeAndBlocks(timeToSkip, blocksToSkip) {
+  await provider.send("evm_increaseTime", [Number(timeToSkip)]);
   await provider.send("evm_mine");
-  skipBlocks(CYCLE_DURATION / 3);
+  skipBlocks(Number(blocksToSkip));
 }
 
-// Usually tuples returned by solidity (or ethers.js) contain duplicated data
-// one data is named variables and second unnamed (e.g. {var:5, 5}).
+// Usually tuples returned by ethers.js contain duplicated data,
+// named and unnamed e.g. [var:5, 5].
 // This helper should remove such duplication and print result in console.
 function printStruct(struct) {
   let obj = struct;

@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
-const { skipBlocks, BLOCKS_MONTH } = require("../utils");
+const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber } = require("ethers");
 
 
@@ -12,6 +12,7 @@ module.exports = function strategyTest(strategyName) {
     let owner, feeAddress;
     // core contracts
     let router, oracle, exchange;
+    let strategy;
     // strategy's deposit token
     let depositToken;
     // helper function to parse deposit token amounts
@@ -26,7 +27,7 @@ module.exports = function strategyTest(strategyName) {
       snapshotId = await provider.send("evm_snapshot");
 
       // deploy core contracts
-      ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+      ({ router, oracle, exchange } = await setupCore());
 
       // setup params for testing
       await setupParamsOnBNB(router, oracle, exchange);
@@ -35,10 +36,9 @@ module.exports = function strategyTest(strategyName) {
       await setupTokens();
 
       // deploy strategy to test
-      strategy = await ethers.getContractFactory(strategyName);
-      strategy = await strategy.deploy(router.address);
-      await strategy.deployed();
+      strategy = await deploy(strategyName, router.address);
 
+      // get deposit token and parse helper function
       depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
       let decimals = await depositToken.decimals();
       parseAmount = (amount) => parseUnits(amount, decimals);

@@ -57,10 +57,10 @@ async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount) {
 
 // Get tokens that actually exists on BNB for testing
 async function setupTokens() {
-  let usdc = await getUSDC();
-  let busd = await getBUSD();
-  let usdt = await getUSDT();
-  return { usdc, busd, usdt };
+  ({tokenContract: usdc, parse: parseUsdc}= await getUSDC());
+  ({tokenContract: usdt, parse: parseUsdt}= await getUSDT());
+  ({tokenContract: busd, parse: parseBusd}= await getBUSD());
+  return { usdc, busd, usdt, parseUsdc, parseUsdt, parseBusd };
 };
 
 // deploy core contracts
@@ -70,13 +70,21 @@ async function setupCore() {
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
   let exchange = await deploy("Exchange");
-  // Deploy StrategyRouter 
-  let router = await deploy("StrategyRouter");
+  // Deploy StrategyRouterLib 
+  let routerLib = await deploy("StrategyRouterLib");
+  // Deploy StrategyRouter linked to its library
+  let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
+    libraries: {
+     StrategyRouterLib: routerLib.address
+    }
+  });
+  let router = await StrategyRouter.deploy();
+  await router.deployed();
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let receiptContract = await ethers.getContractAt("ReceiptNFT", await router.receiptContract());
   let batching = await ethers.getContractAt("Batching", await router.batching());
   let sharesToken = await ethers.getContractAt("SharesToken", await router.sharesToken());
-  let INITIAL_SHARES = Number(await router.INITIAL_SHARES());
+  let INITIAL_SHARES = Number(1e12);
 
   return { oracle, exchange, router, receiptContract, batching, sharesToken, INITIAL_SHARES };
 }

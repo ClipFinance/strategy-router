@@ -31,6 +31,7 @@ contract FakeOracle is IUsdOracle, Ownable {
         prices[BUSD][Denominations.USD] = Price(10_000_000_000, 10); // 1$
     }
 
+    // set fake prices
     function setPrice(address base, uint256 price) public {
         prices[base][Denominations.USD] = Price(price, ERC20(base).decimals()); 
     }

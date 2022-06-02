@@ -13,7 +13,7 @@ import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -100,11 +100,14 @@ contract Batching is Ownable {
         for (uint256 i; i < balances.length; i++) {
             address token = stablecoins.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
+
+            // console.log(balance, ERC20(token).decimals());
             balance = toUniform(balance, token);
 
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 token
             );
+            // console.log(price, priceDecimals, balance, ERC20(token).decimals());
             balance = ((balance * price) / 10**priceDecimals);
             balances[i] = balance;
             totalBalance += balance;
@@ -296,12 +299,11 @@ contract Batching is Ownable {
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
-    /// @return totalDeposit Total batching balance to be deposited into strategies with uniform decimals.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
     function rebalance()
         public
         onlyOwner
-        returns (uint256 totalDeposit, uint256[] memory balances)
+        returns (uint256[] memory balances)
     {
         /*
         1 store supported-stables (set of unique addrs)
@@ -431,13 +433,9 @@ contract Batching is Ownable {
         _balances = new uint256[](lenStrats);
         for (uint256 i; i < lenStrats; i++) {
             _balances[i] = _strategiesBalances[i];
-            totalDeposit += toUniform(
-                _balances[i],
-                router.viewStrategyDepositToken(i)
-            );
         }
 
-        return (totalDeposit, _balances);
+        return _balances;
     }
 
     /// @notice Set token as supported for user deposit and withdraw.

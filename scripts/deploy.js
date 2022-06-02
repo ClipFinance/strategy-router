@@ -1,6 +1,6 @@
+const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
-const { ethers, waffle } = require("hardhat");
-const { parseUsdc } = require("../test/utils/utils");
+const { ethers } = require("hardhat");
 
 // deploy script for testing on mainnet
 // to test on hardhat network:
@@ -16,9 +16,14 @@ async function main() {
   await setupVerificationHelper();
 
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-  provider = ethers.provider;
 
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+  // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
+  busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
+  usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
+  const usdcDecimals = await usdc.decimals();
+  const parseUsdc = (amount) => parseUnits(amount, usdcDecimals);
+
+  // ~~~~~~~~~~~~~~~ SETTINGS ~~~~~~~~~~~~~~~~ 
 
   CYCLE_DURATION = 1;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
@@ -26,10 +31,6 @@ async function main() {
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
   FEE_PERCENT = 1000;
   INITIAL_DEPOSIT = parseUsdc("0.1");
-
-  // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
-  busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
-  usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
   oracle = await ethers.getContractFactory("ChainlinkOracle");
