@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
 
-    error NonexistenToken();
+    error NonExistingToken();
     error NotManager();
     error AlreadyInitialized();
     
@@ -36,10 +36,10 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         managers[strategyRouter] = true;
         managers[batching] = true;
         initialized = true;
-    } 
+    }
 
     function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
-        if (_exists(tokenId) == false) revert NonexistenToken();
+        if (!_exists(tokenId)) revert NonExistingToken();
         receipts[tokenId].amount = amount;
     }     
 
@@ -62,20 +62,22 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
     function burn(uint256 tokenId) external onlyManager {
         _burn(tokenId);
         delete receipts[tokenId];
-    } 
+    }
+
+    /////// remove
 
     /// @notice Get receipt data recorded in NFT.
-    function viewReceipt(uint256 tokenId) 
+    function viewReceipt(uint256 tokenId)
         external 
         view 
         returns (ReceiptData memory) 
     {
-        if(_exists(tokenId) == false) revert NonexistenToken();
+        if(_exists(tokenId) == false) revert NonExistingToken();
         return receipts[tokenId];
     }
     
-    /// @notice Get all tokens owned by user, to be used off-chain.
-    function walletOfOwner(address ownerAddr) 
+    /// @notice Get all tokens owned by user
+    function walletOfOwner(address ownerAddr)
         public 
         view 
         returns (uint256[] memory tokens) 
@@ -87,6 +89,34 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         while(balance > 0) {
             if (_exists(tokenId) && ownerOf(tokenId) == ownerAddr) {
                 tokens[--balance] = tokenId; 
+            }
+            tokenId++;
+        }
+    }
+
+    ///////// replace by
+
+    function getReceipt(uint256 tokenId)
+        external
+        view
+        returns (ReceiptData memory)
+    {
+        if(_exists(tokenId) == false) revert NonExistingToken();
+        return receipts[tokenId];
+    }
+
+    function getTokensOwnedBy(address ownerAddr)
+        public
+        view
+        returns (uint256[] memory tokens)
+    {
+        uint256 balance = balanceOf(ownerAddr);
+        tokens = new uint256[](balance);
+        uint256 tokenId;
+
+        while(balance > 0) {
+            if (_exists(tokenId) && ownerOf(tokenId) == ownerAddr) {
+                tokens[--balance] = tokenId;
             }
             tokenId++;
         }
