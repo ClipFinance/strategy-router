@@ -99,7 +99,7 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   await router.setOracle(oracle.address);
   await router.setFeePercent(2000);
   await router.setFeeAddress(feeAddress.address);
-  await router.setCycleDuration(1)
+  await router.setCycleDuration(1);
 
   // Setup fake prices
   let usdtAmount = parseUnits("0.99", await usdt.decimals());

@@ -295,7 +295,10 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        (totalBalance, balances) = StrategyRouterLib.viewStrategiesValue(oracle, strategies);
+        (totalBalance, balances) = StrategyRouterLib.viewStrategiesValue(
+            oracle,
+            strategies
+        );
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batching.
@@ -411,9 +414,9 @@ contract StrategyRouter is Ownable {
         }
 
         // shares into usd using current PPS
-        uint256 amountWithdraw = sharesToValue(shares);
+        uint256 valueToWithdraw = sharesToValue(shares);
         sharesToken.burn(address(this), shares);
-        _withdrawFromStrategies(amountWithdraw, withdrawToken);
+        _withdrawFromStrategies(valueToWithdraw, withdrawToken);
     }
 
     /// @notice Withdraw stablecoins from strategies while receipts are in batching.
@@ -552,9 +555,9 @@ contract StrategyRouter is Ownable {
             );
         }
 
-        uint256 amountWithdraw = sharesToValue(shares);
+        uint256 valueToWithdraw = sharesToValue(shares);
 
-        _withdrawFromBatching(amountWithdraw, withdrawToken);
+        _withdrawFromBatching(valueToWithdraw, withdrawToken);
         cycles[currentCycleId].stratsDebtInShares += shares;
     }
 
@@ -943,17 +946,19 @@ contract StrategyRouter is Ownable {
 
     // Internals
 
-    /// @param amount USD value to withdraw.
-    function _withdrawFromBatching(uint256 amount, address withdrawToken)
-        private
-    {
-        batching._withdraw(msg.sender, amount, withdrawToken);
+    /// @param valueToWithdraw USD value to withdraw.
+    function _withdrawFromBatching(
+        uint256 valueToWithdraw,
+        address withdrawToken
+    ) private {
+        batching._withdraw(msg.sender, valueToWithdraw, withdrawToken);
     }
 
-    /// @param amount USD value to withdraw.
-    function _withdrawFromStrategies(uint256 amount, address withdrawToken)
-        private
-    {
+    /// @param valueToWithdraw USD value to withdraw.
+    function _withdrawFromStrategies(
+        uint256 valueToWithdraw,
+        address withdrawToken
+    ) private {
         (
             uint256 strategiesBalance,
             uint256[] memory balances
@@ -965,31 +970,35 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             if (
                 strategies[i].depositToken == withdrawToken &&
-                balances[i] >= amount
+                balances[i] >= valueToWithdraw
             ) {
                 (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                     withdrawToken
                 );
-                amountToTransfer = (amount * 10**priceDecimals) / price;
+                amountToTransfer =
+                    (valueToWithdraw * 10**priceDecimals) /
+                    price;
                 amountToTransfer = StrategyRouterLib.fromUniform(
                     amountToTransfer,
                     withdrawToken
                 );
                 amountToTransfer = IStrategy(strategies[i].strategyAddress)
                     .withdraw(amountToTransfer);
-                amount = 0;
+                valueToWithdraw = 0;
                 break;
             }
         }
 
         // try withdraw token which balance is enough to do only 1 swap
-        if (amount != 0) {
+        if (valueToWithdraw != 0) {
             for (uint256 i; i < len; i++) {
-                if (balances[i] >= amount) {
+                if (balances[i] >= valueToWithdraw) {
                     address token = strategies[i].depositToken;
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getAssetUsdPrice(token);
-                    amountToTransfer = (amount * 10**priceDecimals) / price;
+                    amountToTransfer =
+                        (valueToWithdraw * 10**priceDecimals) /
+                        price;
                     amountToTransfer = StrategyRouterLib.fromUniform(
                         amountToTransfer,
                         token
@@ -1002,58 +1011,42 @@ contract StrategyRouter is Ownable {
                         token,
                         withdrawToken
                     );
-                    amount = 0;
+                    valueToWithdraw = 0;
                     break;
                 }
             }
         }
 
         // swap different tokens until withraw amount is fulfilled
-        if (amount != 0) {
+        if (valueToWithdraw != 0) {
             for (uint256 i; i < len; i++) {
                 address token = strategies[i].depositToken;
                 uint256 toSwap;
-                if (balances[i] < amount) {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
+                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                    token
+                );
 
-                    // convert usd value into token amount
-                    toSwap = (balances[i] * 10**priceDecimals) / price;
-                    // adjust decimals of the token amount
-                    toSwap = StrategyRouterLib.fromUniform(toSwap, token);
-                    toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
-                        toSwap
-                    );
-                    // swap for requested token
-                    amountToTransfer += StrategyRouterLib.trySwap(
-                        exchange,
-                        toSwap,
-                        token,
-                        withdrawToken
-                    );
-                    // reduce total withdraw usd value
-                    amount -= balances[i];
-                    balances[i] = 0;
-                } else {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
-                    // convert usd value into token amount
-                    toSwap = (amount * 10**priceDecimals) / price;
-                    // adjust decimals of the token amount
-                    toSwap = StrategyRouterLib.fromUniform(toSwap, token);
-                    toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
-                        toSwap
-                    );
-                    // swap for requested token
-                    amountToTransfer += StrategyRouterLib.trySwap(
-                        exchange,
-                        toSwap,
-                        token,
-                        withdrawToken
-                    );
-                    amount = 0;
-                    break;
+                toSwap = balances[i] < valueToWithdraw
+                    ? balances[i]
+                    : valueToWithdraw;
+                unchecked {
+                    valueToWithdraw -= toSwap;
                 }
+                // convert usd value into token amount
+                toSwap = (toSwap * 10**priceDecimals) / price;
+                // adjust decimals of the token amount
+                toSwap = StrategyRouterLib.fromUniform(toSwap, token);
+                toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
+                    toSwap
+                );
+                // swap for requested token
+                amountToTransfer += StrategyRouterLib.trySwap(
+                    exchange,
+                    toSwap,
+                    token,
+                    withdrawToken
+                );
+                if(valueToWithdraw == 0) break;
             }
         }
 

@@ -13,8 +13,10 @@ import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
+/// @notice This contract contains batching related code, its just a module that is utilized by StrategyRouter.
+/// @notice This contract should be owned by StrategyRouter.
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
@@ -101,13 +103,10 @@ contract Batching is Ownable {
             address token = stablecoins.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
 
-            // console.log(balance, ERC20(token).decimals());
             balance = toUniform(balance, token);
-
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 token
             );
-            // console.log(price, priceDecimals, balance, ERC20(token).decimals());
             balance = ((balance * price) / 10**priceDecimals);
             balances[i] = balance;
             totalBalance += balance;
@@ -129,11 +128,10 @@ contract Batching is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public onlyOwner {
-        if (!supportsCoin(withdrawToken))
-            revert UnsupportedStablecoin();
+        if (!supportsCoin(withdrawToken)) revert UnsupportedStablecoin();
 
         uint256 _currentCycleId = router.currentCycleId();
-        uint256 toWithdraw;
+        uint256 valueToWithdraw;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != withdrawer)
@@ -152,88 +150,86 @@ contract Batching is Ownable {
                 // withdraw whole receipt and burn receipt
                 uint256 receiptValue = ((receipt.amount * price) /
                     10**priceDecimals);
-                toWithdraw += receiptValue;
+                valueToWithdraw += receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 // withdraw only part of receipt and update receipt
                 uint256 amountValue = ((amounts[i] * price) /
                     10**priceDecimals);
-                toWithdraw += amountValue;
-                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
+                valueToWithdraw += amountValue;
+                receiptContract.setAmount(
+                    receiptId,
+                    receipt.amount - amounts[i]
+                );
             }
         }
-        _withdraw(withdrawer, toWithdraw, withdrawToken);
+        _withdraw(withdrawer, valueToWithdraw, withdrawToken);
     }
 
     function _withdraw(
         address withdrawer,
-        uint256 amount,
+        uint256 valueToWithdraw,
         address withdrawToken
     ) public onlyOwner {
         (uint256 totalBalance, uint256[] memory balances) = viewBatchingValue();
-        if (totalBalance < amount) revert NotEnoughInBatching();
+        if (totalBalance < valueToWithdraw) revert NotEnoughInBatching();
 
         uint256 amountToTransfer;
         // try withdraw requested token directly
-        if (balances[stablecoins.indexOf(withdrawToken)] >= amount) {
+        if (balances[stablecoins.indexOf(withdrawToken)] >= valueToWithdraw) {
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 withdrawToken
             );
-            amountToTransfer = (amount * 10**priceDecimals) / price;
+            amountToTransfer = (valueToWithdraw * 10**priceDecimals) / price;
             amountToTransfer = fromUniform(amountToTransfer, withdrawToken);
-            amount = 0;
+            valueToWithdraw = 0;
         }
 
         // try withdraw token which balance is enough to do only 1 swap
-        if (amount != 0) {
+        if (valueToWithdraw != 0) {
             for (uint256 i; i < balances.length; i++) {
-                if (balances[i] >= amount) {
+                if (balances[i] >= valueToWithdraw) {
                     address token = stablecoins.at(i);
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getAssetUsdPrice(token);
-                    amountToTransfer = (amount * 10**priceDecimals) / price;
+                    amountToTransfer =
+                        (valueToWithdraw * 10**priceDecimals) /
+                        price;
                     amountToTransfer = fromUniform(amountToTransfer, token);
                     amountToTransfer = _trySwap(
                         amountToTransfer,
                         token,
                         withdrawToken
                     );
-                    amount = 0;
+                    valueToWithdraw = 0;
                     break;
                 }
             }
         }
 
         // swap different tokens until withraw amount is fulfilled
-        if (amount != 0) {
+        if (valueToWithdraw != 0) {
             for (uint256 i; i < balances.length; i++) {
                 address token = stablecoins.at(i);
                 uint256 toSwap;
-                if (balances[i] < amount) {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
+                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                    token
+                );
 
-                    // convert usd value into token amount
-                    toSwap = (balances[i] * 10**priceDecimals) / price;
-                    // adjust decimals of the token amount
-                    toSwap = fromUniform(toSwap, token);
-                    // swap for requested token
-                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
-                    // reduce total withdraw usd value
-                    amount -= balances[i];
-                    balances[i] = 0;
-                } else {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
-                    // convert usd value into token amount
-                    toSwap = (amount * 10**priceDecimals) / price;
-                    // adjust decimals of the token amount
-                    toSwap = fromUniform(toSwap, token);
-                    // swap for requested token
-                    amountToTransfer += _trySwap(toSwap, token, withdrawToken);
-                    amount = 0;
-                    break;
+                toSwap = balances[i] < valueToWithdraw
+                    ? balances[i]
+                    : valueToWithdraw;
+
+                unchecked{
+                    valueToWithdraw -= toSwap;
                 }
+                // convert usd value into token amount
+                toSwap = (toSwap * 10**priceDecimals) / price;
+                // adjust decimals of the token amount
+                toSwap = fromUniform(toSwap, token);
+                // swap for requested token
+                amountToTransfer += _trySwap(toSwap, token, withdrawToken);
+                if(valueToWithdraw == 0) break;
             }
         }
         IERC20(withdrawToken).transfer(withdrawer, amountToTransfer);
@@ -300,11 +296,7 @@ contract Batching is Ownable {
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalance()
-        public
-        onlyOwner
-        returns (uint256[] memory balances)
-    {
+    function rebalance() public onlyOwner returns (uint256[] memory balances) {
         /*
         1 store supported-stables (set of unique addrs)
             [a,b,c]
@@ -485,12 +477,7 @@ contract Batching is Ownable {
     ) private returns (uint256 result) {
         if (from != to) {
             IERC20(from).transfer(address(exchange), amount);
-            result = exchange.swapRouted(
-                amount,
-                from,
-                to,
-                address(this)
-            );
+            result = exchange.swapRouted(amount, from, to, address(this));
             return result;
         }
         return amount;

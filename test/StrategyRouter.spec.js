@@ -6,7 +6,7 @@ const { MaxUint256, parseUniform } = require("./utils");
 
 describe("Test StrategyRouter", function () {
 
-  let owner;
+  let owner, user1;
   // mock stablecoins with different decimals
   let usdc, usdt, busd;
   // helper functions to parse amounts of mock stablecoins
@@ -20,7 +20,7 @@ describe("Test StrategyRouter", function () {
 
   before(async function () {
 
-    [owner] = await ethers.getSigners();
+    [owner, user1] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
@@ -70,18 +70,17 @@ describe("Test StrategyRouter", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-  it("depositToBatch no allowance", async function () {
-    // remove allowance
+  it("should revert depositToBatch no allowance", async function () {
     await busd.approve(router.address, 0);
     await expect(router.depositToBatch(busd.address, parseBusd("100"))).to.be.reverted;
   });
 
-  it("depositToBatch token not whitelisted", async function () {
+  it("should revert depositToBatch token not whitelisted", async function () {
     await expect(router.depositToBatch(router.address, parseBusd("100")))
       .to.be.revertedWith("UnsupportedStablecoin");
   });
 
-  it("depositToBatch", async function () {
+  it("should depositToBatch create receipt with correct values", async function () {
     let depositAmount = parseBusd("100");
     await router.depositToBatch(busd.address, depositAmount);
 
@@ -93,17 +92,14 @@ describe("Test StrategyRouter", function () {
     expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
   });
 
-  // TODO:
-  // deposit 100, withdraw 50
-  // deposit 100, withdraw 150 (more than deposited)
-  // precondition: minimum deposit 50. deposit 50, withdraw 25. what to expect?
-  // withdraw nft that doesn't belong to you
-  // withdraw $1. what is minimum withdrawal amount?
-  // deposit token X, trying to withdraw token Y
-  //   token Y withdrawing amount is larger than deposited token X amount
-  //   token Y withdrawing amount is less than minimum deposit amount
-  it("withdrawFromBatching withdout swaps", async function () {
+  it("shouldn't be able to withdrawFromBatching receipt that doesn't belong to you", async function () {
     await router.depositToBatch(usdc.address, parseUsdc("100"))
+    await expect(router.connect(user1).withdrawFromBatching([1], usdc.address, [MaxUint256]))
+      .to.be.revertedWith("NotReceiptOwner()");
+  });
+
+  it("should withdrawFromBatching whole amount", async function () {
+    await router.depositToBatch(usdc.address, parseUsdc("100"));
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
@@ -112,41 +108,66 @@ describe("Test StrategyRouter", function () {
     expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
   });
 
-  // deposit x, withdraw in token y
-  // what if stablecoins value is different
-  // what if oracle gives another stablecoin is different 1000 times? (different rates)
-  // what if token X has 0, 2, 6, 9, 18 decimals, token Y has 0, 2, 6, 9, 18 decimals and vice versa (different decimals)
-  // different rate and decimals
-  it("withdrawFromBatching with swaps", async function () {
-    await router.depositToBatch(busd.address, parseBusd("100"))
+  it("should withdrawFromBatching token y when deposited token x", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
     let newBalance = await usdc.balanceOf(owner.address);
-
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+  });
+
+  it("should withdrawFromBatching half of receipt value", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
 
     // WITHDRAW PART
     oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([2], usdc.address, [parseUsdc("50")]);
+    await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
     newBalance = await usdc.balanceOf(owner.address);
 
-    let receipt = await receiptContract.viewReceipt(2);
-
-    expect(receipt.amount).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
+    let receipt = await receiptContract.viewReceipt(1);
+    expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
   });
 
-  it("depositToStrategies", async function () {
+  it("should withdrawFromBatching (and swap tokens x,y into z)", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"));
+    await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+    // WITHDRAW PART
+    oldBalance = await usdt.balanceOf(owner.address);
+    await router.withdrawFromBatching([1,2], usdt.address, [parseUniform("100"), parseUniform("100")]);
+    newBalance = await usdt.balanceOf(owner.address);
+
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdt("200"), parseUsdt("1"));
+  });
+
+  it("should withdrawFromBatching correct amount when price changes", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+
+    // set price x10
+    await oracle.setPrice(busd.address, parseBusd("10"));
+
+    // current balance is 100 BUSD = 1000$
+    // but dex's rates aren't changed! so we'll receive only 50usdc instead of 500.
+    oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
+    newBalance = await usdc.balanceOf(owner.address);
+
+    let receipt = await receiptContract.viewReceipt(1);
+    expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
+  });
+
+  it("should depositToStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
     await router.depositToStrategies()
     let strategiesBalance = await router.viewStrategiesValue()
-    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUsdc("100"), parseUsdc("2"));
+    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
   });
 
-  it("withdrawFromStrategies", async function () {
+  it("should withdrawFromStrategies whole amount", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.depositToStrategies()
 
@@ -158,7 +179,7 @@ describe("Test StrategyRouter", function () {
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
 
-  it("withdrawFromStrategies both nft and shares", async function () {
+  it("should withdrawFromStrategies both nft and shares", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.depositToStrategies()
@@ -168,7 +189,6 @@ describe("Test StrategyRouter", function () {
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.receiptsToShares([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
-
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
@@ -318,7 +338,6 @@ describe("Test StrategyRouter", function () {
 
   it("Remove strategy", async function () {
 
-
     // deposit to strategies
     await router.depositToBatch(busd.address, parseBusd("10"));
     await router.depositToStrategies();
@@ -346,10 +365,6 @@ describe("Test StrategyRouter", function () {
       parseUniform("1")
     );
 
-  });
-
-  it("Test rebalance function", async function () {
-    // see rebalance.js
   });
 
 });
