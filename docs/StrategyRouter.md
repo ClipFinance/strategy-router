@@ -72,42 +72,42 @@ Compound all strategies.
 
 _Only callable by user wallets._
 
-### viewStablecoins
+### getStablecoins
 
 ```solidity
-function viewStablecoins() public view returns (address[])
+function getStablecoins() public view returns (address[])
 ```
 
 _Returns list of supported stablecoins._
 
-### viewStrategyPercentWeight
+### getStrategyPercentWeight
 
 ```solidity
-function viewStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation)
+function getStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation)
 ```
 
 _Returns strategy weight as percent of total weight._
 
-### viewStrategiesCount
+### getStrategiesCount
 
 ```solidity
-function viewStrategiesCount() public view returns (uint256 count)
+function getStrategiesCount() public view returns (uint256 count)
 ```
 
 Returns count of strategies.
 
-### viewStrategies
+### getStrategies
 
 ```solidity
-function viewStrategies() public view returns (struct StrategyRouter.StrategyInfo[])
+function getStrategies() public view returns (struct StrategyRouter.StrategyInfo[])
 ```
 
 Returns array of strategies.
 
-### viewStrategiesBalance
+### getStrategiesBalance
 
 ```solidity
-function viewStrategiesBalance() public view returns (uint256 totalBalance, uint256[] balances)
+function getStrategiesBalance() public view returns (uint256 totalBalance, uint256[] balances)
 ```
 
 Returns amount of tokens in strategies.
@@ -118,10 +118,10 @@ All returned numbers have &#x60;UNIFORM_DECIMALS&#x60; decimals.
 | totalBalance | uint256 | Total amount of tokens in strategies. |
 | balances | uint256[] | Array of token amount in each strategy. |
 
-### viewBatchingBalance
+### getBatchingBalance
 
 ```solidity
-function viewBatchingBalance() public view returns (uint256 totalBalance, uint256[] balances)
+function getBatchingBalance() public view returns (uint256 totalBalance, uint256[] balances)
 ```
 
 Returns token balances and their sum in the batching.

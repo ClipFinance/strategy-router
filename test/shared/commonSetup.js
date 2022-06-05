@@ -78,12 +78,12 @@ async function setupCore() {
      StrategyRouterLib: routerLib.address
     }
   });
-  let router = await StrategyRouter.deploy();
+  let router = await StrategyRouter.deploy(exchange.address, oracle.address);
   await router.deployed();
   // Retrieve contracts that are deployed from StrategyRouter constructor
-  let receiptContract = await ethers.getContractAt("ReceiptNFT", await router.receiptContract());
   let batching = await ethers.getContractAt("Batching", await router.batching());
   let sharesToken = await ethers.getContractAt("SharesToken", await router.sharesToken());
+  let receiptContract = await ethers.getContractAt("ReceiptNFT", await router.receiptContract());
   let INITIAL_SHARES = Number(1e12);
 
   return { oracle, exchange, router, receiptContract, batching, sharesToken, INITIAL_SHARES };

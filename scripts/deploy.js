@@ -88,7 +88,7 @@ async function main() {
       StrategyRouterLib: routerLib.address
     }
   });
-  router = await StrategyRouter.deploy();
+  router = await StrategyRouter.deploy(exchange.address, oracle.address);
   router = await router.deployed();
   console.log("StrategyRouter", router.address);
   console.log("ReceiptNFT", await router.receiptContract());
@@ -140,6 +140,11 @@ async function main() {
   console.log("  - Verification will start in a minute...\n");
   await delay(46000);
 
+  let batchingAddress = await router.batching();
+  let receiptNftAddress = await router.receiptContract();
+  let sharesTokenAddress = await router.sharesToken();
+
+  // verify router
   await safeVerify({
     address: router.address,
     constructorArguments: router.constructorArgs,
@@ -148,21 +153,34 @@ async function main() {
     }
   });
 
-  let deployedContracts = [
+  // verify receiptNFT
+  await safeVerify({
+    address: receiptNftAddress,
+    constructorArguments: [router.address, batchingAddress],
+  });
+
+  // verify batching contract
+  await safeVerify({
+    address: batchingAddress,
+    constructorArguments: [router.address],
+  });
+
+  // verify ShareToken contract
+  await safeVerify({
+    address: sharesTokenAddress,
+    constructorArguments: [],
+  });
+
+
+  await verifyMultiple([
     exchange,
-    // these are deployed by StrategyRouter and they don't have constructor args
-    // thus we can use their address with args set to [] for verification
-    await router.receiptContract(),
-    await router.batching(),
-    await router.sharesToken(),
     strategyBusd,
     strategyUsdc,
     oracle
-  ];
-
-  await verifyMultiple(deployedContracts);
+  ]);
 }
 
+// Helper function that won't exit script on error
 async function safeVerify(verifyArgs) {
   try {
     await hre.run("verify:verify", verifyArgs);

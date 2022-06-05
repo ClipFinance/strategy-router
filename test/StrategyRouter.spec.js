@@ -84,7 +84,7 @@ describe("Test StrategyRouter", function () {
     let depositAmount = parseBusd("100");
     await router.depositToBatch(busd.address, depositAmount);
 
-    let newReceipt = await receiptContract.viewReceipt(1);
+    let newReceipt = await receiptContract.getReceipt(1);
     expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
     expect(newReceipt.token).to.be.equal(busd.address);
     expect(newReceipt.amount).to.be.equal(parseUniform("100"));
@@ -125,7 +125,7 @@ describe("Test StrategyRouter", function () {
     await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
     newBalance = await usdc.balanceOf(owner.address);
 
-    let receipt = await receiptContract.viewReceipt(1);
+    let receipt = await receiptContract.getReceipt(1);
     expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
   });
@@ -154,7 +154,7 @@ describe("Test StrategyRouter", function () {
     await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
     newBalance = await usdc.balanceOf(owner.address);
 
-    let receipt = await receiptContract.viewReceipt(1);
+    let receipt = await receiptContract.getReceipt(1);
     expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
   });
@@ -163,7 +163,7 @@ describe("Test StrategyRouter", function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
     await router.depositToStrategies()
-    let strategiesBalance = await router.viewStrategiesValue()
+    let strategiesBalance = await router.getStrategiesValue()
     expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
   });
 
@@ -324,16 +324,16 @@ describe("Test StrategyRouter", function () {
     let withdrawSharesFromReceipt = await router.receiptsToShares([2]);
     let totalShares = withdrawShares.add(withdrawSharesFromReceipt);
 
-    let amountReceiptBatch = (await receiptContract.viewReceipt(3)).amount;
+    let amountReceiptBatch = (await receiptContract.getReceipt(3)).amount;
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([3], [2], usdc.address, [amountReceiptBatch], totalShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("30000"), parseUsdc("1000"));
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(receiptContract.viewReceipt(1)).to.be.reverted;
-    expect(receiptContract.viewReceipt(2)).to.be.reverted;
-    expect(receiptContract.viewReceipt(3)).to.be.reverted;
+    expect(receiptContract.getReceipt(1)).to.be.reverted;
+    expect(receiptContract.getReceipt(2)).to.be.reverted;
+    expect(receiptContract.getReceipt(3)).to.be.reverted;
   });
 
   it("Remove strategy", async function () {
