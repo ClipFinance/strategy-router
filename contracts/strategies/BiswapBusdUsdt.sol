@@ -43,12 +43,12 @@ contract BiswapBusdUsdt is Ownable, IStrategy {
         // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
 
         // swap a bit more to account for swap fee (0.06% on acryptos)
-        uint256 usdtAmount = (amount * 5003) / 10000;
-        uint256 busdAmount = amount - usdtAmount;
+        uint256 allocateToUsdtAmount = (amount * 5003) / 10000;
+        uint256 busdAmount = amount - allocateToUsdtAmount;
 
         Exchange exchange = strategyRouter.exchange();
-        BUSD.transfer(address(exchange), usdtAmount);
-        usdtAmount = exchange.swapRouted(usdtAmount, address(BUSD), address(USDT), address(this));
+        BUSD.transfer(address(exchange), allocateToUsdtAmount);
+        uint256 usdtAmount = exchange.swapRouted(allocateToUsdtAmount, address(BUSD), address(USDT), address(this));
 
         BUSD.approve(address(biswapRouter), busdAmount);
         USDT.approve(address(biswapRouter), usdtAmount);
@@ -146,32 +146,24 @@ contract BiswapBusdUsdt is Ownable, IStrategy {
         }
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() external view override returns (uint256 amountBusd) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
-        uint256 _totalSupply = lpToken.totalSupply();
-        // this formula is from remove_liquidity -> burn of uniswapV2pair
-        uint256 amountUst = (liquidity * BUSD.balanceOf(address(lpToken))) /
-            _totalSupply;
-        uint256 amountBusd = (liquidity * USDT.balanceOf(address(lpToken))) /
-            _totalSupply;
-
-        if (amountBusd > 0) {
-            address token0 = IUniswapV2Pair(address(lpToken)).token0();
+        if (liquidity > 0) {
+            uint256 _totalSupply = lpToken.totalSupply();
 
             (uint112 _reserve0, uint112 _reserve1, ) = IUniswapV2Pair(
                 address(lpToken)
             ).getReserves();
+            // this formula is from remove_liquidity -> burn of uniswapV2pair
+            uint256 amountUsdt = (liquidity * _reserve0) / _totalSupply;
+            amountBusd = (liquidity * _reserve1) / _totalSupply;
 
-            (_reserve0, _reserve1) = token0 == address(USDT)
-                ? (_reserve0, _reserve1)
-                : (_reserve1, _reserve0);
-
-            // convert amountBusd to amount BUSD 
-            amountUst += biswapRouter.quote(amountBusd, _reserve0, _reserve1);
+            // convert amount USDT to BUSD equivalent
+            amountBusd += biswapRouter.quote(amountUsdt, _reserve0, _reserve1);
         }
 
-        return amountUst;
+        return amountBusd;
     }
 
     function withdrawAll()
