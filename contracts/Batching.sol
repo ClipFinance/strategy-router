@@ -9,7 +9,6 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
 import "./Exchange.sol";
-import "./SharesToken.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
@@ -36,6 +35,7 @@ contract Batching is Ownable {
 
     // Events for setters.
     event SetOracle(address newAddress);
+    event SetReceiptNFT(address newAddress);
     event SetExchange(address newAddress);
     event SetMinDeposit(uint256 newAmount);
 
@@ -57,25 +57,13 @@ contract Batching is Ownable {
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
-    SharesToken public sharesToken;
     StrategyRouter public router;
     IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private stablecoins;
 
-    constructor() {}
-
-    function init(
-        StrategyRouter _router,
-        Exchange _exchange,
-        SharesToken _sharesToken,
-        ReceiptNFT _receiptContract
-    ) public onlyOwner {
-        if (address(router) != address(0)) revert();
-        router = _router;
-        exchange = _exchange;
-        sharesToken = _sharesToken;
-        receiptContract = _receiptContract;
+    constructor(address _router) {
+        router = StrategyRouter(_router);
     }
 
     // Universal Functions
@@ -89,11 +77,11 @@ contract Batching is Ownable {
     }
 
     /// @dev Returns list of supported stablecoins.
-    function viewStablecoins() public view returns (address[] memory) {
+    function getStablecoins() public view returns (address[] memory) {
         return stablecoins.values();
     }
 
-    function viewBatchingValue()
+    function getBatchingValue()
         public
         view
         returns (uint256 totalBalance, uint256[] memory balances)
@@ -137,7 +125,7 @@ contract Batching is Ownable {
             if (receiptContract.ownerOf(receiptId) != withdrawer)
                 revert NotReceiptOwner();
 
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
                 receiptId
             );
             // only for receipts in batching
@@ -171,7 +159,7 @@ contract Batching is Ownable {
         uint256 valueToWithdraw,
         address withdrawToken
     ) public onlyOwner {
-        (uint256 totalBalance, uint256[] memory balances) = viewBatchingValue();
+        (uint256 totalBalance, uint256[] memory balances) = getBatchingValue();
         if (totalBalance < valueToWithdraw) revert NotEnoughInBatching();
 
         uint256 amountToTransfer;
@@ -274,16 +262,23 @@ contract Batching is Ownable {
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(IUsdOracle _oracle) external onlyOwner {
-        oracle = _oracle;
+    function setOracle(address _oracle) external onlyOwner {
+        oracle = IUsdOracle(_oracle);
         emit SetOracle(address(_oracle));
+    }
+
+    /// @notice Set address of ReceiptNFT contract.
+    /// @dev Admin function.
+    function setReceiptNFT(address  _receiptContract) external onlyOwner {
+        receiptContract = ReceiptNFT(_receiptContract);
+        emit SetReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(Exchange newExchange) external onlyOwner {
-        exchange = newExchange;
-        emit SetExchange(address(newExchange));
+    function setExchange(address newExchange) external onlyOwner {
+        exchange = Exchange(newExchange);
+        emit SetExchange(newExchange);
     }
 
     /// @notice Minimum to be deposited in the batching.
@@ -331,13 +326,13 @@ contract Batching is Ownable {
             totalInBatch += toUniform(_balances[i], _tokens[i]);
         }
 
-        uint256 lenStrats = router.viewStrategiesCount();
+        uint256 lenStrats = router.getStrategiesCount();
 
         uint256[] memory _strategiesBalances = new uint256[](
             lenStrats + lenStables
         );
         for (uint256 i; i < lenStrats; i++) {
-            address depositToken = router.viewStrategyDepositToken(i);
+            address depositToken = router.getStrategyDepositToken(i);
             for (uint256 j; j < lenStables; j++) {
                 if (depositToken == _tokens[j] && _balances[j] > 0) {
                     _strategiesBalances[i] = _balances[j];
@@ -355,10 +350,10 @@ contract Batching is Ownable {
         uint256[] memory toSell = new uint256[](_strategiesBalances.length);
         for (uint256 i; i < lenStrats; i++) {
             uint256 desiredBalance = (totalInBatch *
-                router.viewStrategyPercentWeight(i)) / 1e18;
+                router.getStrategyPercentWeight(i)) / 1e18;
             desiredBalance = fromUniform(
                 desiredBalance,
-                router.viewStrategyDepositToken(i)
+                router.getStrategyDepositToken(i)
             );
             unchecked {
                 if (desiredBalance > _strategiesBalances[i]) {
@@ -382,8 +377,8 @@ contract Batching is Ownable {
                     // otherwise take strategy_stablecoin[0 or 1]
                     address sellToken = i > lenStrats - 1
                         ? _tokens[i - lenStrats]
-                        : router.viewStrategyDepositToken(i);
-                    address buyToken = router.viewStrategyDepositToken(j);
+                        : router.getStrategyDepositToken(i);
+                    address buyToken = router.getStrategyDepositToken(j);
 
                     uint256 sellUniform = toUniform(toSell[i], sellToken);
                     uint256 addUniform = toUniform(toAdd[j], buyToken);
@@ -442,10 +437,10 @@ contract Batching is Ownable {
         if (supported) {
             stablecoins.add(tokenAddress);
         } else {
-            uint8 len = uint8(router.viewStrategiesCount());
+            uint8 len = uint8(router.getStrategiesCount());
             // don't remove tokens that are in use by active strategies
             for (uint256 i = 0; i < len; i++) {
-                if (router.viewStrategyDepositToken(i) == tokenAddress) {
+                if (router.getStrategyDepositToken(i) == tokenAddress) {
                     revert CantRemoveTokenOfActiveStrategy();
                 }
             }

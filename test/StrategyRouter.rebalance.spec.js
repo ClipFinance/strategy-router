@@ -130,7 +130,7 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(usdt.address, parseUsdt("1"));
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.depositToBatch(usdc.address, parseUsdc("1"));
-      // console.log(await router.viewBatchingValue());
+      // console.log(await router.getBatchingValue());
 
       await verifyTokensRatio([1, 1, 1]);
 
@@ -346,10 +346,10 @@ describe("Test rebalance functions", function () {
   });
 
   async function verifyRatioOfReturnedData(weights, data) {
-    assert(Number(await router.viewStrategiesCount()) == weights.length);
+    assert(Number(await router.getStrategiesCount()) == weights.length);
     let balances = Array.from(data);
     let totalDeposit = BigNumber.from(0);
-    let strategies = await router.viewStrategies();
+    let strategies = await router.getStrategies();
 
     for (let i = 0; i < balances.length; i++) {
       let uniformAmount = await toUniform(balances[i], strategies[i].depositToken);
@@ -382,7 +382,7 @@ describe("Test rebalance functions", function () {
 
   // weights order should match 'stablecoins' order
   async function verifyTokensRatio(weights) {
-    assert((await router.viewStablecoins()).length == weights.length);
+    assert((await router.getStablecoins()).length == weights.length);
     const ERROR_THRESHOLD = 0.5;
     const { total, balances } = await getTokenBalances();
     let totalWeight = weights.reduce((e, acc) => acc + e);
@@ -394,7 +394,7 @@ describe("Test rebalance functions", function () {
   }
 
   async function verifyStrategiesRatio(weights) {
-    assert((await router.viewStrategiesCount()) == weights.length);
+    assert((await router.getStrategiesCount()) == weights.length);
     const ERROR_THRESHOLD = 0.5;
     const { total, balances } = await getStrategiesBalances();
     let totalWeight = weights.reduce((e, acc) => acc + e);
@@ -406,12 +406,12 @@ describe("Test rebalance functions", function () {
   }
 
   async function getTokenBalances() {
-    let [total, balances] = await router.viewBatchingValue();
+    let [total, balances] = await router.getBatchingValue();
     return { total, balances };
   }
 
   async function getStrategiesBalances() {
-    let strategies = await router.viewStrategies();
+    let strategies = await router.getStrategies();
     let total = BigNumber.from(0);
     let balances = [];
     for (let i = 0; i < strategies.length; i++) {

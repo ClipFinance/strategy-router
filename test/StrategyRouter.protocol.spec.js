@@ -73,7 +73,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
   });
 
   it("User withdraw half from current cycle", async function () {
-    let receipt = await receiptContract.viewReceipt(1);
+    let receipt = await receiptContract.getReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromBatching([1], usdc.address, [receipt.amount.div(2)]);
     let newBalance = await usdc.balanceOf(owner.address);
@@ -103,7 +103,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
     await router.depositToStrategies();
-    expect((await router.viewStrategiesValue()).totalBalance).to.be.closeTo(
+    expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("100"),
       parseUniform("1.5")
     );
@@ -118,7 +118,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
 
     await router.depositToStrategies();
 
-    expect((await router.viewStrategiesValue()).totalBalance).to.be.closeTo(
+    expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("200"),
       parseUniform("2.0")
     );
@@ -175,13 +175,13 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
       await router.depositToBatch(usdc.address, parseUsdc("10"));
       await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
       await router.depositToStrategies();
-      let receipts = await receiptContract.walletOfOwner(owner.address);
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       let shares = await router.receiptsToShares([receipts[0]]);
       await router.withdrawFromStrategies([receipts[0]], usdc.address, shares);
 
       // console.log("strategies balance");
-      // printStruct(await router.viewStrategiesValue());
+      // printStruct(await router.getStrategiesValue());
     }
 
     expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
@@ -213,7 +213,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await router.removeStrategy(1);
 
     // withdraw user shares
-    let receipts = await receiptContract.walletOfOwner(owner.address);
+    let receipts = await receiptContract.getTokensOfOwner(owner.address);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await usdc.balanceOf(owner.address);
     let shares = await router.receiptsToShares([receipts[0]]);
@@ -235,7 +235,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
 
   it("Test rebalance function", async function () {
 
-    // console.log("strategies balance", await router.viewStrategiesValue());
+    // console.log("strategies balance", await router.getStrategiesValue());
 
     // deposit to strategies
     await router.updateStrategy(0, 1000);
@@ -243,7 +243,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
 
     await router.rebalanceStrategies();
 
-    let { balances, totalBalance } = await router.viewStrategiesValue();
+    let { balances, totalBalance } = await router.getStrategiesValue();
     // strategies should be balanced as 10% and 90%
     expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
     expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
@@ -267,7 +267,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
     await router.depositToStrategies();
 
-    let receipts = await receiptContract.walletOfOwner(owner.address);
+    let receipts = await receiptContract.getTokensOfOwner(owner.address);
     // withdraw by receipt
     let oldBalance = await usdc.balanceOf(owner.address);
     let shares = await router.receiptsToShares([10]);
@@ -293,7 +293,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await router.withdrawShares(sharesUnlocked, usdc.address);
     newBalance = await usdc.balanceOf(owner.address);
 
-    receipts = await receiptContract.walletOfOwner(owner.address);
+    receipts = await receiptContract.getTokensOfOwner(owner.address);
 
 
     // await router.withdrawShares(1, usdc.address);

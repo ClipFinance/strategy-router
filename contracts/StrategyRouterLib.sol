@@ -25,7 +25,7 @@ library StrategyRouterLib {
 
     uint8 constant UNIFORM_DECIMALS = 18;
 
-    function viewStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
+    function getStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
         public
         view
         returns (uint256 totalBalance, uint256[] memory balances)
@@ -51,7 +51,7 @@ library StrategyRouterLib {
         uint256 currentCycleId,
         uint256 receiptId
     ) public view returns (uint256 shares) {
-        ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+        ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
             receiptId
         );
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();

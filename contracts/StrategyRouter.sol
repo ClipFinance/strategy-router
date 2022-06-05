@@ -116,17 +116,13 @@ contract StrategyRouter is Ownable {
     StrategyInfo[] public strategies;
     mapping(uint256 => Cycle) public cycles;
 
-    constructor() {
-        receiptContract = new ReceiptNFT();
+    constructor(address _exchange, address _oracle) {
         sharesToken = new SharesToken();
-        batching = new Batching();
-        batching.init(
-            StrategyRouter(address(this)),
-            exchange,
-            sharesToken,
-            receiptContract
-        );
-        receiptContract.init(address(this), address(batching));
+        batching = new Batching(address(this));
+        receiptContract = new ReceiptNFT(address(this), address(batching));
+        batching.setExchange(_exchange);
+        batching.setOracle(_oracle);
+        batching.setReceiptNFT(address(receiptContract));
         cycles[0].startAt = block.timestamp;
     }
 
@@ -138,7 +134,7 @@ contract StrategyRouter is Ownable {
     /// @dev Only callable by user wallets.
     function depositToStrategies() external OnlyEOW {
         uint256 _currentCycleId = currentCycleId;
-        (uint256 totalValue, ) = viewBatchingValue();
+        (uint256 totalValue, ) = getBatchingValue();
         uint256 stratsDebtInShares = cycles[_currentCycleId].stratsDebtInShares;
         uint256 stratsDebtValue;
         if (stratsDebtInShares > 0)
@@ -151,7 +147,7 @@ contract StrategyRouter is Ownable {
 
         // save current supported tokens and their prices
         {
-            address[] memory tokens = viewStablecoins();
+            address[] memory tokens = getStablecoins();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
                     (uint256 price, uint8 priceDecimals) = oracle
@@ -179,7 +175,7 @@ contract StrategyRouter is Ownable {
         }
 
         // get total strategies value after compound
-        (uint256 balanceAfterCompound, ) = viewStrategiesValue();
+        (uint256 balanceAfterCompound, ) = getStrategiesValue();
         // rebalance tokens in batching and get new balances
         uint256[] memory depositAmounts = batching.rebalance();
 
@@ -207,7 +203,7 @@ contract StrategyRouter is Ownable {
         }
 
         // get total strategies balance after deposit
-        (uint256 balanceAfterDeposit, ) = viewStrategiesValue();
+        (uint256 balanceAfterDeposit, ) = getStrategiesValue();
         uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
 
         uint256 totalShares = sharesToken.totalSupply();
@@ -249,12 +245,12 @@ contract StrategyRouter is Ownable {
     }
 
     /// @dev Returns list of supported stablecoins.
-    function viewStablecoins() public view returns (address[] memory) {
-        return batching.viewStablecoins();
+    function getStablecoins() public view returns (address[] memory) {
+        return batching.getStablecoins();
     }
 
     /// @dev Returns strategy weight as percent of total weight.
-    function viewStrategyPercentWeight(uint256 _strategyId)
+    function getStrategyPercentWeight(uint256 _strategyId)
         public
         view
         returns (uint256 strategyPercentAllocation)
@@ -272,17 +268,17 @@ contract StrategyRouter is Ownable {
     }
 
     /// @notice Returns count of strategies.
-    function viewStrategiesCount() public view returns (uint256 count) {
+    function getStrategiesCount() public view returns (uint256 count) {
         return strategies.length;
     }
 
     /// @notice Returns array of strategies.
-    function viewStrategies() public view returns (StrategyInfo[] memory) {
+    function getStrategies() public view returns (StrategyInfo[] memory) {
         return strategies;
     }
 
     /// @notice Returns deposit token of the strategy.
-    function viewStrategyDepositToken(uint256 i) public view returns (address) {
+    function getStrategyDepositToken(uint256 i) public view returns (address) {
         return strategies[i].depositToken;
     }
 
@@ -290,12 +286,12 @@ contract StrategyRouter is Ownable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batching usd value.
     /// @return balances Array of usd value of token balances in the batching.
-    function viewStrategiesValue()
+    function getStrategiesValue()
         public
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        (totalBalance, balances) = StrategyRouterLib.viewStrategiesValue(
+        (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(
             oracle,
             strategies
         );
@@ -305,12 +301,12 @@ contract StrategyRouter is Ownable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batching usd value.
     /// @return balances Array of usd value of token balances in the batching.
-    function viewBatchingValue()
+    function getBatchingValue()
         public
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        return batching.viewBatchingValue();
+        return batching.getBatchingValue();
     }
 
     /// @notice Returns amount of shares locked by multiple receipts.
@@ -340,7 +336,7 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 amount)
     {
-        (uint256 strategiesBalance, ) = viewStrategiesValue();
+        (uint256 strategiesBalance, ) = getStrategiesValue();
         uint256 currentPricePerShare = strategiesBalance /
             sharesToken.totalSupply();
         amount = shares * currentPricePerShare;
@@ -353,7 +349,7 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 shares)
     {
-        (uint256 strategiesBalance, ) = viewStrategiesValue();
+        (uint256 strategiesBalance, ) = getStrategiesValue();
         uint256 currentPricePerShare = strategiesBalance /
             sharesToken.totalSupply();
         shares = amount / currentPricePerShare;
@@ -442,7 +438,7 @@ contract StrategyRouter is Ownable {
             if (receiptContract.ownerOf(receiptId) != msg.sender)
                 revert NotReceiptOwner();
 
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
                 receiptId
             );
             // only for receipts in batching
@@ -584,7 +580,7 @@ contract StrategyRouter is Ownable {
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
             uint256 receiptId = receiptIdsBatch[i];
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.viewReceipt(
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
                 receiptId
             );
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
@@ -610,7 +606,7 @@ contract StrategyRouter is Ownable {
         }
 
         if (fromBatchAmount > 0) {
-            (uint256 totalBalance, ) = viewBatchingValue();
+            (uint256 totalBalance, ) = getBatchingValue();
 
             if (fromBatchAmount <= totalBalance) {
                 // withdraw 100% from batching
@@ -640,7 +636,7 @@ contract StrategyRouter is Ownable {
 
         uint256 fromStratsAmount = sharesToValue(shares);
 
-        (uint256 totalBalance, ) = viewBatchingValue();
+        (uint256 totalBalance, ) = getBatchingValue();
 
         if (fromStratsAmount <= totalBalance) {
             crossWithdrawShares(shares, withdrawToken);
@@ -690,15 +686,22 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(IUsdOracle _oracle) external onlyOwner {
-        oracle = _oracle;
+    function setOracle(address _oracle) external onlyOwner {
+        oracle = IUsdOracle(_oracle);
         batching.setOracle(_oracle);
+    }
+
+    /// @notice Set address of ReceiptNFT contract.
+    /// @dev Admin function.
+    function setReceiptNFT(address  _receiptContract) external onlyOwner {
+        receiptContract = ReceiptNFT(_receiptContract);
+        batching.setReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(Exchange newExchange) external onlyOwner {
-        exchange = newExchange;
+    function setExchange(address newExchange) external onlyOwner {
+        exchange = Exchange(newExchange);
         batching.setExchange(newExchange);
     }
 
@@ -803,7 +806,7 @@ contract StrategyRouter is Ownable {
         // deposit withdrawn funds into other strategies
         for (uint256 i; i < len; i++) {
             uint256 depositAmount = (withdrawnAmount *
-                viewStrategyPercentWeight(i)) / 1e18;
+                getStrategyPercentWeight(i)) / 1e18;
             address strategyAssetAddress = strategies[i].depositToken;
 
             depositAmount = StrategyRouterLib.trySwap(
@@ -860,7 +863,7 @@ contract StrategyRouter is Ownable {
         uint256[] memory toSell = new uint256[](len);
         for (uint256 i; i < len; i++) {
             uint256 desiredBalance = (totalBalance *
-                viewStrategyPercentWeight(i)) / 1e18;
+                getStrategyPercentWeight(i)) / 1e18;
             desiredBalance = StrategyRouterLib.fromUniform(
                 desiredBalance,
                 _strategiesTokens[i]
@@ -962,7 +965,7 @@ contract StrategyRouter is Ownable {
         (
             uint256 strategiesBalance,
             uint256[] memory balances
-        ) = viewStrategiesValue();
+        ) = getStrategiesValue();
         uint256 len = strategies.length;
 
         uint256 amountToTransfer;
