@@ -8,9 +8,9 @@ const { skipTimeAndBlocks, MaxUint256, deploy, provider } = require("./utils");
 describe("Test StrategyRouter with two real strategies on bnb chain", function () {
 
   let owner;
-  // mock stablecoins with different decimals
+  // mock tokens with different decimals
   let usdc, busd;
-  // helper functions to parse amounts of mock stablecoins
+  // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd;
   // core contracts
   let router, oracle, exchange, batching, receiptContract, sharesToken;
@@ -31,12 +31,12 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await setupParamsOnBNB(router, oracle, exchange);
     cycleDuration = await router.cycleDuration();
 
-    // get stablecoins on bnb chain for testing
+    // get tokens on bnb chain for testing
     ({usdc, busd, parseUsdc, parseBusd} = await setupTokens());
 
-    // setup supported stables
-    await router.setSupportedStablecoin(usdc.address, true);
-    await router.setSupportedStablecoin(busd.address, true);
+    // setup supported tokens
+    await router.setSupportedToken(usdc.address, true);
+    await router.setSupportedToken(busd.address, true);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));

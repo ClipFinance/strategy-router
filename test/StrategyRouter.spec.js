@@ -7,9 +7,9 @@ const { MaxUint256, parseUniform } = require("./utils");
 describe("Test StrategyRouter", function () {
 
   let owner, user1;
-  // mock stablecoins with different decimals
+  // mock tokens with different decimals
   let usdc, usdt, busd;
-  // helper functions to parse amounts of mock stablecoins
+  // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batching, receiptContract, sharesToken;
@@ -26,7 +26,7 @@ describe("Test StrategyRouter", function () {
     // deploy core contracts
     ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
 
-    // deploy mock stablecoins 
+    // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
 
     // setup fake token liquidity
@@ -43,15 +43,15 @@ describe("Test StrategyRouter", function () {
     await usdc.approve(router.address, parseUsdc("1000000"));
     await usdt.approve(router.address, parseUsdt("1000000"));
 
-    // setup supported stables
-    await router.setSupportedStablecoin(usdc.address, true);
-    await router.setSupportedStablecoin(busd.address, true);
-    await router.setSupportedStablecoin(usdt.address, true);
+    // setup supported tokens
+    await router.setSupportedToken(usdc.address, true);
+    await router.setSupportedToken(busd.address, true);
+    await router.setSupportedToken(usdt.address, true);
 
     // add fake strategies
-    await deployFakeStrategy({ router, stablecoin: busd });
-    await deployFakeStrategy({ router, stablecoin: usdc });
-    await deployFakeStrategy({ router, stablecoin: usdt });
+    await deployFakeStrategy({ router, token: busd });
+    await deployFakeStrategy({ router, token: usdc });
+    await deployFakeStrategy({ router, token: usdt });
 
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1"));
@@ -77,7 +77,7 @@ describe("Test StrategyRouter", function () {
 
   it("should revert depositToBatch token not whitelisted", async function () {
     await expect(router.depositToBatch(router.address, parseBusd("100")))
-      .to.be.revertedWith("UnsupportedStablecoin");
+      .to.be.revertedWith("UnsupportedToken");
   });
 
   it("should depositToBatch create receipt with correct values", async function () {

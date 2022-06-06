@@ -37,9 +37,9 @@ contract FakeOracle is IUsdOracle, Ownable {
     }
 
     /**
-     * Returns the latest asset / usd price and its decimals
+     * Returns the latest token / usd price and its decimals
      */
-    function getAssetUsdPrice(address base)
+    function getTokenUsdPrice(address base)
         public
         view
         override

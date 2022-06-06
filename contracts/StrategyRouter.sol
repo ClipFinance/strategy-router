@@ -49,7 +49,7 @@ contract StrategyRouter is Ownable {
 
     /* ERRORS */
 
-    error UnsupportedStablecoin();
+    error UnsupportedToken();
     error NotReceiptOwner();
     error CycleNotClosed();
     error CycleClosed();
@@ -147,11 +147,11 @@ contract StrategyRouter is Ownable {
 
         // save current supported tokens and their prices
         {
-            address[] memory tokens = getStablecoins();
+            address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
                     (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(tokens[i]);
+                        .getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
@@ -181,17 +181,17 @@ contract StrategyRouter is Ownable {
 
         // uint256 totalValueDeposited;
         for (uint256 i; i < len; i++) {
-            address strategyAssetAddress = strategies[i].depositToken;
+            address strategyDepositToken = strategies[i].depositToken;
 
             if (depositAmounts[i] > 0) {
                 // calculate total usd deposited in strategies
-                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
-                    strategyAssetAddress
+                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
+                    strategyDepositToken
                 );
 
                 // transfer tokens from batching into strategies
                 batching.transfer(
-                    strategyAssetAddress,
+                    strategyDepositToken,
                     strategies[i].strategyAddress,
                     depositAmounts[i]
                 );
@@ -244,9 +244,9 @@ contract StrategyRouter is Ownable {
         }
     }
 
-    /// @dev Returns list of supported stablecoins.
-    function getStablecoins() public view returns (address[] memory) {
-        return batching.getStablecoins();
+    /// @dev Returns list of supported tokens.
+    function getSupportedTokens() public view returns (address[] memory) {
+        return batching.getSupportedTokens();
     }
 
     /// @dev Returns strategy weight as percent of total weight.
@@ -355,14 +355,14 @@ contract StrategyRouter is Ownable {
         shares = amount / currentPricePerShare;
     }
 
-    /// @notice Returns whether this stablecoin is supported.
-    /// @param stablecoinAddress Address to lookup.
-    function supportsCoin(address stablecoinAddress)
+    /// @notice Returns whether this token is supported.
+    /// @param tokenAddress Address to lookup.
+    function supportsToken(address tokenAddress)
         public
         view
         returns (bool isSupported)
     {
-        return batching.supportsCoin(stablecoinAddress);
+        return batching.supportsToken(tokenAddress);
     }
 
     // User Functions
@@ -378,12 +378,12 @@ contract StrategyRouter is Ownable {
         sharesToken.transfer(msg.sender, shares);
     }
 
-    /// @notice Withdraw stablecoins from strategies while receipts are in strategies.
+    /// @notice Withdraw tokens from strategies while receipts are in strategies.
     /// @notice On partial withdraw leftover shares transferred to user.
     /// @notice If not enough shares unlocked from receipt, more will be taken from user.
     /// @notice Receipts are burned.
     /// @param receiptIds ReceiptNFTs ids.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param shares Amount of shares to withdraw.
     /// @dev Only callable by user wallets.
     function withdrawFromStrategies(
@@ -392,8 +392,8 @@ contract StrategyRouter is Ownable {
         uint256 shares
     ) external OnlyEOW {
         if (shares == 0) revert AmountNotSpecified();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 unlockedShares = _unlockShares(receiptIds);
 
@@ -415,12 +415,12 @@ contract StrategyRouter is Ownable {
         _withdrawFromStrategies(valueToWithdraw, withdrawToken);
     }
 
-    /// @notice Withdraw stablecoins from strategies while receipts are in batching.
+    /// @notice Withdraw tokens from strategies while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @notice Only allowed to withdraw less or equal to stratsDebtInShares.
     /// @param receiptIds ReceiptNFT ids.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param amounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function crossWithdrawFromStrategies(
@@ -428,8 +428,8 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public OnlyEOW {
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 _currentCycleId = currentCycleId;
         uint256 toWithdraw;
@@ -444,7 +444,7 @@ contract StrategyRouter is Ownable {
             // only for receipts in batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
 
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 receipt.token
             );
 
@@ -471,34 +471,34 @@ contract StrategyRouter is Ownable {
         cycles[_currentCycleId].stratsDebtInShares -= sharesToRepay;
     }
 
-    /// @notice Withdraw stablecoins from strategies by shares.
+    /// @notice Withdraw tokens from strategies by shares.
     /// @param shares Amount of shares to withdraw.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     function withdrawShares(uint256 shares, address withdrawToken)
         public
         OnlyEOW
     {
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 amount = sharesToUsd(shares);
         sharesToken.burn(msg.sender, shares);
         _withdrawFromStrategies(amount, withdrawToken);
     }
 
-    /// @notice Withdraw stablecoins from batching by shares.
+    /// @notice Withdraw tokens from batching by shares.
     /// @param shares Amount of shares to withdraw.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     function crossWithdrawShares(uint256 shares, address withdrawToken)
         public
         OnlyEOW
     {
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 amount = sharesToUsd(shares);
         // these shares will be owned by depositors of the current batching
@@ -507,11 +507,11 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].stratsDebtInShares += shares;
     }
 
-    /// @notice Withdraw stablecoins from batching while receipts are in batching.
+    /// @notice Withdraw tokens from batching while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param amounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function withdrawFromBatching(
@@ -522,11 +522,11 @@ contract StrategyRouter is Ownable {
         batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
     }
 
-    /// @notice Withdraw stablecoins from batching while receipts are in strategies.
+    /// @notice Withdraw tokens from batching while receipts are in strategies.
     /// @notice On partial withdraw leftover shares transferred to user.
     /// @notice Receipts are burned.
     /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param shares Amount of shares from receipts to withdraw.
     /// @dev Only callable by user wallets.
     function crossWithdrawFromBatching(
@@ -535,8 +535,8 @@ contract StrategyRouter is Ownable {
         uint256 shares
     ) external OnlyEOW {
         if (shares == 0) revert AmountNotSpecified();
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 unlockedShares = _unlockShares(receiptIds);
         if (unlockedShares > shares) {
@@ -557,12 +557,12 @@ contract StrategyRouter is Ownable {
         cycles[currentCycleId].stratsDebtInShares += shares;
     }
 
-    /// @notice Allows to withdraw stablecoins from batching and from strategies at the same time.
+    /// @notice Allows to withdraw tokens from batching and from strategies at the same time.
     /// @notice It also can cross withdraw if possible.
     /// @notice This function internally rely on the other withdraw functions, thus inherit some bussines logic.
     /// @param receiptIdsBatch ReceiptNFTs ids from batching.
     /// @param receiptIdsStrats ReceiptNFTs ids from strategies.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param amounts Amounts to withdraw from each passed receipt.
     /// @param shares Amount of shares to withdraw.
     /// @dev Only callable by user wallets.
@@ -573,8 +573,8 @@ contract StrategyRouter is Ownable {
         uint256[] calldata amounts,
         uint256 shares
     ) external OnlyEOW {
-        if (supportsCoin(withdrawToken) == false)
-            revert UnsupportedStablecoin();
+        if (supportsToken(withdrawToken) == false)
+            revert UnsupportedToken();
 
         uint256 fromBatchAmount;
         uint256 _currentCycleId = currentCycleId;
@@ -583,7 +583,7 @@ contract StrategyRouter is Ownable {
             ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
                 receiptId
             );
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 receipt.token
             );
 
@@ -654,10 +654,10 @@ contract StrategyRouter is Ownable {
         }
     }
 
-    /// @notice Deposit stablecoin into batching. dApp already asked user to approve spending of the token
+    /// @notice Deposit token into batching. dApp already asked user to approve spending of the token
     /// and we have allowance to transfer these funds to Batching smartcontract
     /// @notice Tokens not deposited into strategies immediately.
-    /// @param depositToken Supported stablecoin to deposit.
+    /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
@@ -677,11 +677,11 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedStablecoin(address tokenAddress, bool supported)
+    function setSupportedToken(address tokenAddress, bool supported)
         external
         onlyOwner
     {
-        batching.setSupportedStablecoin(tokenAddress, supported);
+        batching.setSupportedToken(tokenAddress, supported);
     }
 
     /// @notice Set address of oracle contract.
@@ -741,16 +741,16 @@ contract StrategyRouter is Ownable {
 
     /// @notice Add strategy.
     /// @param _strategyAddress Address of the strategy.
-    /// @param _depositAssetAddress Asset to be deposited into strategy.
+    /// @param _depositTokenAddress Token to be deposited into strategy.
     /// @param _weight Weight of the strategy. Used to split user deposit between strategies.
     /// @dev Admin function.
-    /// @dev Deposit asset must be supported by the router.
+    /// @dev Deposit token must be supported by the router.
     function addStrategy(
         address _strategyAddress,
-        address _depositAssetAddress,
+        address _depositTokenAddress,
         uint256 _weight
     ) external onlyOwner {
-        if (!supportsCoin(_depositAssetAddress)) revert UnsupportedStablecoin();
+        if (!supportsToken(_depositTokenAddress)) revert UnsupportedToken();
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
             if (strategies[i].strategyAddress == _strategyAddress)
@@ -807,15 +807,15 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             uint256 depositAmount = (withdrawnAmount *
                 getStrategyPercentWeight(i)) / 1e18;
-            address strategyAssetAddress = strategies[i].depositToken;
+            address strategyDepositToken = strategies[i].depositToken;
 
             depositAmount = StrategyRouterLib.trySwap(
                 exchange,
                 depositAmount,
                 removedDepositToken,
-                strategyAssetAddress
+                strategyDepositToken
             );
-            IERC20(strategyAssetAddress).transfer(
+            IERC20(strategyDepositToken).transfer(
                 strategies[i].strategyAddress,
                 depositAmount
             );
@@ -975,7 +975,7 @@ contract StrategyRouter is Ownable {
                 strategies[i].depositToken == withdrawToken &&
                 balances[i] >= valueToWithdraw
             ) {
-                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                     withdrawToken
                 );
                 amountToTransfer =
@@ -998,7 +998,7 @@ contract StrategyRouter is Ownable {
                 if (balances[i] >= valueToWithdraw) {
                     address token = strategies[i].depositToken;
                     (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
+                        .getTokenUsdPrice(token);
                     amountToTransfer =
                         (valueToWithdraw * 10**priceDecimals) /
                         price;
@@ -1025,7 +1025,7 @@ contract StrategyRouter is Ownable {
             for (uint256 i; i < len; i++) {
                 address token = strategies[i].depositToken;
                 uint256 toSwap;
-                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                     token
                 );
 

@@ -7,11 +7,11 @@ module.exports = {
   setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams
 };
 
-async function deployFakeStrategy({ router, stablecoin, weight = 10_000, profitPercent = 10_000 }) {
-  // console.log(router.address, await stablecoin.name(), weight, profitPercent);
-  let strategy = await deploy("MockStrategy", stablecoin.address, profitPercent);
+async function deployFakeStrategy({ router, token, weight = 10_000, profitPercent = 10_000 }) {
+  // console.log(router.address, await token.name(), weight, profitPercent);
+  let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, stablecoin.address, weight);
+  await router.addStrategy(strategy.address, token.address, weight);
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'

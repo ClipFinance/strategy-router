@@ -38,7 +38,7 @@ library StrategyRouterLib {
                 IStrategy(strategies[i].strategyAddress).totalTokens();
 
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 token
             );
             balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);

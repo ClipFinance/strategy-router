@@ -32,7 +32,7 @@ module.exports = function strategyTest(strategyName) {
       // setup params for testing
       await setupParamsOnBNB(router, oracle, exchange);
 
-      // get stablecoins on bnb chain for testing
+      // get tokens on bnb chain for testing
       await setupTokens();
 
       // deploy strategy to test

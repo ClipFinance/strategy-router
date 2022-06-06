@@ -41,9 +41,9 @@ contract Batching is Ownable {
 
     /* ERRORS */
 
-    error AlreadyAddedStablecoin();
+    error AlreadySupportedToken();
     error CantRemoveTokenOfActiveStrategy();
-    error UnsupportedStablecoin();
+    error UnsupportedToken();
     error NotReceiptOwner();
     error CycleClosed();
     error DepositUnderMinimum();
@@ -60,7 +60,7 @@ contract Batching is Ownable {
     StrategyRouter public router;
     IUsdOracle public oracle;
 
-    EnumerableSet.AddressSet private stablecoins;
+    EnumerableSet.AddressSet private supportedTokens;
 
     constructor(address _router) {
         router = StrategyRouter(_router);
@@ -68,17 +68,17 @@ contract Batching is Ownable {
 
     // Universal Functions
 
-    function supportsCoin(address stablecoinAddress)
+    function supportsToken(address tokenAddress)
         public
         view
         returns (bool)
     {
-        return stablecoins.contains(stablecoinAddress);
+        return supportedTokens.contains(tokenAddress);
     }
 
-    /// @dev Returns list of supported stablecoins.
-    function getStablecoins() public view returns (address[] memory) {
-        return stablecoins.values();
+    /// @dev Returns list of supported tokens.
+    function getSupportedTokens() public view returns (address[] memory) {
+        return supportedTokens.values();
     }
 
     function getBatchingValue()
@@ -86,13 +86,13 @@ contract Batching is Ownable {
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        balances = new uint256[](stablecoins.length());
+        balances = new uint256[](supportedTokens.length());
         for (uint256 i; i < balances.length; i++) {
-            address token = stablecoins.at(i);
+            address token = supportedTokens.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
 
             balance = toUniform(balance, token);
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 token
             );
             balance = ((balance * price) / 10**priceDecimals);
@@ -103,11 +103,11 @@ contract Batching is Ownable {
 
     // User Functions
 
-    /// @notice Withdraw stablecoins from batching while receipts are in batching.
+    /// @notice Withdraw tokens from batching while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported stablecoin that user wish to receive.
+    /// @param withdrawToken Supported token that user wish to receive.
     /// @param amounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function withdraw(
@@ -116,7 +116,7 @@ contract Batching is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public onlyOwner {
-        if (!supportsCoin(withdrawToken)) revert UnsupportedStablecoin();
+        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = router.currentCycleId();
         uint256 valueToWithdraw;
@@ -130,7 +130,7 @@ contract Batching is Ownable {
             );
             // only for receipts in batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 receipt.token
             );
 
@@ -164,8 +164,8 @@ contract Batching is Ownable {
 
         uint256 amountToTransfer;
         // try withdraw requested token directly
-        if (balances[stablecoins.indexOf(withdrawToken)] >= valueToWithdraw) {
-            (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+        if (balances[supportedTokens.indexOf(withdrawToken)] >= valueToWithdraw) {
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 withdrawToken
             );
             amountToTransfer = (valueToWithdraw * 10**priceDecimals) / price;
@@ -177,9 +177,9 @@ contract Batching is Ownable {
         if (valueToWithdraw != 0) {
             for (uint256 i; i < balances.length; i++) {
                 if (balances[i] >= valueToWithdraw) {
-                    address token = stablecoins.at(i);
+                    address token = supportedTokens.at(i);
                     (uint256 price, uint8 priceDecimals) = oracle
-                        .getAssetUsdPrice(token);
+                        .getTokenUsdPrice(token);
                     amountToTransfer =
                         (valueToWithdraw * 10**priceDecimals) /
                         price;
@@ -198,9 +198,9 @@ contract Batching is Ownable {
         // swap different tokens until withraw amount is fulfilled
         if (valueToWithdraw != 0) {
             for (uint256 i; i < balances.length; i++) {
-                address token = stablecoins.at(i);
+                address token = supportedTokens.at(i);
                 uint256 toSwap;
-                (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
+                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                     token
                 );
 
@@ -224,9 +224,9 @@ contract Batching is Ownable {
         emit WithdrawFromBatching(withdrawer, withdrawToken, amountToTransfer);
     }
 
-    /// @notice Deposit stablecoin into batching.
+    /// @notice Deposit token into batching.
     /// @notice Tokens not deposited into strategies immediately.
-    /// @param depositToken Supported stablecoin to deposit.
+    /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
@@ -235,7 +235,7 @@ contract Batching is Ownable {
         address depositToken,
         uint256 _amount
     ) external onlyOwner {
-        if (!supportsCoin(depositToken)) revert UnsupportedStablecoin();
+        if (!supportsToken(depositToken)) revert UnsupportedToken();
         if (fromUniform(minDeposit, depositToken) > _amount)
             revert DepositUnderMinimum();
 
@@ -293,13 +293,13 @@ contract Batching is Ownable {
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
     function rebalance() public onlyOwner returns (uint256[] memory balances) {
         /*
-        1 store supported-stables (set of unique addrs)
+        1 store supported-tokens (set of unique addrs)
             [a,b,c]
         2 store their balances
             [1,1,1]
         3 store their sum with uniform decimals
             3
-        4 create array of length = supported_stables + strategeis_stables (e.g. [a])
+        4 create array of length = supported_tokens + strategeis_tokens (e.g. [a])
             [a,b,c] + [a] = 4
         5 store in that array balances from step 2, duplicated tokens should be ignored
             [1, 0, 1, 1] (instead of [1,1...] we got [1,0...] because first two are both token a)
@@ -315,12 +315,12 @@ contract Batching is Ownable {
     */
         uint256 totalInBatch;
 
-        uint256 lenStables = stablecoins.length();
-        address[] memory _tokens = new address[](lenStables);
-        uint256[] memory _balances = new uint256[](lenStables);
+        uint256 lenSupTokens = supportedTokens.length();
+        address[] memory _tokens = new address[](lenSupTokens);
+        uint256[] memory _balances = new uint256[](lenSupTokens);
 
-        for (uint256 i; i < lenStables; i++) {
-            _tokens[i] = stablecoins.at(i);
+        for (uint256 i; i < lenSupTokens; i++) {
+            _tokens[i] = supportedTokens.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
             totalInBatch += toUniform(_balances[i], _tokens[i]);
@@ -329,11 +329,11 @@ contract Batching is Ownable {
         uint256 lenStrats = router.getStrategiesCount();
 
         uint256[] memory _strategiesBalances = new uint256[](
-            lenStrats + lenStables
+            lenStrats + lenSupTokens
         );
         for (uint256 i; i < lenStrats; i++) {
             address depositToken = router.getStrategyDepositToken(i);
-            for (uint256 j; j < lenStables; j++) {
+            for (uint256 j; j < lenSupTokens; j++) {
                 if (depositToken == _tokens[j] && _balances[j] > 0) {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
@@ -372,9 +372,9 @@ contract Batching is Ownable {
             for (uint256 j; j < lenStrats; j++) {
                 if (toSell[i] == 0) break;
                 if (toAdd[j] > 0) {
-                    // if toSell's 'i' greater than strats-1 (e.g. strats 2, stables 2, i=2, 2>2-1==true)
-                    // then take supported_stablecoin[2-2=0]
-                    // otherwise take strategy_stablecoin[0 or 1]
+                    // if toSell's 'i' greater than strats-1 (e.g. strats 2, tokens 2, i=2, 2>2-1==true)
+                    // then take supported_token[2-2=0]
+                    // otherwise take strategy_token[0 or 1]
                     address sellToken = i > lenStrats - 1
                         ? _tokens[i - lenStrats]
                         : router.getStrategyDepositToken(i);
@@ -427,15 +427,15 @@ contract Batching is Ownable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedStablecoin(address tokenAddress, bool supported)
+    function setSupportedToken(address tokenAddress, bool supported)
         external
         onlyOwner
     {
-        if (supported && supportsCoin(tokenAddress))
-            revert AlreadyAddedStablecoin();
+        if (supported && supportsToken(tokenAddress))
+            revert AlreadySupportedToken();
 
         if (supported) {
-            stablecoins.add(tokenAddress);
+            supportedTokens.add(tokenAddress);
         } else {
             uint8 len = uint8(router.getStrategiesCount());
             // don't remove tokens that are in use by active strategies
@@ -444,7 +444,7 @@ contract Batching is Ownable {
                     revert CantRemoveTokenOfActiveStrategy();
                 }
             }
-            stablecoins.remove(tokenAddress);
+            supportedTokens.remove(tokenAddress);
         }
     }
 

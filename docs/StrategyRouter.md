@@ -16,7 +16,7 @@ Restrict msg.sender to be externally owned accounts only.
 uint8 UNIFORM_DECIMALS
 ```
 
-We adjust stablecoins amounts to have uniform number of decimals where needed for calculations.
+We adjust tokens amounts to have uniform number of decimals where needed for calculations.
 
 ### cycleDuration
 
@@ -72,13 +72,13 @@ Compound all strategies.
 
 _Only callable by user wallets._
 
-### getStablecoins
+### getSupportedTokens
 
 ```solidity
-function getStablecoins() public view returns (address[])
+function getSupportedTokens() public view returns (address[])
 ```
 
-_Returns list of supported stablecoins._
+_Returns list of supported tokens._
 
 ### getStrategyPercentWeight
 
@@ -178,7 +178,7 @@ _Only callable by user wallets._
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | receiptId | uint256 | Receipt NFT id. |
-| withdrawToken | address | Supported stablecoin that user wish to receive. |
+| withdrawToken | address | Supported token that user wish to receive. |
 | shares | uint256 | Amount of shares to withdraw. |
 | amount | uint256 | Uniform amount from receipt to withdraw, only for current cycle. |
 
@@ -188,12 +188,12 @@ _Only callable by user wallets._
 function withdrawShares(uint256 shares, address withdrawToken) external
 ```
 
-User withdraw stablecoins from strategies via shares. Receipts should be converted to shares prior to call this.
+User withdraw tokens from strategies via shares. Receipts should be converted to shares prior to call this.
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | shares | uint256 | Amount of shares to withdraw. |
-| withdrawToken | address | Supported stablecoin that user wish to receive. |
+| withdrawToken | address | Supported token that user wish to receive. |
 
 
 ### withdrawFromBatching
@@ -211,7 +211,7 @@ _Only callable by user wallets._
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | receiptId | uint256 | Receipt NFT id. |
-| withdrawToken | address | Supported stablecoin that user wish to receive. |
+| withdrawToken | address | Supported token that user wish to receive. |
 | shares | uint256 | Amount of shares to withdraw, specify this if money of receipt were deposited into strategies. |
 | amount | uint256 | Amount to withdraw, specify this if money of receipt isn't deposited into strategies yet. |
 
@@ -221,7 +221,7 @@ _Only callable by user wallets._
 function depositToBatch(address depositToken, uint256 _amount) external
 ```
 
-Deposit stablecoin into batching.
+Deposit token into batching.
 Tokens not deposited into strategies immediately.
 
 _User should approve &#x60;_amount&#x60; of &#x60;depositToken&#x60; to this contract.
@@ -229,7 +229,7 @@ Only callable by user wallets._
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| depositToken | address | Supported stablecoin to deposit. |
+| depositToken | address | Supported token to deposit. |
 | _amount | uint256 | Amount to deposit. |
 
 ### setExchange
@@ -287,7 +287,7 @@ _Admin function._
 ### addStrategy
 
 ```solidity
-function addStrategy(address _strategyAddress, address _depositAssetAddress, uint256 _weight) external
+function addStrategy(address _strategyAddress, address _depositTokenAddress, uint256 _weight) external
 ```
 
 Add strategy.
@@ -298,7 +298,7 @@ Deposit asset must be supported by the router._
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | _strategyAddress | address | Address of the strategy. |
-| _depositAssetAddress | address | Asset to be deposited into strategy. |
+| _depositTokenAddress | address | Asset to be deposited into strategy. |
 | _weight | uint256 | Weight of the strategy. Used to split user deposit between strategies. |
 
 ### updateStrategy
@@ -340,10 +340,10 @@ Rebalance strategies, so that their balances will match their weights.
 
 _Admin function._
 
-### setSupportedStablecoin
+### setSupportedToken
 
 ```solidity
-function setSupportedStablecoin(address tokenAddress, bool supported) external
+function setSupportedToken(address tokenAddress, bool supported) external
 ```
 
 Set token as supported for user deposit and withdraw.

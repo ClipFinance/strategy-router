@@ -116,9 +116,9 @@ async function main() {
 
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
-  console.log("Setting supported stablecoin...");
-  await (await router.setSupportedStablecoin(busd.address, true)).wait();
-  await (await router.setSupportedStablecoin(usdc.address, true)).wait();
+  console.log("Setting supported token...");
+  await (await router.setSupportedToken(busd.address, true)).wait();
+  await (await router.setSupportedToken(usdc.address, true)).wait();
 
   console.log("Adding strategies...");
   await (await router.addStrategy(strategyBusd.address, busd.address, 5000)).wait();

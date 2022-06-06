@@ -7,21 +7,21 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 contract MockStrategy is Ownable, IStrategy {
-    address private asset;
+    address private _depositToken;
     uint256 private balance;
     uint256 private mockProfitPercent;
 
-    constructor(address _asset, uint256 _mockProfitPercent) {
-        asset = _asset;
+    constructor(address depositToken_, uint256 _mockProfitPercent) {
+        _depositToken = depositToken_;
         mockProfitPercent = _mockProfitPercent;
     }
 
     function depositToken() external view override returns (address) {
-        return asset;
+        return _depositToken;
     }
 
     function deposit(uint256 amount) external override {
-        // console.log("MockStrategy.deposit", amount, ERC20(asset).balanceOf(address(this)));
+        // console.log("MockStrategy.deposit", amount, ERC20(_depositToken).balanceOf(address(this)));
         balance += amount;
     }
 
@@ -30,7 +30,7 @@ contract MockStrategy is Ownable, IStrategy {
         override
         returns (uint256 amountWithdrawn)
     {
-        ERC20(asset).transfer(msg.sender, amount);
+        ERC20(_depositToken).transfer(msg.sender, amount);
         balance -= amount;
         return amount;
     }
@@ -47,7 +47,7 @@ contract MockStrategy is Ownable, IStrategy {
     function withdrawAll() external override returns (uint256 amountWithdrawn) {
         if (balance > 0) {
             amountWithdrawn = balance;
-            ERC20(asset).transfer(msg.sender, amountWithdrawn);
+            ERC20(_depositToken).transfer(msg.sender, amountWithdrawn);
         }
     }
 }

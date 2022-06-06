@@ -22,17 +22,18 @@ contract ChainlinkOracle is Ownable {
         feeds[USDC][Denominations.USD] = 0x51597f405303C4377E36123cBc172b13269EA163;
     }
 
+    /// @notice Set price feed for token / usd.
     function setPriceFeed(
-        address asset,
+        address token,
         address feed
     ) external onlyOwner {
-        feeds[asset][Denominations.USD] = feed;
+        feeds[token][Denominations.USD] = feed;
     }
 
     /**
-     * Returns the latest asset / usd price and its decimals
+     * Returns the latest token / usd price and its decimals
      */
-    function getAssetUsdPrice(address base)
+    function getTokenUsdPrice(address base)
         public
         view
         returns (uint256 price, uint8 decimals)

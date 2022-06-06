@@ -1,9 +1,9 @@
 
 --------- exchange contract with routing --------- 
 1) Needs a function to route swap through predefined dex such as pancakeswap or acryptos, maybe some other in future.
-    - this would be useful in strategy router as we may have different stables, some of them can be swapped on acryptos to save on fees and slippage.
+    - this would be useful in strategy router as we may have different tokens, some of them can be swapped on acryptos to save on fees and slippage.
 2) AcryptoS pool is relatively hard to integrate on-chain.
-    - good to know that they have multiple stableswap metapools, and one base pool ACS4USD. We only use UST metapool for now, to add new pools will need to add new DexType, setup coinIds and dexTypes mappings via setter functions. 
+    - good to know that they have multiple tokenswap metapools, and one base pool ACS4USD. We only use UST metapool for now, to add new pools will need to add new DexType, setup coinIds and dexTypes mappings via setter functions. 
 
 So possible implementation in general: 
 1) when calling swapRouted we will get DexType for these two tokens. If DexType not set for them we use default route which is pancakeswap with intermediary WETH.

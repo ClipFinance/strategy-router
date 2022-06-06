@@ -2,13 +2,13 @@
 https://miro.com/app/board/uXjVOXGtYEw=/
 
 ### Definitions
-*Strategies* - is a smart contracts that implements certain farming strategies with stablecoins, such as staking biswap UST-BUSD LP tokens. Users can't interact with strategy contracts directly.  
+*Strategies* - is a smart contracts that implements certain farming strategies with tokens, such as staking biswap UST-BUSD LP tokens. Users can't interact with strategy contracts directly.  
 
 *Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
 
 *Batching balance* - This is where user funds appear after his deposit. Coins hold here before depositing them into strategies, thus money in batching doesn't generate any profits. This is managed by Strategy Router.  
 
-*Strategy balance* - Simply saying how much stablecoin you can withdraw from that strategy, not accounting for fee or slippage. Money in strategies are generating profits.  
+*Strategy balance* - Simply saying how much token you can withdraw from that strategy, not accounting for fee or slippage. Money in strategies are generating profits.  
 
 *Cycle* - Every cycle has its own price per share (PPS).  
 
@@ -19,10 +19,10 @@ https://miro.com/app/board/uXjVOXGtYEw=/
 *Receipt NFT or receipt* - Utility ERC721 token to denote user deposits.  
 
 ### General overview
-Users depositing their stablecoins together into strategy router, collected funds are periodically deposited into strategies. User can withdraw his share of the pool including his profits at anytime. Strategy router can add, remove or rebalance strategies.
+Users depositing their tokens together into strategy router, collected funds are periodically deposited into strategies. User can withdraw his share of the pool including his profits at anytime. Strategy router can add, remove or rebalance strategies.
 
 ### User workflow
-User choose one of the supported stablecoins to deposit in the batching and receive "Receipt NFT" that notes how much user just deposited and assigned unique ID for the cycle. Unique cycle ID is incrementing integer number.  
+User choose one of the supported tokens to deposit in the batching and receive "Receipt NFT" that notes how much user just deposited and assigned unique ID for the cycle. Unique cycle ID is incrementing integer number.  
 
 Then after cycle duration has been passed or batching has reached minimum amount of required coins, a Chainlink Keeper triggers current batch deposits into strategies. Now the coins in the strategies are generating profits. This whole process can be repeated for infinite number of cycles.  
 
@@ -34,12 +34,12 @@ Maximum withdrawable amount's formula is user's total shares times current PPS.
 
 With partial withdraw all NFTs are burned and issuing share tokens for remaining amount. User's share tokens formula is remaining amount of coins divided by current PPS.  
 
-User can withdraw part or whole amount noted in his Receipt NFT directly from the batching if cycle noted in the receipt is not closed yet. If closed then he can convert his NFTs into Share Tokens, these shares can be used to withdraw stablecoins from strategies inlcuding profits. User can choose one of the supported stablecoins to receive after withdraw.  
+User can withdraw part or whole amount noted in his Receipt NFT directly from the batching if cycle noted in the receipt is not closed yet. If closed then he can convert his NFTs into Share Tokens, these shares can be used to withdraw tokens from strategies inlcuding profits. User can choose one of the supported tokens to receive after withdraw.  
 
 There is also function to compound all the strategies which can be called anytime by anyone, and it is also called when depositing batch into strategies.
 
 ### Platform fee collection
-Platform fee is collected inside each strategy as strategies are unique. I.e biswap gives token in reward and when platform sells token for stablecoin to auto-compound, 20% from the amount is moved to platform's treasury.  
+Platform fee is collected inside each strategy as strategies are unique. I.e biswap gives token in reward and when platform sells token for token to auto-compound, 20% from the amount is moved to platform's treasury.  
 Acryptos on BSC and Curve give rewards in their token and also in the interest bearing token.  
 
 ### Adjust to most profitable strategies

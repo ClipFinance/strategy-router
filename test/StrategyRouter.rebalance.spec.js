@@ -6,9 +6,9 @@ const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPanca
 describe("Test rebalance functions", function () {
 
   let owner;
-  // mock stablecoins with different decimals
+  // mock tokens with different decimals
   let usdc, usdt, busd;
-  // helper functions to parse amounts of mock stablecoins
+  // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange;
@@ -25,7 +25,7 @@ describe("Test rebalance functions", function () {
     // deploy core contracts`
     ({ router, oracle, exchange } = await setupCore());
 
-    // deploy mock stablecoins 
+    // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
 
     // setup fake token liquidity
@@ -61,7 +61,7 @@ describe("Test rebalance functions", function () {
 
     it("usdt strategy, router supports only usdt, should revert", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -71,9 +71,9 @@ describe("Test rebalance functions", function () {
 
     it("usdt strategy, router supports multiple arbitrary tokens", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
-      await router.setSupportedStablecoin(busd.address, true);
-      await router.setSupportedStablecoin(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdc.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -96,7 +96,7 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies, router supports only usdt", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -118,9 +118,9 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies, router supports usdt,busd,usdc", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
-      await router.setSupportedStablecoin(busd.address, true);
-      await router.setSupportedStablecoin(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdc.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -146,8 +146,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies, router supports usdt,busd", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
-      await router.setSupportedStablecoin(busd.address, true);
+      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -172,9 +172,9 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies, router supports usdt,busd,usdc", async function () {
 
-      await router.setSupportedStablecoin(busd.address, true);
-      await router.setSupportedStablecoin(usdc.address, true);
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -200,9 +200,9 @@ describe("Test rebalance functions", function () {
 
     it("'dust' token balances should not be swapped on dexes", async function () {
 
-      await router.setSupportedStablecoin(busd.address, true);
-      await router.setSupportedStablecoin(usdc.address, true);
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -228,7 +228,7 @@ describe("Test rebalance functions", function () {
 
     it("one strategy rebalance should revert", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -238,7 +238,7 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -260,8 +260,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
-      await router.setSupportedStablecoin(busd.address, true);
+      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -286,8 +286,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt,usdt,busd strategies", async function () {
 
-      await router.setSupportedStablecoin(usdt.address, true);
-      await router.setSupportedStablecoin(busd.address, true);
+      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -314,9 +314,9 @@ describe("Test rebalance functions", function () {
 
     it("'dust' amounts should be ignored and not swapped on dex", async function () {
 
-      await router.setSupportedStablecoin(busd.address, true);
-      await router.setSupportedStablecoin(usdc.address, true);
-      await router.setSupportedStablecoin(usdt.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -380,9 +380,9 @@ describe("Test rebalance functions", function () {
     return amount;
   }
 
-  // weights order should match 'stablecoins' order
+  // weights order should match 'tokens' order
   async function verifyTokensRatio(weights) {
-    assert((await router.getStablecoins()).length == weights.length);
+    assert((await router.getSupportedTokens()).length == weights.length);
     const ERROR_THRESHOLD = 0.5;
     const { total, balances } = await getTokenBalances();
     let totalWeight = weights.reduce((e, acc) => acc + e);
@@ -424,9 +424,9 @@ describe("Test rebalance functions", function () {
     return { total, balances };
   }
 
-  async function createMockStrategy(asset, profit_percent) {
+  async function createMockStrategy(depositToken, profit_percent) {
     const Farm = await ethers.getContractFactory("MockStrategy");
-    let farm = await Farm.deploy(asset, profit_percent);
+    let farm = await Farm.deploy(depositToken, profit_percent);
     await farm.deployed();
     return farm;
   }
