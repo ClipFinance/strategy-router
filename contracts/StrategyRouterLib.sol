@@ -33,15 +33,17 @@ library StrategyRouterLib {
         balances = new uint256[](strategies.length);
         for (uint256 i; i < balances.length; i++) {
             address token = strategies[i].depositToken;
-            uint256 balance = IStrategy(strategies[i].strategyAddress)
-                .totalTokens();
-            balance = toUniform(balance, token);
+
+            uint256 balanceInDepositToken =
+                IStrategy(strategies[i].strategyAddress).totalTokens();
+
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
             (uint256 price, uint8 priceDecimals) = oracle.getAssetUsdPrice(
                 token
             );
-            balance = ((balance * price) / 10**priceDecimals);
-            balances[i] = balance;
-            totalBalance += balance;
+            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
+            balances[i] = balanceInDepositToken;
+            totalBalance += balanceInDepositToken;
         }
     }
     // returns amount of shares locked by receipt.

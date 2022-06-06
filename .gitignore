@@ -9,3 +9,4 @@ tenderly.yaml
 cache
 artifacts
 .vscode/
+.idea/*
