@@ -30,6 +30,8 @@ contract BiswapBase is Ownable, IStrategy {
 
     uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_A;
     uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_B;
+    uint256 private constant PERCENT_DENOMINATOR = 10000;
+    uint256 private constant HALF_WITH_FEE = 5003;
 
     constructor(
         StrategyRouter _strategyRouter,
@@ -55,7 +57,7 @@ contract BiswapBase is Ownable, IStrategy {
         // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
 
         // swap a bit more to account for swap fee (0.06% on acryptos)
-        uint256 amountB = (amount * 5003) / 10000;
+        uint256 amountB = (amount * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
         uint256 amountA = amount - amountB;
 
         Exchange exchange = strategyRouter.exchange();
@@ -239,7 +241,7 @@ contract BiswapBase is Ownable, IStrategy {
             amountB > amountA &&
             (toSwap = amountB - amountA) > LEFTOVER_TRESHOLD_TOKEN_B
         ) {
-            toSwap = (toSwap * 5003) / 1e4;
+            toSwap = (toSwap * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
             tokenB.transfer(address(exchange), toSwap);
             exchange.swapRouted(
                 toSwap,
@@ -251,7 +253,7 @@ contract BiswapBase is Ownable, IStrategy {
             amountA > amountB &&
             (toSwap = amountA - amountB) > LEFTOVER_TRESHOLD_TOKEN_A
         ) {
-            toSwap = (toSwap * 5003) / 1e4;
+            toSwap = (toSwap * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
             tokenA.transfer(address(exchange), toSwap);
             exchange.swapRouted(
                 toSwap,
@@ -297,7 +299,7 @@ contract BiswapBase is Ownable, IStrategy {
 
         uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
         address feeAddress = StrategyRouter(strategyRouter).feeAddress();
-        uint256 fee = (amount * feePercent) / 1e4;
+        uint256 fee = (amount * feePercent) / PERCENT_DENOMINATOR;
         if (fee > 0 && feeAddress != address(0)) {
             bsw.transfer(address(exchange), fee);
             exchange.swapRouted(fee, address(bsw), address(tokenA), feeAddress);
