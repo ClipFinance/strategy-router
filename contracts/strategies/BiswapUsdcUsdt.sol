@@ -14,7 +14,6 @@ contract BiswapUsdcUsdt is BiswapBase {
             4, 
             ERC20(0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d), 
             ERC20(0x55d398326f99059fF775485246999027B3197955),
-            ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1),
             ERC20(0x1483767E665B3591677Fd49F724bf7430C18Bf83)
         ) 
     {

@@ -290,7 +290,7 @@ describe("Test StrategyRouter", function () {
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
     let receiptsShares = await router.receiptsToShares([1]);
-    let amountFromShares = await router.sharesToValue(receiptsShares);
+    let amountFromShares = await router.sharesToUsd(receiptsShares);
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [1], usdc.address, [], receiptsShares);
@@ -305,7 +305,7 @@ describe("Test StrategyRouter", function () {
 
     let receiptsShares = await router.receiptsToShares([1]);
     await router.unlockShares([1]);
-    let amountFromShares = await router.sharesToValue(receiptsShares);
+    let amountFromShares = await router.sharesToUsd(receiptsShares);
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawUniversal([], [], usdc.address, [], receiptsShares);

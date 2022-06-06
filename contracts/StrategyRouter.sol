@@ -138,7 +138,7 @@ contract StrategyRouter is Ownable {
         uint256 stratsDebtInShares = cycles[_currentCycleId].stratsDebtInShares;
         uint256 stratsDebtValue;
         if (stratsDebtInShares > 0)
-            stratsDebtValue = sharesToValue(stratsDebtInShares);
+            stratsDebtValue = sharesToUsd(stratsDebtInShares);
 
         if (
             cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
@@ -331,7 +331,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function sharesToValue(uint256 shares)
+    function sharesToUsd(uint256 shares)
         public
         view
         returns (uint256 amount)
@@ -344,7 +344,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns shares equivalent of the usd vulue.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function amountToShares(uint256 amount)
+    function usdToShares(uint256 amount)
         public
         view
         returns (uint256 shares)
@@ -410,7 +410,7 @@ contract StrategyRouter is Ownable {
         }
 
         // shares into usd using current PPS
-        uint256 valueToWithdraw = sharesToValue(shares);
+        uint256 valueToWithdraw = sharesToUsd(shares);
         sharesToken.burn(address(this), shares);
         _withdrawFromStrategies(valueToWithdraw, withdrawToken);
     }
@@ -464,7 +464,7 @@ contract StrategyRouter is Ownable {
             }
         }
 
-        uint256 sharesToRepay = amountToShares(toWithdraw);
+        uint256 sharesToRepay = usdToShares(toWithdraw);
         if (cycles[_currentCycleId].stratsDebtInShares < sharesToRepay)
             revert CantCrossWithdrawFromStrategiesNow();
         _withdrawFromStrategies(toWithdraw, withdrawToken);
@@ -483,7 +483,7 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-        uint256 amount = sharesToValue(shares);
+        uint256 amount = sharesToUsd(shares);
         sharesToken.burn(msg.sender, shares);
         _withdrawFromStrategies(amount, withdrawToken);
     }
@@ -500,7 +500,7 @@ contract StrategyRouter is Ownable {
         if (supportsCoin(withdrawToken) == false)
             revert UnsupportedStablecoin();
 
-        uint256 amount = sharesToValue(shares);
+        uint256 amount = sharesToUsd(shares);
         // these shares will be owned by depositors of the current batching
         sharesToken.routerTransferFrom(msg.sender, address(this), shares);
         _withdrawFromBatching(amount, withdrawToken);
@@ -551,7 +551,7 @@ contract StrategyRouter is Ownable {
             );
         }
 
-        uint256 valueToWithdraw = sharesToValue(shares);
+        uint256 valueToWithdraw = sharesToUsd(shares);
 
         _withdrawFromBatching(valueToWithdraw, withdrawToken);
         cycles[currentCycleId].stratsDebtInShares += shares;
@@ -617,7 +617,7 @@ contract StrategyRouter is Ownable {
                     _withdrawFromBatching(fromBatchAmount, withdrawToken);
                     fromBatchAmount -= totalBalance;
                 }
-                uint256 sharesToRepay = amountToShares(fromBatchAmount);
+                uint256 sharesToRepay = usdToShares(fromBatchAmount);
                 if (cycles[_currentCycleId].stratsDebtInShares < sharesToRepay)
                     revert CantCrossWithdrawFromStrategiesNow();
                 _withdrawFromStrategies(fromBatchAmount, withdrawToken);
@@ -634,7 +634,7 @@ contract StrategyRouter is Ownable {
         uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
         if (sharesBalance < shares) shares = sharesBalance;
 
-        uint256 fromStratsAmount = sharesToValue(shares);
+        uint256 fromStratsAmount = sharesToUsd(shares);
 
         (uint256 totalBalance, ) = getBatchingValue();
 
@@ -645,7 +645,7 @@ contract StrategyRouter is Ownable {
                 uint256 _withdrawShares = (shares * totalBalance) /
                     fromStratsAmount;
                 shares -= _withdrawShares;
-                uint256 _withdrawAmount = sharesToValue(_withdrawShares);
+                uint256 _withdrawAmount = sharesToUsd(_withdrawShares);
                 sharesToken.burn(msg.sender, _withdrawShares);
                 _withdrawFromBatching(_withdrawAmount, withdrawToken);
                 cycles[currentCycleId].stratsDebtInShares += _withdrawShares;

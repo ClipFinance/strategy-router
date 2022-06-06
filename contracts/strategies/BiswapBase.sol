@@ -12,15 +12,15 @@ import "../StrategyRouter.sol";
 // import "hardhat/console.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
-// BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
-// MasterChef github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
+// address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
+// their code on github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
 contract BiswapBase is Ownable, IStrategy {
     ERC20 internal immutable tokenA;
     ERC20 internal immutable tokenB;
-    ERC20 internal immutable bsw;
     ERC20 internal immutable lpToken;
     StrategyRouter internal immutable strategyRouter;
 
+    ERC20 internal constant bsw = ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
     IBiswapFarm internal constant farm =
         IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
     IUniswapV2Router02 internal constant biswapRouter =
@@ -36,14 +36,12 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 _poolId,
         ERC20 _tokenA,
         ERC20 _tokenB,
-        ERC20 _bsw,
         ERC20 _lpToken
     ) {
         strategyRouter = _strategyRouter;
         poolId = _poolId;
         tokenA = _tokenA;
         tokenB = _tokenB;
-        bsw = _bsw;
         lpToken = _lpToken;
         LEFTOVER_TRESHOLD_TOKEN_A = 10**_tokenA.decimals();
         LEFTOVER_TRESHOLD_TOKEN_B = 10**_tokenB.decimals();
