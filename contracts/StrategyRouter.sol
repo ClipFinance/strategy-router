@@ -55,24 +55,12 @@ contract StrategyRouter is Ownable {
     error CycleClosed();
     error InsufficientShares();
     error DuplicateStrategy();
-    error NotCallableByContracts();
     error CycleNotClosableYet();
     error AmountNotSpecified();
     error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
     // error InitialSharesAreUnwithdrawable();
-
-    /// @notice Restrict msg.sender to be externally owned accounts only.
-    modifier OnlyEOW() {
-        _onlyEOW();
-        _;
-    }
-
-    // need this to reduce bytecode size
-    function _onlyEOW() internal view {
-        if (msg.sender != tx.origin) revert NotCallableByContracts();
-    }
 
     struct StrategyInfo {
         address strategyAddress;
@@ -86,9 +74,9 @@ contract StrategyRouter is Ownable {
         // usd value transferred into strategies
         uint256 totalDeposited;
         // actual usd value received by strategies
-        uint256 receivedByStrats;
+        uint256 receivedByStrategies;
         // cross withdrawn amount from batching by strategy receipt
-        uint256 stratsDebtInShares;
+        uint256 strategiesDebtInShares;
         mapping(address => uint256) prices;
         address[] tokens;
     }
@@ -132,17 +120,17 @@ contract StrategyRouter is Ownable {
     /// @notice Can be called when `cycleDuration` seconds has been passed or
     ///         batch usd value has reached `minUsdPerCycle`.
     /// @dev Only callable by user wallets.
-    function depositToStrategies() external OnlyEOW {
+    function depositToStrategies() external {
         uint256 _currentCycleId = currentCycleId;
         (uint256 totalValue, ) = getBatchingValue();
-        uint256 stratsDebtInShares = cycles[_currentCycleId].stratsDebtInShares;
-        uint256 stratsDebtValue;
-        if (stratsDebtInShares > 0)
-            stratsDebtValue = sharesToUsd(stratsDebtInShares);
+        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
+        uint256 strategiesDebtValue;
+        if (strategiesDebtInShares > 0)
+            strategiesDebtValue = sharesToUsd(strategiesDebtInShares);
 
         if (
             cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
-            totalValue + stratsDebtValue < minUsdPerCycle
+            totalValue + strategiesDebtValue < minUsdPerCycle
         ) revert CycleNotClosableYet();
 
         // save current supported tokens and their prices
@@ -204,7 +192,7 @@ contract StrategyRouter is Ownable {
 
         // get total strategies balance after deposit
         (uint256 balanceAfterDeposit, ) = getStrategiesValue();
-        uint256 receivedByStrats = balanceAfterDeposit - balanceAfterCompound;
+        uint256 receivedByStrategies = balanceAfterDeposit - balanceAfterCompound;
 
         uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
@@ -217,17 +205,17 @@ contract StrategyRouter is Ownable {
                 balanceAfterCompound /
                 totalShares;
 
-            uint256 newShares = receivedByStrats /
+            uint256 newShares = receivedByStrategies /
                 cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
 
-        cycles[_currentCycleId].receivedByStrats =
-            receivedByStrats +
-            stratsDebtValue;
-        cycles[_currentCycleId].totalDeposited = totalValue + stratsDebtValue;
+        cycles[_currentCycleId].receivedByStrategies =
+            receivedByStrategies +
+            strategiesDebtValue;
+        cycles[_currentCycleId].totalDeposited = totalValue + strategiesDebtValue;
 
-        emit DepositToStrategies(_currentCycleId, receivedByStrats);
+        emit DepositToStrategies(_currentCycleId, receivedByStrategies);
         // start new cycle
         currentCycleId++;
         cycles[_currentCycleId + 1].startAt = block.timestamp;
@@ -235,7 +223,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Compound all strategies.
     /// @dev Only callable by user wallets.
-    function compoundAll() external OnlyEOW {
+    function compoundAll() external {
         if (sharesToken.totalSupply() == 0) revert();
 
         uint256 len = strategies.length;
@@ -371,8 +359,7 @@ contract StrategyRouter is Ownable {
     /// @notice Cycle noted in receipt should be closed.
     function unlockShares(uint256[] calldata receiptIds)
         public
-        OnlyEOW
-        returns (uint256 shares)
+                returns (uint256 shares)
     {
         shares = _unlockShares(receiptIds);
         sharesToken.transfer(msg.sender, shares);
@@ -390,7 +377,7 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256 shares
-    ) external OnlyEOW {
+    ) external {
         if (shares == 0) revert AmountNotSpecified();
         if (supportsToken(withdrawToken) == false)
             revert UnsupportedToken();
@@ -418,7 +405,7 @@ contract StrategyRouter is Ownable {
     /// @notice Withdraw tokens from strategies while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
-    /// @notice Only allowed to withdraw less or equal to stratsDebtInShares.
+    /// @notice Only allowed to withdraw less or equal to strategiesDebtInShares.
     /// @param receiptIds ReceiptNFT ids.
     /// @param withdrawToken Supported token that user wish to receive.
     /// @param amounts Amounts to withdraw from each passed receipt.
@@ -427,7 +414,7 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata amounts
-    ) public OnlyEOW {
+    ) public {
         if (supportsToken(withdrawToken) == false)
             revert UnsupportedToken();
 
@@ -465,10 +452,10 @@ contract StrategyRouter is Ownable {
         }
 
         uint256 sharesToRepay = usdToShares(toWithdraw);
-        if (cycles[_currentCycleId].stratsDebtInShares < sharesToRepay)
+        if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay)
             revert CantCrossWithdrawFromStrategiesNow();
         _withdrawFromStrategies(toWithdraw, withdrawToken);
-        cycles[_currentCycleId].stratsDebtInShares -= sharesToRepay;
+        cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
     }
 
     /// @notice Withdraw tokens from strategies by shares.
@@ -476,8 +463,7 @@ contract StrategyRouter is Ownable {
     /// @param withdrawToken Supported token that user wish to receive.
     function withdrawShares(uint256 shares, address withdrawToken)
         public
-        OnlyEOW
-    {
+            {
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
         if (supportsToken(withdrawToken) == false)
@@ -493,8 +479,7 @@ contract StrategyRouter is Ownable {
     /// @param withdrawToken Supported token that user wish to receive.
     function crossWithdrawShares(uint256 shares, address withdrawToken)
         public
-        OnlyEOW
-    {
+            {
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
         if (supportsToken(withdrawToken) == false)
@@ -504,7 +489,7 @@ contract StrategyRouter is Ownable {
         // these shares will be owned by depositors of the current batching
         sharesToken.routerTransferFrom(msg.sender, address(this), shares);
         _withdrawFromBatching(amount, withdrawToken);
-        cycles[currentCycleId].stratsDebtInShares += shares;
+        cycles[currentCycleId].strategiesDebtInShares += shares;
     }
 
     /// @notice Withdraw tokens from batching while receipts are in batching.
@@ -518,7 +503,7 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata amounts
-    ) public OnlyEOW {
+    ) public {
         batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
     }
 
@@ -533,7 +518,7 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256 shares
-    ) external OnlyEOW {
+    ) external {
         if (shares == 0) revert AmountNotSpecified();
         if (supportsToken(withdrawToken) == false)
             revert UnsupportedToken();
@@ -554,7 +539,7 @@ contract StrategyRouter is Ownable {
         uint256 valueToWithdraw = sharesToUsd(shares);
 
         _withdrawFromBatching(valueToWithdraw, withdrawToken);
-        cycles[currentCycleId].stratsDebtInShares += shares;
+        cycles[currentCycleId].strategiesDebtInShares += shares;
     }
 
     /// @notice Allows to withdraw tokens from batching and from strategies at the same time.
@@ -572,7 +557,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256[] calldata amounts,
         uint256 shares
-    ) external OnlyEOW {
+    ) external {
         if (supportsToken(withdrawToken) == false)
             revert UnsupportedToken();
 
@@ -618,10 +603,10 @@ contract StrategyRouter is Ownable {
                     fromBatchAmount -= totalBalance;
                 }
                 uint256 sharesToRepay = usdToShares(fromBatchAmount);
-                if (cycles[_currentCycleId].stratsDebtInShares < sharesToRepay)
+                if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay)
                     revert CantCrossWithdrawFromStrategiesNow();
                 _withdrawFromStrategies(fromBatchAmount, withdrawToken);
-                cycles[_currentCycleId].stratsDebtInShares -= sharesToRepay;
+                cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
             }
         }
 
@@ -648,7 +633,7 @@ contract StrategyRouter is Ownable {
                 uint256 _withdrawAmount = sharesToUsd(_withdrawShares);
                 sharesToken.burn(msg.sender, _withdrawShares);
                 _withdrawFromBatching(_withdrawAmount, withdrawToken);
-                cycles[currentCycleId].stratsDebtInShares += _withdrawShares;
+                cycles[currentCycleId].strategiesDebtInShares += _withdrawShares;
             }
             if (shares > 0) withdrawShares(shares, withdrawToken);
         }
@@ -663,8 +648,7 @@ contract StrategyRouter is Ownable {
     /// @dev Only callable by user wallets.
     function depositToBatch(address depositToken, uint256 _amount)
         external
-        OnlyEOW
-    {
+            {
         batching.deposit(msg.sender, depositToken, _amount);
         IERC20(depositToken).transferFrom(
             msg.sender,
@@ -674,6 +658,7 @@ contract StrategyRouter is Ownable {
     }
 
     // Admin functions
+
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.

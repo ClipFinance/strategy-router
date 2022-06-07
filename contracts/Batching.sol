@@ -14,7 +14,7 @@ import "./interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
 
-/// @notice This contract contains batching related code, its just a module that is utilized by StrategyRouter.
+/// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
 contract Batching is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -315,25 +315,25 @@ contract Batching is Ownable {
     */
         uint256 totalInBatch;
 
-        uint256 lenSupTokens = supportedTokens.length();
-        address[] memory _tokens = new address[](lenSupTokens);
-        uint256[] memory _balances = new uint256[](lenSupTokens);
+        uint256 supportedTokensLength = supportedTokens.length();
+        address[] memory _tokens = new address[](supportedTokensLength);
+        uint256[] memory _balances = new uint256[](supportedTokensLength);
 
-        for (uint256 i; i < lenSupTokens; i++) {
+        for (uint256 i; i < supportedTokensLength; i++) {
             _tokens[i] = supportedTokens.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
             totalInBatch += toUniform(_balances[i], _tokens[i]);
         }
 
-        uint256 lenStrats = router.getStrategiesCount();
+        uint256 strategiesLength = router.getStrategiesCount();
 
         uint256[] memory _strategiesBalances = new uint256[](
-            lenStrats + lenSupTokens
+            strategiesLength + supportedTokensLength
         );
-        for (uint256 i; i < lenStrats; i++) {
+        for (uint256 i; i < strategiesLength; i++) {
             address depositToken = router.getStrategyDepositToken(i);
-            for (uint256 j; j < lenSupTokens; j++) {
+            for (uint256 j; j < supportedTokensLength; j++) {
                 if (depositToken == _tokens[j] && _balances[j] > 0) {
                     _strategiesBalances[i] = _balances[j];
                     _balances[j] = 0;
@@ -342,13 +342,13 @@ contract Batching is Ownable {
             }
         }
 
-        for (uint256 i = lenStrats; i < _strategiesBalances.length; i++) {
-            _strategiesBalances[i] = _balances[i - lenStrats];
+        for (uint256 i = strategiesLength; i < _strategiesBalances.length; i++) {
+            _strategiesBalances[i] = _balances[i - strategiesLength];
         }
 
-        uint256[] memory toAdd = new uint256[](lenStrats);
+        uint256[] memory toAdd = new uint256[](strategiesLength);
         uint256[] memory toSell = new uint256[](_strategiesBalances.length);
-        for (uint256 i; i < lenStrats; i++) {
+        for (uint256 i; i < strategiesLength; i++) {
             uint256 desiredBalance = (totalInBatch *
                 router.getStrategyPercentWeight(i)) / 1e18;
             desiredBalance = fromUniform(
@@ -364,19 +364,19 @@ contract Batching is Ownable {
             }
         }
 
-        for (uint256 i = lenStrats; i < _strategiesBalances.length; i++) {
+        for (uint256 i = strategiesLength; i < _strategiesBalances.length; i++) {
             toSell[i] = _strategiesBalances[i];
         }
 
         for (uint256 i; i < _strategiesBalances.length; i++) {
-            for (uint256 j; j < lenStrats; j++) {
+            for (uint256 j; j < strategiesLength; j++) {
                 if (toSell[i] == 0) break;
                 if (toAdd[j] > 0) {
                     // if toSell's 'i' greater than strats-1 (e.g. strats 2, tokens 2, i=2, 2>2-1==true)
                     // then take supported_token[2-2=0]
                     // otherwise take strategy_token[0 or 1]
-                    address sellToken = i > lenStrats - 1
-                        ? _tokens[i - lenStrats]
+                    address sellToken = i > strategiesLength - 1
+                        ? _tokens[i - strategiesLength]
                         : router.getStrategyDepositToken(i);
                     address buyToken = router.getStrategyDepositToken(j);
 
@@ -417,8 +417,8 @@ contract Batching is Ownable {
             }
         }
 
-        _balances = new uint256[](lenStrats);
-        for (uint256 i; i < lenStrats; i++) {
+        _balances = new uint256[](strategiesLength);
+        for (uint256 i; i < strategiesLength; i++) {
             _balances[i] = _strategiesBalances[i];
         }
 
