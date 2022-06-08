@@ -17,11 +17,6 @@ import "./StrategyRouter.sol";
 
 library StrategyRouterLib {
     error CycleNotClosed();
-    // struct StrategyInfo {
-    //     address strategyAddress;
-    //     address depositToken;
-    //     uint256 weight;
-    // }
 
     uint8 constant UNIFORM_DECIMALS = 18;
 
@@ -37,11 +32,11 @@ library StrategyRouterLib {
             uint256 balanceInDepositToken =
                 IStrategy(strategies[i].strategyAddress).totalTokens();
 
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 token
             );
             balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
         }
@@ -65,7 +60,7 @@ library StrategyRouterLib {
         assert(oldValue > 0);
         // adjust according to what was actually deposited into strategies
         uint256 oldValueAdjusted = (oldValue *
-            cycles[receipt.cycleId].receivedByStrats) /
+            cycles[receipt.cycleId].receivedByStrategies) /
             cycles[receipt.cycleId].totalDeposited;
 
         shares = oldValueAdjusted / cycles[receipt.cycleId].pricePerShare;

@@ -2,10 +2,10 @@
 
 ## StrategyRouter
 
-### OnlyEOW
+### onlyWhitelisted
 
 ```solidity
-modifier OnlyEOW()
+modifier onlyWhitelisted()
 ```
 
 Restrict msg.sender to be externally owned accounts only.

@@ -75,7 +75,7 @@ describe("Test StrategyRouter", function () {
     await expect(router.depositToBatch(busd.address, parseBusd("100"))).to.be.reverted;
   });
 
-  it("should revert depositToBatch token not whitelisted", async function () {
+  it("should revert depositToBatch if token unsupported", async function () {
     await expect(router.depositToBatch(router.address, parseBusd("100")))
       .to.be.revertedWith("UnsupportedToken");
   });
