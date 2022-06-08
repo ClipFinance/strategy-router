@@ -135,8 +135,10 @@ contract StrategyRouter is Ownable {
     function depositToStrategies() external OnlyEOW {
         uint256 _currentCycleId = currentCycleId;
         (uint256 totalValue, ) = getBatchingValue();
+
         uint256 stratsDebtInShares = cycles[_currentCycleId].stratsDebtInShares;
         uint256 stratsDebtValue;
+
         if (stratsDebtInShares > 0)
             stratsDebtValue = sharesToUsd(stratsDebtInShares);
 
@@ -150,20 +152,14 @@ contract StrategyRouter is Ownable {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getTokenUsdPrice(tokens[i]);
+                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
-                        price,
+                        priceUsd,
                         priceDecimals,
                         UNIFORM_DECIMALS
                     );
-                    // cycles[_currentCycleId].prices[tokens[i]] = changeDecimals(
-                    //     price,
-                    //     priceDecimals,
-                    //     UNIFORM_DECIMALS
-                    // );
                 }
             }
         }
@@ -331,15 +327,16 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function sharesToUsd(uint256 shares)
+    function sharesToUsd(uint256 amountShares)
         public
         view
-        returns (uint256 amount)
+        returns (uint256 amountUsd)
     {
-        (uint256 strategiesBalance, ) = getStrategiesValue();
-        uint256 currentPricePerShare = strategiesBalance /
+        uint256 precision = 1000000;
+        (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+        uint256 sharePriceUsd = strategiesLockedUsd * precision /
             sharesToken.totalSupply();
-        amount = shares * currentPricePerShare;
+        amountUsd = amountShares * sharePriceUsd / precision;
     }
 
     /// @notice Returns shares equivalent of the usd vulue.
