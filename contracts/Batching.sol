@@ -91,11 +91,11 @@ contract Batching is Ownable {
             address token = supportedTokens.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
 
-            balance = toUniform(balance, token);
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 token
             );
             balance = ((balance * price) / 10**priceDecimals);
+            balance = toUniform(balance, token);
             balances[i] = balance;
             totalBalance += balance;
         }
