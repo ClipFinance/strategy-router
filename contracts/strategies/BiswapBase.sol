@@ -134,6 +134,7 @@ contract BiswapBase is Ownable, IStrategy {
     }
 
     function compound() external override onlyOwner {
+        // inside withdraw happens BSW rewards collection
         farm.withdraw(poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
         uint256 bswAmount = bsw.balanceOf(address(this));
@@ -269,12 +270,11 @@ contract BiswapBase is Ownable, IStrategy {
         private
         returns (uint256 receivedA, uint256 receivedB)
     {
-        // take comission
-        bswAmount = takeFee(bswAmount);
+        uint256 bswAmountAfterCommission = collectProtocolCommission(bswAmount);
 
         // sell for lp ratio
-        uint256 amountA = bswAmount / 2;
-        uint256 amountB = bswAmount - amountA;
+        uint256 amountA = bswAmountAfterCommission / 2;
+        uint256 amountB = bswAmountAfterCommission - amountA;
 
         Exchange exchange = strategyRouter.exchange();
         bsw.transfer(address(exchange), amountA);
@@ -294,7 +294,7 @@ contract BiswapBase is Ownable, IStrategy {
         );
     }
 
-    function takeFee(uint256 amount) private returns (uint256 amountAfterFee) {
+    function collectProtocolCommission(uint256 amount) private returns (uint256 amountAfterFee) {
         Exchange exchange = strategyRouter.exchange();
 
         uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
