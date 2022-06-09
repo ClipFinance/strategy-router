@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
     error NonExistingToken();
+    error ReceiptAmountCanOnlyDecrease();
     error NotManager();
     /// Invalid query range (`start` >= `stop`).
     error InvalidQueryRange();
@@ -34,6 +35,8 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
 
     function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
         if (!_exists(tokenId)) revert NonExistingToken();
+        if (receipts[tokenId].amount < amount)
+            revert ReceiptAmountCanOnlyDecrease();
         receipts[tokenId].amount = amount;
     }
 
