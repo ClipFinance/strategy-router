@@ -125,9 +125,10 @@ contract StrategyRouter is Ownable {
     function depositToStrategies() external {
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchingValue, ) = getBatchingValue();
-        uint256 strategiesDebtInShares = cycles[_currentCycleId]
-            .strategiesDebtInShares;
+
+        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
         uint256 strategiesDebtValue;
+
         if (strategiesDebtInShares > 0)
             strategiesDebtValue = sharesToUsd(strategiesDebtInShares);
 
@@ -141,12 +142,11 @@ contract StrategyRouter is Ownable {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getTokenUsdPrice(tokens[i]);
+                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
-                        price,
+                        priceUsd,
                         priceDecimals,
                         UNIFORM_DECIMALS
                     );
@@ -315,16 +315,25 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function sharesToUsd(uint256 shares) public view returns (uint256 amount) {
-        (uint256 strategiesBalance, ) = getStrategiesValue();
-        uint256 currentPricePerShare = strategiesBalance /
+    function sharesToUsd(uint256 amountShares)
+        public
+        view
+        returns (uint256 amountUsd)
+    {
+        uint256 precision = 1000000;
+        (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+        uint256 sharePriceUsd = strategiesLockedUsd * precision /
             sharesToken.totalSupply();
-        amount = shares * currentPricePerShare;
+        amountUsd = amountShares * sharePriceUsd / precision;
     }
 
     /// @notice Returns shares equivalent of the usd vulue.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function usdToShares(uint256 amount) public view returns (uint256 shares) {
+    function usdToShares(uint256 amount)
+        public
+        view
+        returns (uint256 shares)
+    {
         (uint256 strategiesBalance, ) = getStrategiesValue();
         uint256 currentPricePerShare = strategiesBalance /
             sharesToken.totalSupply();
