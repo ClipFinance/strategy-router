@@ -48,7 +48,7 @@ contract StrategyRouter is Ownable {
     event UnlockShares(address indexed user, uint256 receiptId, uint256 shares);
 
     /* ERRORS */
-
+    error AmountExceedTotalSupply();
     error UnsupportedToken();
     error NotReceiptOwner();
     error CycleNotClosed();
@@ -320,11 +320,12 @@ contract StrategyRouter is Ownable {
         view
         returns (uint256 amountUsd)
     {
-        uint256 precision = 1000000;
+        uint256 totalShares = sharesToken.totalSupply();
+        if(amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
-        uint256 sharePriceUsd = strategiesLockedUsd * precision /
-            sharesToken.totalSupply();
-        amountUsd = amountShares * sharePriceUsd / precision;
+        uint256 sharePriceUsd = strategiesLockedUsd /
+            totalShares;
+        amountUsd = amountShares * sharePriceUsd;
     }
 
     /// @notice Returns shares equivalent of the usd vulue.
