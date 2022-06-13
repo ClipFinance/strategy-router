@@ -7,7 +7,10 @@ function bnbChain() {
     usdt: "0x55d398326f99059fF775485246999027B3197955",
     dai: "0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3",
 
-    // current holders for tests, may not work based on block number used in forking
+    bsw: "0x965f527d9159dce6288a2219db51fc6eef120dd1",
+
+    // current token holders for tests, 
+    // may not work based on block number used in forking, in such case try find other holders
     busdHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
     usdcHolder: "0x6782472a11987e6f4a8afb10def25b498cb622db",
     usdtHolder: "0xf977814e90da44bfa03b6295a0616a897441acec"

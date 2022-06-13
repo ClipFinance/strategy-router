@@ -9,7 +9,7 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
@@ -31,6 +31,7 @@ contract BiswapBase is Ownable, IStrategy {
     uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_A;
     uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
+    // TODO: remove this and use math similar to what in deposit function
     uint256 private constant HALF_WITH_FEE = 5003;
 
     constructor(
@@ -56,11 +57,19 @@ contract BiswapBase is Ownable, IStrategy {
     function deposit(uint256 amount) external override onlyOwner {
         // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
 
+        Exchange exchange = strategyRouter.exchange();
         // swap a bit more to account for swap fee (0.06% on acryptos)
-        uint256 amountB = (amount * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
+        uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
+
+        // We take (amount/2) and then calc how much to increase that 
+        // in order to receive 50/50 after swap (only accounting for fee %).
+        // So the formula: fee * 2 / (fee + 1), where fee is for example 1.06
+        // the above formula adjusted for integers:
+        uint256 halfWithFee = (1e18 + dexFee) * 2 * 1e18 / (1e18 * 2  + dexFee);
+        console.log(halfWithFee, amount);
+        uint256 amountB = (amount / 2 * halfWithFee) / 1e18; // 1e18 fee denominator
         uint256 amountA = amount - amountB;
 
-        Exchange exchange = strategyRouter.exchange();
         tokenA.transfer(address(exchange), amountB);
         amountB = exchange.swapRouted(
             amountB,

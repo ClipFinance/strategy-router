@@ -1,4 +1,4 @@
-const {  parseUnits } = require("ethers/lib/utils");
+const { parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 let { getUSDC, getBUSD, getUSDT, deploy } = require("../utils");
 
@@ -57,9 +57,9 @@ async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount) {
 
 // Get tokens that actually exists on BNB for testing
 async function setupTokens() {
-  ({tokenContract: usdc, parse: parseUsdc}= await getUSDC());
-  ({tokenContract: usdt, parse: parseUsdt}= await getUSDT());
-  ({tokenContract: busd, parse: parseBusd}= await getBUSD());
+  ({ tokenContract: usdc, parse: parseUsdc } = await getUSDC());
+  ({ tokenContract: usdt, parse: parseUsdt } = await getUSDT());
+  ({ tokenContract: busd, parse: parseBusd } = await getBUSD());
   return { usdc, busd, usdt, parseUsdc, parseUsdt, parseBusd };
 };
 
@@ -75,7 +75,7 @@ async function setupCore() {
   // Deploy StrategyRouter 
   let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
-     StrategyRouterLib: routerLib.address
+      StrategyRouterLib: routerLib.address
     }
   });
   let router = await StrategyRouter.deploy(exchange.address, oracle.address);
@@ -109,25 +109,25 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   let usdcAmount = parseUnits("1.0", await usdc.decimals());
   await oracle.setPrice(usdc.address, usdcAmount);
 
+  let bsw = hre.networkVariables.bsw;
+
+  let pancakePlugin = await deploy("UniswapPlugin");
+  let pancake = (pancakePlugin).address;
   // Setup exchange params
-  await exchange.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await exchange.setDexType(
-    [
-      busd.address,
-      busd.address,
-      usdc.address,
-    ],
-    [
-      usdt.address,
-      usdc.address,
-      usdt.address,
-    ],
-    [
-      hre.networkVariables.exchangeTypes.pancakeDirect,
-      hre.networkVariables.exchangeTypes.pancakeDirect,
-      hre.networkVariables.exchangeTypes.pancakeDirect,
-    ]
+  busd = busd.address;
+  usdc = usdc.address;
+  usdt = usdt.address;
+  await exchange.setPlugin(
+    [busd, busd, usdc, bsw, bsw, bsw],
+    [usdt, usdc, usdt, busd, usdt, usdc],
+    [pancake, pancake, pancake, pancake, pancake, pancake]
   );
+
+  // pancake plugin params
+  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
+  // await pancakePlugin.setUseWeth(bsw, busd, true);
+  // await pancakePlugin.setUseWeth(bsw, usdt, true);
+  // await pancakePlugin.setUseWeth(bsw, usdc, true);
 
 }
 
@@ -142,25 +142,42 @@ async function setupParamsOnBNB(router, oracle, exchange) {
   await router.setFeeAddress(feeAddress.address);
   await router.setCycleDuration(1);
 
+  await setupPluginsOnBNB(exchange);
+}
+
+async function setupPluginsOnBNB(exchange) {
+  const [owner, feeAddress] = await ethers.getSigners();
+
+  let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
   let acs4ust = hre.networkVariables.acryptosUst4Pool.address;
-  let exchangeTypeACS4UST = hre.networkVariables.exchangeTypes.acryptosUst4Pool;
+
+  let acsPlugin = await deploy("CurvePlugin");
+  let pancakePlugin = await deploy("UniswapPlugin");
 
   // Setup exchange params
-  await exchange.setCurvePool(busd, usdt, acs4ust);
-  await exchange.setCurvePool(usdc, usdt, acs4ust);
-  await exchange.setCurvePool(busd, usdc, acs4ust);
-  await exchange.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await exchange.setCoinIds(
+  await exchange.setPlugin(
+    [busd, busd, usdc, bsw, bsw, bsw],
+    [usdt, usdc, usdt, busd, usdt, usdc],
+    [acsPlugin.address, acsPlugin.address, acsPlugin.address, 
+      pancakePlugin.address, pancakePlugin.address, pancakePlugin.address]
+  );
+
+  // acs plugin params
+  await acsPlugin.setCurvePool(busd, usdt, acs4ust);
+  await acsPlugin.setCurvePool(usdc, usdt, acs4ust);
+  await acsPlugin.setCurvePool(busd, usdc, acs4ust);
+  await acsPlugin.setCoinIds(
     hre.networkVariables.acryptosUst4Pool.address,
     hre.networkVariables.acryptosUst4Pool.tokens,
     hre.networkVariables.acryptosUst4Pool.coinIds
   );
-  await exchange.setDexType(
-    [busd, busd, usdc],
-    [usdt, usdc, usdt],
-    [exchangeTypeACS4UST, exchangeTypeACS4UST, exchangeTypeACS4UST,]
-  );
+
+  // pancake plugin params
+  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
+  await pancakePlugin.setUseWeth(bsw, busd, true);
+  await pancakePlugin.setUseWeth(bsw, usdt, true);
+  await pancakePlugin.setUseWeth(bsw, usdc, true);
 }

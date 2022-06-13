@@ -41,28 +41,39 @@ async function main() {
   // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
   exchange = await deploy("Exchange");
   console.log("Exchange", exchange.address);
-  await (await exchange.setCurvePool(
+
+  let acsPlugin = await deploy("CurvePlugin");
+  console.log("acsPlugin", acsPlugin.address);
+  let pancakePlugin = await deploy("UniswapPlugin");
+  console.log("pancakePlugin", pancakePlugin.address);
+
+  // pancake plugin params
+  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true);
+  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true);
+  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true);
+
+  await (await acsPlugin.setCurvePool(
     hre.networkVariables.busd,
     hre.networkVariables.usdt,
     hre.networkVariables.acryptosUst4Pool.address
   )).wait();
-  await (await exchange.setCurvePool(
+  await (await acsPlugin.setCurvePool(
     hre.networkVariables.usdc,
     hre.networkVariables.usdt,
     hre.networkVariables.acryptosUst4Pool.address
   )).wait();
-  await (await exchange.setCurvePool(
+  await (await acsPlugin.setCurvePool(
     hre.networkVariables.busd,
     hre.networkVariables.usdc,
     hre.networkVariables.acryptosUst4Pool.address
   )).wait();
-  await (await exchange.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await exchange.setCoinIds(
+  await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
+  await (await acsPlugin.setCoinIds(
     hre.networkVariables.acryptosUst4Pool.address,
     hre.networkVariables.acryptosUst4Pool.tokens,
     hre.networkVariables.acryptosUst4Pool.coinIds
   )).wait();
-  await (await exchange.setDexType(
+  await (await exchange.setPlugin(
     [
       hre.networkVariables.busd,
       hre.networkVariables.busd,
@@ -74,9 +85,9 @@ async function main() {
       hre.networkVariables.usdt,
     ],
     [
-      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
-      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
-      hre.networkVariables.exchangeTypes.acryptosUst4Pool,
+      acsPlugin.address,
+      acsPlugin.address,
+      acsPlugin.address,
     ]
   )).wait();
 
