@@ -28,8 +28,8 @@ contract BiswapBase is Ownable, IStrategy {
 
     uint256 internal immutable poolId;
 
-    uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_A;
-    uint256 private immutable LEFTOVER_TRESHOLD_TOKEN_B;
+    uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_A;
+    uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     // TODO: remove this and use math similar to what in deposit function
     uint256 private constant HALF_WITH_FEE = 5003;
@@ -46,8 +46,8 @@ contract BiswapBase is Ownable, IStrategy {
         tokenA = _tokenA;
         tokenB = _tokenB;
         lpToken = _lpToken;
-        LEFTOVER_TRESHOLD_TOKEN_A = 10**_tokenA.decimals();
-        LEFTOVER_TRESHOLD_TOKEN_B = 10**_tokenB.decimals();
+        LEFTOVER_THRESHOLD_TOKEN_A = 10**_tokenA.decimals();
+        LEFTOVER_THRESHOLD_TOKEN_B = 10**_tokenB.decimals();
     }
 
     function depositToken() external view override returns (address) {
@@ -242,14 +242,14 @@ contract BiswapBase is Ownable, IStrategy {
     }
 
     /// @dev Swaps leftover tokens for a better ratio for LP.
-    function fix_leftover(uint256 amoungIgnore) private {
+    function fix_leftover(uint256 amountIgnore) private {
         Exchange exchange = strategyRouter.exchange();
         uint256 amountB = tokenB.balanceOf(address(this));
-        uint256 amountA = tokenA.balanceOf(address(this)) - amoungIgnore;
+        uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
         if (
             amountB > amountA &&
-            (toSwap = amountB - amountA) > LEFTOVER_TRESHOLD_TOKEN_B
+            (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B
         ) {
             toSwap = (toSwap * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
             tokenB.transfer(address(exchange), toSwap);
@@ -261,7 +261,7 @@ contract BiswapBase is Ownable, IStrategy {
             );
         } else if (
             amountA > amountB &&
-            (toSwap = amountA - amountB) > LEFTOVER_TRESHOLD_TOKEN_A
+            (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A
         ) {
             toSwap = (toSwap * HALF_WITH_FEE) / PERCENT_DENOMINATOR;
             tokenA.transfer(address(exchange), toSwap);

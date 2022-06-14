@@ -20,27 +20,29 @@ library StrategyRouterLib {
 
     uint8 constant UNIFORM_DECIMALS = 18;
 
-    function getStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
-        public
-        view
-        returns (uint256 totalBalance, uint256[] memory balances)
-    {
+    function getStrategiesValue(
+        IUsdOracle oracle,
+        StrategyRouter.StrategyInfo[] storage strategies
+    ) public view returns (uint256 totalBalance, uint256[] memory balances) {
         balances = new uint256[](strategies.length);
         for (uint256 i; i < balances.length; i++) {
             address token = strategies[i].depositToken;
 
-            uint256 balanceInDepositToken =
-                IStrategy(strategies[i].strategyAddress).totalTokens();
+            uint256 balanceInDepositToken = IStrategy(
+                strategies[i].strategyAddress
+            ).totalTokens();
 
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 token
             );
-            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
+            balanceInDepositToken = ((balanceInDepositToken * price) /
+                10**priceDecimals);
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
         }
     }
+
     // returns amount of shares locked by receipt.
     function receiptToShares(
         ReceiptNFT receiptContract,
@@ -59,11 +61,9 @@ library StrategyRouterLib {
         oldValue = (receipt.amount * oldPrice) / 10**UNIFORM_DECIMALS;
         assert(oldValue > 0);
         // adjust according to what was actually deposited into strategies
-        uint256 oldValueAdjusted = (oldValue *
-            cycles[receipt.cycleId].receivedByStrategies) /
+        uint256 oldValueAdjusted = (oldValue * cycles[receipt.cycleId].receivedByStrategies) /
             cycles[receipt.cycleId].totalDeposited;
-
-        shares = oldValueAdjusted / cycles[receipt.cycleId].pricePerShare;
+        return oldValueAdjusted;
     }
 
     /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.
