@@ -9,7 +9,7 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
@@ -66,7 +66,7 @@ contract BiswapBase is Ownable, IStrategy {
         // So the formula: fee * 2 / (fee + 1), where fee is for example 1.06
         // the above formula adjusted for integers:
         uint256 halfWithFee = (1e18 + dexFee) * 2 * 1e18 / (1e18 * 2  + dexFee);
-        console.log(halfWithFee, amount);
+        // console.log(halfWithFee, amount);
         uint256 amountB = (amount / 2 * halfWithFee) / 1e18; // 1e18 fee denominator
         uint256 amountA = amount - amountB;
 

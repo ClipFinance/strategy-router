@@ -47,6 +47,16 @@ contract StrategyRouter is Ownable {
     /// @param shares Amount of shares received by user.
     event UnlockShares(address indexed user, uint256 receiptId, uint256 shares);
 
+    // Events for setters.
+    event SetOracle(address newAddress);
+    event SetReceiptNFT(address newAddress);
+    event SetExchange(address newAddress);
+    event SetMinDeposit(uint256 newAmount);
+    event SetCycleDuration(uint256 newDuration);
+    event SetMinUsdPerCycle(uint256 newAmount);
+    event SetFeeAddress(address newAddress);
+    event SetFeePercent(uint256 newPercent);
+
     /* ERRORS */
     error AmountExceedTotalSupply();
     error UnsupportedToken();
@@ -126,7 +136,8 @@ contract StrategyRouter is Ownable {
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchingValue, ) = getBatchingValue();
 
-        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
+        uint256 strategiesDebtInShares = cycles[_currentCycleId]
+            .strategiesDebtInShares;
         uint256 strategiesDebtValue;
 
         if (strategiesDebtInShares > 0)
@@ -142,7 +153,8 @@ contract StrategyRouter is Ownable {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
-                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
+                    (uint256 priceUsd, uint8 priceDecimals) = oracle
+                        .getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
@@ -321,20 +333,15 @@ contract StrategyRouter is Ownable {
         returns (uint256 amountUsd)
     {
         uint256 totalShares = sharesToken.totalSupply();
-        if(amountShares > totalShares) revert AmountExceedTotalSupply();
+        if (amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
-        uint256 sharePriceUsd = strategiesLockedUsd /
-            totalShares;
+        uint256 sharePriceUsd = strategiesLockedUsd / totalShares;
         amountUsd = amountShares * sharePriceUsd;
     }
 
     /// @notice Returns shares equivalent of the usd vulue.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function usdToShares(uint256 amount)
-        public
-        view
-        returns (uint256 shares)
-    {
+    function usdToShares(uint256 amount) public view returns (uint256 shares) {
         (uint256 strategiesBalance, ) = getStrategiesValue();
         uint256 currentPricePerShare = strategiesBalance /
             sharesToken.totalSupply();
@@ -662,6 +669,7 @@ contract StrategyRouter is Ownable {
     function setOracle(address _oracle) external onlyOwner {
         oracle = IUsdOracle(_oracle);
         batching.setOracle(_oracle);
+        emit SetOracle(address(_oracle));
     }
 
     /// @notice Set address of ReceiptNFT contract.
@@ -669,6 +677,7 @@ contract StrategyRouter is Ownable {
     function setReceiptNFT(address _receiptContract) external onlyOwner {
         receiptContract = ReceiptNFT(_receiptContract);
         batching.setReceiptNFT(_receiptContract);
+        emit SetReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
@@ -676,6 +685,7 @@ contract StrategyRouter is Ownable {
     function setExchange(address newExchange) external onlyOwner {
         exchange = Exchange(newExchange);
         batching.setExchange(newExchange);
+        emit SetExchange(newExchange);
     }
 
     /// @notice Set address for collecting fees from rewards.
@@ -683,12 +693,14 @@ contract StrategyRouter is Ownable {
     function setFeeAddress(address _feeAddress) external onlyOwner {
         if (_feeAddress == address(0)) revert();
         feeAddress = _feeAddress;
+        emit SetFeeAddress(_feeAddress);
     }
 
     /// @notice Set percent to take of rewards for owners.
     /// @dev Admin function.
     function setFeePercent(uint256 percent) external onlyOwner {
         feePercent = percent;
+        emit SetFeePercent(percent);
     }
 
     /// @notice Minimum usd needed to be able to close the cycle.
@@ -696,6 +708,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
+        emit SetMinUsdPerCycle(amount);
     }
 
     /// @notice Minimum to be deposited in the batching.
@@ -703,6 +716,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setMinDeposit(uint256 amount) external onlyOwner {
         batching.setMinDeposit(amount);
+        emit SetMinDeposit(amount);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
@@ -710,6 +724,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setCycleDuration(uint256 duration) external onlyOwner {
         cycleDuration = duration;
+        emit SetCycleDuration(duration);
     }
 
     /// @notice Add strategy.
