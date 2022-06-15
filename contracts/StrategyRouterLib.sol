@@ -60,10 +60,10 @@ library StrategyRouterLib {
         assert(oldValue > 0);
         // adjust according to what was actually deposited into strategies
         uint256 oldValueAdjusted = (oldValue *
-            cycles[receipt.cycleId].receivedByStrategies) /
-            cycles[receipt.cycleId].totalDeposited;
+            cycles[receipt.cycleId].receivedByStrategiesInUsd) /
+            cycles[receipt.cycleId].totalDepositedInUsd;
 
-        shares = oldValueAdjusted / cycles[receipt.cycleId].pricePerShare;
+        shares = oldValueAdjusted / cycles[receipt.cycleId].gweiSharePriceInUsd;
     }
 
     /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.

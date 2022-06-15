@@ -293,99 +293,122 @@ contract Batching is Ownable {
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
     function rebalance() public onlyOwner returns (uint256[] memory balances) {
         /*
-        1 store supported-tokens (set of unique addrs)
+        1 store supported-tokens (set of unique addresses)
             [a,b,c]
         2 store their balances
-            [1,1,1]
+            [10, 6, 8]
         3 store their sum with uniform decimals
-            3
-        4 create array of length = supported_tokens + strategeis_tokens (e.g. [a])
-            [a,b,c] + [a] = 4
+            24
+        4 create array of length = supported_tokens + strategies_tokens (e.g. [a])
+            [a, b, c] + [a] = 4
         5 store in that array balances from step 2, duplicated tokens should be ignored
-            [1, 0, 1, 1] (instead of [1,1...] we got [1,0...] because first two are both token a)
-        6 get desired balance for every strategy using their weights
-            [3] (our 1 strategy will get 100%)
-        6 store amounts that we need to sell or buy for each balance in order to match desired balances
-            toSell [0, 0, 1, 1] 
-            toBuy  [2, 0, 0, 0] (here we have 1 strategy so it takes 100% weight)
-            these arrays contain amounts with tokens' decimals
+            [10, 0, 6, 8] (instead of [10,10...] we got [10,0...] because first two are both token a)
+        6a get desired balance for every strategy using their weights
+            [12, 0, 4.8, 7.2] (our 1st strategy will get 50%, 2nd and 3rd will get 20% and 30% respectively)
+        6b store amounts that we need to sell or buy for each balance in order to match desired balances
+            toSell [0, 0, 1.2, 0.8]
+            toBuy  [2, 0, 0, 0]
+            these arrays contain amounts with tokens' original decimals
         7 now sell 'toSell' amounts of respective tokens for 'toBuy' tokens
             (token to amount connection is derived by index in the array)
             (also track new strategies balances for cases where 1 token is shared by multiple strategies)
-    */
+        */
         uint256 totalInBatch;
 
-        uint256 supportedTokensLength = supportedTokens.length();
-        address[] memory _tokens = new address[](supportedTokensLength);
-        uint256[] memory _balances = new uint256[](supportedTokensLength);
+        // point 1
+        uint256 supportedTokensCount = supportedTokens.length();
+        address[] memory _tokens = new address[](supportedTokensCount);
+        uint256[] memory _balances = new uint256[](supportedTokensCount);
 
-        for (uint256 i; i < supportedTokensLength; i++) {
+        // point 2
+        for (uint256 i; i < supportedTokensCount; i++) {
             _tokens[i] = supportedTokens.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
+            // point 3
             totalInBatch += toUniform(_balances[i], _tokens[i]);
         }
 
-        uint256 strategiesLength = router.getStrategiesCount();
+        // point 4
+        uint256 strategiesCount = router.getStrategiesCount();
 
-        uint256[] memory _strategiesBalances = new uint256[](
-            strategiesLength + supportedTokensLength
+        uint256[] memory _strategiesAndSupportedTokensBalances = new uint256[](
+            strategiesCount + supportedTokensCount
         );
-        for (uint256 i; i < strategiesLength; i++) {
+
+        // point 5
+        // We fill in strategies balances with tokens that strategies are accepting and ignoring duplicates
+        for (uint256 i; i < strategiesCount; i++) {
             address depositToken = router.getStrategyDepositToken(i);
-            for (uint256 j; j < supportedTokensLength; j++) {
+            for (uint256 j; j < supportedTokensCount; j++) {
                 if (depositToken == _tokens[j] && _balances[j] > 0) {
-                    _strategiesBalances[i] = _balances[j];
+                    _strategiesAndSupportedTokensBalances[i] = _balances[j];
                     _balances[j] = 0;
                     break;
                 }
             }
         }
 
-        for (uint256 i = strategiesLength; i < _strategiesBalances.length; i++) {
-            _strategiesBalances[i] = _balances[i - strategiesLength];
+        // we fill in strategies balances with balances of remaining tokens that are supported as deposits but are not
+        // accepted in strategies
+        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
+            _strategiesAndSupportedTokensBalances[i] = _balances[i - strategiesCount];
         }
 
-        uint256[] memory toAdd = new uint256[](strategiesLength);
-        uint256[] memory toSell = new uint256[](_strategiesBalances.length);
-        for (uint256 i; i < strategiesLength; i++) {
+        // point 6a
+        uint256[] memory toBuy = new uint256[](strategiesCount);
+        uint256[] memory toSell = new uint256[](_strategiesAndSupportedTokensBalances.length);
+        for (uint256 i; i < strategiesCount; i++) {
             uint256 desiredBalance = (totalInBatch *
                 router.getStrategyPercentWeight(i)) / 1e18;
             desiredBalance = fromUniform(
                 desiredBalance,
                 router.getStrategyDepositToken(i)
             );
+            // we skip safemath check since we already do comparison in if clauses
             unchecked {
-                if (desiredBalance > _strategiesBalances[i]) {
-                    toAdd[i] = desiredBalance - _strategiesBalances[i];
-                } else if (desiredBalance < _strategiesBalances[i]) {
-                    toSell[i] = _strategiesBalances[i] - desiredBalance;
+                // point 6b
+                if (desiredBalance > _strategiesAndSupportedTokensBalances[i]) {
+                    toBuy[i] = desiredBalance - _strategiesAndSupportedTokensBalances[i];
+                } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
+                    toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
                 }
             }
         }
 
-        for (uint256 i = strategiesLength; i < _strategiesBalances.length; i++) {
-            toSell[i] = _strategiesBalances[i];
+        // point 7
+        // all tokens we accept to deposit but are not part of strategies therefore we are going to swap them
+        // to tokens that strategies are accepting
+        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
+            toSell[i] = _strategiesAndSupportedTokensBalances[i];
         }
 
-        for (uint256 i; i < _strategiesBalances.length; i++) {
-            for (uint256 j; j < strategiesLength; j++) {
-                if (toSell[i] == 0) break;
-                if (toAdd[j] > 0) {
+        for (uint256 i; i < _strategiesAndSupportedTokensBalances.length; i++) {
+            for (uint256 j; j < strategiesCount; j++) {
+                // if we are not going to buy this token (nothing to sell), we simply skip to the next one
+                // if we can sell this token we go into swap routine
+                // we proceed to swap routine if there is some tokens to buy and some tokens sell
+                // if found which token to buy and which token to sell we proceed to swap routine
+                if (toSell[i] > 0 && toBuy[j] > 0) {
                     // if toSell's 'i' greater than strats-1 (e.g. strats 2, tokens 2, i=2, 2>2-1==true)
                     // then take supported_token[2-2=0]
                     // otherwise take strategy_token[0 or 1]
-                    address sellToken = i > strategiesLength - 1
-                        ? _tokens[i - strategiesLength]
+                    address sellToken = i > strategiesCount - 1
+                        ? _tokens[i - strategiesCount]
                         : router.getStrategyDepositToken(i);
                     address buyToken = router.getStrategyDepositToken(j);
 
-                    uint256 sellUniform = toUniform(toSell[i], sellToken);
-                    uint256 addUniform = toUniform(toAdd[j], buyToken);
-                    // curSell should have sellToken decimals
-                    uint256 curSell = sellUniform > addUniform
+                    uint256 toSellUniform = toUniform(toSell[i], sellToken);
+                    uint256 toBuyUniform = toUniform(toBuy[j], buyToken);
+                    /*
+                    Weight of strategies is in token amount not usd equivalent
+                    In case of stablecoin depeg an administrative decision will be made to move out of the strategy
+                    that has exposure to depegged stablecoin.
+                    curSell should have sellToken decimals
+                    */
+                    uint256 curSell = toSellUniform > toBuyUniform
                         ? changeDecimals(
-                            addUniform,
+                            toBuyUniform,
                             UNIFORM_DECIMALS,
                             ERC20(sellToken).decimals()
                         )
@@ -396,7 +419,7 @@ contract Batching is Ownable {
                         toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
                     ) {
                         toSell[i] = 0;
-                        toAdd[j] -= changeDecimals(
+                        toBuy[j] -= changeDecimals(
                             curSell,
                             ERC20(sellToken).decimals(),
                             ERC20(buyToken).decimals()
@@ -405,10 +428,10 @@ contract Batching is Ownable {
                     }
                     uint256 received = _trySwap(curSell, sellToken, buyToken);
 
-                    _strategiesBalances[i] -= curSell;
-                    _strategiesBalances[j] += received;
+                    _strategiesAndSupportedTokensBalances[i] -= curSell;
+                    _strategiesAndSupportedTokensBalances[j] += received;
                     toSell[i] -= curSell;
-                    toAdd[j] -= changeDecimals(
+                    toBuy[j] -= changeDecimals(
                         curSell,
                         ERC20(sellToken).decimals(),
                         ERC20(buyToken).decimals()
@@ -417,9 +440,9 @@ contract Batching is Ownable {
             }
         }
 
-        _balances = new uint256[](strategiesLength);
-        for (uint256 i; i < strategiesLength; i++) {
-            _balances[i] = _strategiesBalances[i];
+        _balances = new uint256[](strategiesCount);
+        for (uint256 i; i < strategiesCount; i++) {
+            _balances[i] = _strategiesAndSupportedTokensBalances[i];
         }
 
         return _balances;
