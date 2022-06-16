@@ -45,7 +45,7 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         uint256 feeDenominator = 1e10;
         address pool = getPool(tokenA, tokenB);
         uint256 fee = ICurvePool(pool).fee();
-        // change precision from 10 to 18 decimals
+        // change precision from 10 to 18 decimals, 10 + (18 - 10)
         return fee * (1e18 / feeDenominator);
     }
 
