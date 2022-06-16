@@ -41,36 +41,27 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         }
     }
 
+    function getFee(address tokenA, address tokenB) public view override returns (uint256 feePercent) {
+        uint256 feeDenominator = 1e10;
+        address pool = getPool(tokenA, tokenB);
+        uint256 fee = ICurvePool(pool).fee();
+        // change precision from 10 to 18 decimals, 10 + (18 - 10)
+        return fee * (1e18 / feeDenominator);
+    }
+
     function swap(
         uint256 amountA,
         address tokenA,
         address tokenB,
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
-        return _swapOnAcryptosUST(amountA, tokenA, tokenB, to);
-    }
-
-    function getFee(address tokenA, address tokenB) public view override returns (uint256 feePercent) {
-        uint256 feeDenominator = 1e10;
-        address pool = getAcryptosPool(tokenA, tokenB);
-        uint256 fee = ICurvePool(pool).fee();
-        return fee * (1e18 / feeDenominator);
-    }
-
-    function _swapOnAcryptosUST(
-        uint256 amountA,
-        address tokenA,
-        address tokenB,
-        address to
-    ) private returns (uint256 amountReceivedTokenB) {
-        address pool = getAcryptosPool(tokenA, tokenB);
+        address pool = getPool(tokenA, tokenB);
         IERC20(tokenA).approve(address(pool), amountA);
 
         int128 _tokenAIndex = coinIds[address(pool)][tokenA];
         int128 _tokenBIndex = coinIds[address(pool)][tokenB];
 
-        // console.log("_tokenAIndex %s _tokenBIndex %s amountA %s", uint128(_tokenAIndex), uint128(_tokenBIndex), amountA);
-        uint256 received = ICurvePool(pool).exchange_underlying(
+        uint256 received = ICurvePool(pool).exchange(
             _tokenAIndex,
             _tokenBIndex,
             amountA,
@@ -82,7 +73,7 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         return received;
     }
 
-    function getAcryptosPool(address tokenA, address tokenB)
+    function getPool(address tokenA, address tokenB)
         internal
         view
         returns (address)

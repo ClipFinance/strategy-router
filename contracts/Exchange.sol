@@ -15,7 +15,7 @@ contract Exchange is Ownable {
 
     // which plugin to use for swap for this pair
     // tokenA -> tokenB -> plugin
-    mapping(address => mapping(address => address)) public plugins;
+    mapping(address => mapping(address => address)) private plugins;
 
     constructor() {}
 
@@ -35,7 +35,7 @@ contract Exchange is Ownable {
     }
 
     function getPlugin(address tokenA, address tokenB)
-        internal
+        public 
         view
         returns (address)
     {

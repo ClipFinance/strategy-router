@@ -17,19 +17,10 @@ function bnbChain() {
   };
 
   // acryptos curve-like pool
-  bnb.acryptosUst4Pool = {
-    address: "0x99c92765EfC472a9709Ced86310D64C4573c4b77",
-    coinIds: [1, 2, 3, 4],
+  bnb.acs4usd = {
+    address: "0xb3F0C9ea1F05e312093Fdb031E789A756659B0AC",
+    coinIds: [0, 1, 2, 3],
     tokens: [bnb.busd, bnb.usdt, bnb.dai, bnb.usdc]
-  };
-
-  bnb.exchangeTypes = {
-    // pancakeswap with WETH as intermediary, default option
-    pancakeWithWeth: 0,
-    // tokenA to tokenB direct swap on pancake
-    pancakeDirect: 1,
-    // ACS4UST metapool
-    acryptosUst4Pool: 2
   };
 
   bnb.uniswapRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E";

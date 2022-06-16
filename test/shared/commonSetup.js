@@ -152,7 +152,7 @@ async function setupPluginsOnBNB(exchange) {
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
-  let acs4ust = hre.networkVariables.acryptosUst4Pool.address;
+  let acs4usd = hre.networkVariables.acs4usd.address;
 
   let acsPlugin = await deploy("CurvePlugin");
   let pancakePlugin = await deploy("UniswapPlugin");
@@ -166,13 +166,13 @@ async function setupPluginsOnBNB(exchange) {
   );
 
   // acs plugin params
-  await acsPlugin.setCurvePool(busd, usdt, acs4ust);
-  await acsPlugin.setCurvePool(usdc, usdt, acs4ust);
-  await acsPlugin.setCurvePool(busd, usdc, acs4ust);
+  await acsPlugin.setCurvePool(busd, usdt, acs4usd);
+  await acsPlugin.setCurvePool(usdc, usdt, acs4usd);
+  await acsPlugin.setCurvePool(busd, usdc, acs4usd);
   await acsPlugin.setCoinIds(
-    hre.networkVariables.acryptosUst4Pool.address,
-    hre.networkVariables.acryptosUst4Pool.tokens,
-    hre.networkVariables.acryptosUst4Pool.coinIds
+    hre.networkVariables.acs4usd.address,
+    hre.networkVariables.acs4usd.tokens,
+    hre.networkVariables.acs4usd.coinIds
   );
 
   // pancake plugin params
