@@ -55,23 +55,23 @@ async function main() {
   await (await acsPlugin.setCurvePool(
     hre.networkVariables.busd,
     hre.networkVariables.usdt,
-    hre.networkVariables.acryptosUst4Pool.address
+    hre.networkVariables.acs4usd.address
   )).wait();
   await (await acsPlugin.setCurvePool(
     hre.networkVariables.usdc,
     hre.networkVariables.usdt,
-    hre.networkVariables.acryptosUst4Pool.address
+    hre.networkVariables.acs4usd.address
   )).wait();
   await (await acsPlugin.setCurvePool(
     hre.networkVariables.busd,
     hre.networkVariables.usdc,
-    hre.networkVariables.acryptosUst4Pool.address
+    hre.networkVariables.acs4usd.address
   )).wait();
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
   await (await acsPlugin.setCoinIds(
-    hre.networkVariables.acryptosUst4Pool.address,
-    hre.networkVariables.acryptosUst4Pool.tokens,
-    hre.networkVariables.acryptosUst4Pool.coinIds
+    hre.networkVariables.acs4usd.address,
+    hre.networkVariables.acs4usd.tokens,
+    hre.networkVariables.acs4usd.coinIds
   )).wait();
   await (await exchange.setPlugin(
     [

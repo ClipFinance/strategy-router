@@ -2,7 +2,7 @@
 https://miro.com/app/board/uXjVOXGtYEw=/
 
 ### Definitions
-*Strategies* - is a smart contracts that implements certain farming strategies with tokens, such as staking biswap UST-BUSD LP tokens. Users can't interact with strategy contracts directly.  
+*Strategies* - is a smart contracts that implements certain farming strategies with tokens, such as staking biswap LP tokens. Users can't interact with strategy contracts directly.  
 
 *Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
 

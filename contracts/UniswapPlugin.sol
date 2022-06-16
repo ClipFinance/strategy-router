@@ -56,13 +56,13 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getFee(address tokenA, address tokenB)
+    function getFee(address , address )
         public
-        view
+        pure 
         override
         returns (uint256 feePercent)
     {
-        return 25e16; // 0.25%
+        return 25e16; // 0.25% with 18 decimals
     }
 
     function _swapThroughWETH(

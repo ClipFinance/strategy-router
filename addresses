@@ -1,0 +1,15 @@
+--------- biswap BUSD-USDT strategy --------- 
+biswap router: https://bscscan.com/address/0x3a6d8ca21d1cf76f653a67577fa0d27453350dd8#code
+BUSD: https://bscscan.com/address/0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56
+USDT: https://bscscan.com/token/0x55d398326f99059fF775485246999027B3197955
+Pair BUSD-USDT: https://bscscan.com/address/0x9E78183dD68cC81bc330CAF3eF84D354a58303B5
+BSW: https://bscscan.com/address/0x965f527d9159dce6288a2219db51fc6eef120dd1
+farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
+
+--------- biswap BUSD-USDC strategy --------- 
+biswap router: https://bscscan.com/address/0x3a6d8ca21d1cf76f653a67577fa0d27453350dd8#code
+USDT: https://bscscan.com/token/0x55d398326f99059fF775485246999027B3197955
+USDC: https://bscscan.com/token/0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d
+Pair USDT-USDC: https://bscscan.com/address/0x1483767E665B3591677Fd49F724bf7430C18Bf83
+BSW: https://bscscan.com/address/0x965f527d9159dce6288a2219db51fc6eef120dd1
+farm: https://bscscan.com/address/0xdbc1a13490deef9c3c12b44fe77b503c1b061739
