@@ -82,12 +82,20 @@ contract StrategyRouter is Ownable {
         // block.timestamp at which cycle started
         uint256 startAt;
         // batching USD value before deposited into strategies
-        uint256 totalDeposited;
+        uint256 totalDepositedInUsd;
         // price per share in USD
         uint256 pricePerShare;
         // USD value received by strategies
-        uint256 receivedByStrategies;
-        // amount of shares cross withdrawn from batching
+        uint256 receivedByStrategiesInUsd;
+        /*
+            Amount of shares cross withdrawn from batching
+            Whenever user withdraws and protocol does have enough funds in batching, we increase this value
+            by the amount of shares that user passed to withdraw
+            If there is not enough funds in batching at this moment, we withdraw from strategies and decrease this value
+            We record this amount to do internal accounting between batching and strategies to be break even
+            on user deposits and withdrawals and we take this information into consideration when we move funds
+            from batching to strategies
+        */
         uint256 strategiesDebtInShares;
         // tokens price at time of the deposit to strategies
         mapping(address => uint256) prices;
@@ -131,28 +139,40 @@ contract StrategyRouter is Ownable {
     ///         batch usd value has reached `minUsdPerCycle`.
     /// @dev Only callable by user wallets.
     function depositToStrategies() external {
+        /*
+        step 1 - preparing data and assigning local variables for later reference
+        step 2 - check requirements to launch a cycle
+            condition #1: at least `cycleDuration` time must be passed
+            condition #2: deposit in the current cycle are more than minimum threshold
+        step 3 - store USD price of supported tokens as cycle information
+        step 4 - collect yield and re-deposit/re-stake depending on strategy
+        step 5 - rebalance token in batching to match our desired strategies ratio
+        step 6 - batching transfers funds to strategies and strategies deposit tokens to their respective farms
+        step 7 - we calculate share price for the current cycle and calculate a new amount of shares to issue
+        step 8 - store remaining information for the current cycle
+        */
+        // step 1
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchingValue, ) = getBatchingValue();
+        (uint256 batchingValueInUsd, ) = getBatchingValue();
 
-        uint256 strategiesDebtInShares = cycles[_currentCycleId]
-            .strategiesDebtInShares;
-        uint256 strategiesDebtValue;
+        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
+        uint256 strategiesDebtInUsd;
 
         if (strategiesDebtInShares > 0)
-            strategiesDebtValue = sharesToUsd(strategiesDebtInShares);
+            strategiesDebtInUsd = sharesToUsd(strategiesDebtInShares);
 
+        // step 2
         if (
             cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
-            batchingValue + strategiesDebtValue < minUsdPerCycle
+            batchingValueInUsd + strategiesDebtInUsd < minUsdPerCycle
         ) revert CycleNotClosableYet();
 
-        // save current supported tokens and their prices
+        // step 3
         {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
-                    (uint256 priceUsd, uint8 priceDecimals) = oracle
-                        .getTokenUsdPrice(tokens[i]);
+                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
@@ -164,64 +184,60 @@ contract StrategyRouter is Ownable {
             }
         }
 
-        uint256 len = strategies.length;
-        for (uint256 i; i < len; i++) {
-            // trigger compound on strategy
+        // step 4
+        uint256 strategiesLength = strategies.length;
+        for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        // get total strategies value after compound
-        (uint256 balanceAfterCompound, ) = getStrategiesValue();
-        // rebalance tokens in batching and get new balances
-        uint256[] memory depositAmounts = batching.rebalance();
+        // step 5
+        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
+        uint256[] memory depositAmountsInTokens = batching.rebalance();
 
-        // uint256 totalValueDeposited;
-        for (uint256 i; i < len; i++) {
+        // step 6
+        for (uint256 i; i < strategiesLength; i++) {
             address strategyDepositToken = strategies[i].depositToken;
 
-            if (depositAmounts[i] > 0) {
-                // transfer tokens from batching into strategies
+            if (depositAmountsInTokens[i] > 0) {
                 batching.transfer(
                     strategyDepositToken,
                     strategies[i].strategyAddress,
-                    depositAmounts[i]
+                    depositAmountsInTokens[i]
                 );
 
-                IStrategy(strategies[i].strategyAddress).deposit(
-                    depositAmounts[i]
-                );
+                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
             }
         }
 
-        // get total strategies balance after deposit
-        (uint256 balanceAfterDeposit, ) = getStrategiesValue();
-        uint256 receivedByStrategies = balanceAfterDeposit -
-            balanceAfterCompound;
+        // step 7
+        (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
+        uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
 
        uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
-            sharesToken.mint(address(this), receivedByStrategies);
+            sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].pricePerShare =
-                balanceAfterDeposit * PRECISION /
+                balanceAfterDepositInUsd * PRECISION /
                 sharesToken.totalSupply();
         } else {
             cycles[_currentCycleId].pricePerShare =
-                balanceAfterCompound * PRECISION /
+                balanceAfterCompoundInUsd * PRECISION /
                 totalShares;
 
-            uint256 newShares = receivedByStrategies * PRECISION /
+            uint256 newShares = receivedByStrategiesInUsd * PRECISION /
                 cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
 
-        cycles[_currentCycleId].receivedByStrategies =
-            receivedByStrategies +
-            strategiesDebtValue;
-        cycles[_currentCycleId].totalDeposited =
-            batchingValue +
-            strategiesDebtValue;
+        // step 8
+        cycles[_currentCycleId].receivedByStrategiesInUsd =
+            receivedByStrategiesInUsd +
+            strategiesDebtInUsd;
+        cycles[_currentCycleId].totalDepositedInUsd =
+            batchingValueInUsd +
+            strategiesDebtInUsd;
 
-        emit DepositToStrategies(_currentCycleId, receivedByStrategies);
+        emit DepositToStrategies(_currentCycleId, receivedByStrategiesInUsd);
         // start new cycle
         ++currentCycleId;
         cycles[_currentCycleId].startAt = block.timestamp;
@@ -517,7 +533,7 @@ contract StrategyRouter is Ownable {
         uint256 shares
     ) external {
         if (shares == 0) revert AmountNotSpecified();
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
+        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 unlockedShares = _unlockShares(receiptIds);
         if (unlockedShares > shares) {
@@ -935,9 +951,9 @@ contract StrategyRouter is Ownable {
         batching._withdraw(msg.sender, valueToWithdraw, withdrawToken);
     }
 
-    /// @param valueToWithdraw USD value to withdraw.
+    /// @param amountInUsd - USD value to withdraw. 18 decimals
     function _withdrawFromStrategies(
-        uint256 valueToWithdraw,
+        uint256 amountInUsd,
         address withdrawToken
     ) private {
         (
@@ -951,13 +967,13 @@ contract StrategyRouter is Ownable {
         for (uint256 i; i < len; i++) {
             if (
                 strategies[i].depositToken == withdrawToken &&
-                balances[i] >= valueToWithdraw
+                balances[i] >= amountInUsd
             ) {
                 (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                     withdrawToken
                 );
                 amountToTransfer =
-                    (valueToWithdraw * 10**priceDecimals) /
+                    (amountInUsd * 10**priceDecimals) /
                     price;
                 amountToTransfer = StrategyRouterLib.fromUniform(
                     amountToTransfer,
@@ -965,20 +981,20 @@ contract StrategyRouter is Ownable {
                 );
                 amountToTransfer = IStrategy(strategies[i].strategyAddress)
                     .withdraw(amountToTransfer);
-                valueToWithdraw = 0;
+                amountInUsd = 0;
                 break;
             }
         }
 
         // try withdraw token which balance is enough to do only 1 swap
-        if (valueToWithdraw != 0) {
+        if (amountInUsd != 0) {
             for (uint256 i; i < len; i++) {
-                if (balances[i] >= valueToWithdraw) {
+                if (balances[i] >= amountInUsd) {
                     address token = strategies[i].depositToken;
                     (uint256 price, uint8 priceDecimals) = oracle
                         .getTokenUsdPrice(token);
                     amountToTransfer =
-                        (valueToWithdraw * 10**priceDecimals) /
+                        (amountInUsd * 10**priceDecimals) /
                         price;
                     amountToTransfer = StrategyRouterLib.fromUniform(
                         amountToTransfer,
@@ -992,14 +1008,14 @@ contract StrategyRouter is Ownable {
                         token,
                         withdrawToken
                     );
-                    valueToWithdraw = 0;
+                    amountInUsd = 0;
                     break;
                 }
             }
         }
 
         // swap tokens one by one until withraw amount is fulfilled
-        if (valueToWithdraw != 0) {
+        if (amountInUsd != 0) {
             for (uint256 i; i < len; i++) {
                 address token = strategies[i].depositToken;
                 uint256 toSwap;
@@ -1007,11 +1023,11 @@ contract StrategyRouter is Ownable {
                     token
                 );
 
-                toSwap = balances[i] < valueToWithdraw
+                toSwap = balances[i] < amountInUsd
                     ? balances[i]
-                    : valueToWithdraw;
+                    : amountInUsd;
                 unchecked {
-                    valueToWithdraw -= toSwap;
+                    amountInUsd -= toSwap;
                 }
                 // convert usd value into token amount
                 toSwap = (toSwap * 10**priceDecimals) / price;
@@ -1027,7 +1043,7 @@ contract StrategyRouter is Ownable {
                     token,
                     withdrawToken
                 );
-                if (valueToWithdraw == 0) break;
+                if (amountInUsd == 0) break;
             }
         }
 

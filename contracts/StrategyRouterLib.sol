@@ -62,8 +62,8 @@ library StrategyRouterLib {
         oldValue = (receipt.amount * oldPrice) / 10**UNIFORM_DECIMALS;
         assert(oldValue > 0);
         // adjust according to what was actually deposited into strategies
-        uint256 oldValueAdjusted = (oldValue * cycles[receipt.cycleId].receivedByStrategies) /
-            cycles[receipt.cycleId].totalDeposited;
+        uint256 oldValueAdjusted = (oldValue * cycles[receipt.cycleId].receivedByStrategiesInUsd) /
+            cycles[receipt.cycleId].totalDepositedInUsd;
         return oldValueAdjusted * PRECISION / cycles[receipt.cycleId].pricePerShare;
     }
 
