@@ -166,7 +166,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
   });
 
   it("Farms should be empty on withdraw all multiple times", async function () {
@@ -189,7 +189,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
 
   });
 
@@ -230,7 +230,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.equal(0);
+    expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
   });
 
   it("Test rebalance function", async function () {
@@ -302,7 +302,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
 
     expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.within(0, 10);
+    expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
   });
 
 });

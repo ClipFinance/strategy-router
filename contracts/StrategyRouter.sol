@@ -47,6 +47,16 @@ contract StrategyRouter is Ownable {
     /// @param shares Amount of shares received by user.
     event UnlockShares(address indexed user, uint256 receiptId, uint256 shares);
 
+    // Events for setters.
+    event SetOracle(address newAddress);
+    event SetReceiptNFT(address newAddress);
+    event SetExchange(address newAddress);
+    event SetMinDeposit(uint256 newAmount);
+    event SetCycleDuration(uint256 newDuration);
+    event SetMinUsdPerCycle(uint256 newAmount);
+    event SetFeeAddress(address newAddress);
+    event SetFeePercent(uint256 newPercent);
+
     /* ERRORS */
     error AmountExceedTotalSupply();
     error UnsupportedToken();
@@ -71,8 +81,6 @@ contract StrategyRouter is Ownable {
     struct Cycle {
         // block.timestamp at which cycle started
         uint256 startAt;
-        // price per gwei share in USD
-        uint256 gweiSharePriceInUsd;
         // batching USD value before deposited into strategies
         uint256 totalDepositedInUsd;
         // USD value received by strategies
@@ -92,11 +100,9 @@ contract StrategyRouter is Ownable {
     }
 
     uint8 private constant UNIFORM_DECIMALS = 18;
+    uint256 private constant PRECISION = 1e18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 private constant REBALANCE_SWAP_THRESHOLD = 1e17;
-    uint256 private constant INITIAL_SHARES = 1e12;
-    address private constant DEAD_ADDRESS =
-        0x000000000000000000000000000000000000dEaD;
 
     uint256 public cycleDuration = 1 days;
     uint256 public minUsdPerCycle;
@@ -205,21 +211,7 @@ contract StrategyRouter is Ownable {
         (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();
-        if (totalShares == 0) {
-            sharesToken.mint(DEAD_ADDRESS, INITIAL_SHARES);
-            cycles[_currentCycleId].gweiSharePriceInUsd =
-                balanceAfterDepositInUsd /
-                sharesToken.totalSupply();
-        } else {
-            cycles[_currentCycleId].gweiSharePriceInUsd =
-                balanceAfterCompoundInUsd /
-                totalShares;
-
-            uint256 newSharesInGwei = receivedByStrategiesInUsd /
-                cycles[_currentCycleId].gweiSharePriceInUsd;
-            sharesToken.mint(address(this), newSharesInGwei);
-        }
+        sharesToken.mint(address(this), receivedByStrategiesInUsd);
 
         // step 8
         cycles[_currentCycleId].receivedByStrategiesInUsd =
@@ -263,7 +255,7 @@ contract StrategyRouter is Ownable {
             totalStrategyWeight += strategies[i].weight;
         }
         strategyPercentAllocation =
-            (strategies[_strategyId].weight * 1e18) /
+            (strategies[_strategyId].weight * PRECISION) /
             totalStrategyWeight;
 
         return strategyPercentAllocation;
@@ -333,36 +325,26 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function sharesToUsd(uint256 amountSharesInGwei)
+    function sharesToUsd(uint256 amountShares)
         public
         view
         returns (uint256 amountUsd)
     {
-        // gwei = 10^-9
-        uint256 totalSharesInGwei = sharesToken.totalSupply();
-        if(amountSharesInGwei > totalSharesInGwei) revert AmountExceedTotalSupply();
+        uint256 totalShares = sharesToken.totalSupply();
+        if (amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
-        /*
-            strategiesLockedUsd = 1 000 usd = 1 000 * 1 000 000 000 000 000 000
-            totalShares = 1 000 000 000 000 shares
-            1 000 000 000 000 000 000 000 / 1 000 000 000 000 = 1 000 000 000
-            (1 share cent = 0.000000001 usd)
-        */
-        uint256 gweiSharePriceInUsd = strategiesLockedUsd / totalSharesInGwei;
-        amountUsd = amountSharesInGwei * gweiSharePriceInUsd;
+        uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) /
+            totalShares;
+        return (amountShares * currentPricePerShare) / PRECISION;
     }
 
     /// @notice Returns shares equivalent of the usd vulue.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function usdToShares(uint256 amount)
-        public
-        view
-        returns (uint256 shares)
-    {
-        (uint256 strategiesBalance, ) = getStrategiesValue();
-        uint256 currentPricePerShare = strategiesBalance /
+    function usdToShares(uint256 amount) public view returns (uint256 shares) {
+        (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+        uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) /
             sharesToken.totalSupply();
-        shares = amount / currentPricePerShare;
+        shares = (amount * PRECISION) / currentPricePerShare;
     }
 
     /// @notice Returns whether this token is supported.
@@ -494,16 +476,16 @@ contract StrategyRouter is Ownable {
     /// @notice Withdraw tokens from batching by shares.
     /// @param shares Amount of shares to withdraw.
     /// @param withdrawToken Supported token that user wish to receive.
-    function crossWithdrawShares(uint256 gweiShares, address withdrawToken) public {
-        if (sharesToken.balanceOf(msg.sender) < gweiShares)
+    function crossWithdrawShares(uint256 shares, address withdrawToken) public {
+        if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
         if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
 
-        uint256 amount = sharesToUsd(gweiShares);
+        uint256 amount = sharesToUsd(shares);
         // these shares will be owned by depositors of the current batching
-        sharesToken.routerTransferFrom(msg.sender, address(this), gweiShares);
+        sharesToken.routerTransferFrom(msg.sender, address(this), shares);
         _withdrawFromBatching(amount, withdrawToken);
-        cycles[currentCycleId].strategiesDebtInShares += gweiShares;
+        cycles[currentCycleId].strategiesDebtInShares += shares;
     }
 
     /// @notice Withdraw tokens from batching while receipts are in batching.
@@ -640,16 +622,7 @@ contract StrategyRouter is Ownable {
         if (fromStratsAmount <= totalBalance) {
             crossWithdrawShares(shares, withdrawToken);
         } else {
-            if (totalBalance > 0) {
-                uint256 _withdrawShares = (shares * totalBalance) /
-                    fromStratsAmount;
-                shares -= _withdrawShares;
-                uint256 _withdrawAmount = sharesToUsd(_withdrawShares);
-                sharesToken.burn(msg.sender, _withdrawShares);
-                _withdrawFromBatching(_withdrawAmount, withdrawToken);
-                cycles[currentCycleId].strategiesDebtInShares += _withdrawShares;
-            }
-            if (shares > 0) withdrawShares(shares, withdrawToken);
+            withdrawShares(shares, withdrawToken);
         }
     }
 
@@ -685,6 +658,7 @@ contract StrategyRouter is Ownable {
     function setOracle(address _oracle) external onlyOwner {
         oracle = IUsdOracle(_oracle);
         batching.setOracle(_oracle);
+        emit SetOracle(address(_oracle));
     }
 
     /// @notice Set address of ReceiptNFT contract.
@@ -692,6 +666,7 @@ contract StrategyRouter is Ownable {
     function setReceiptNFT(address _receiptContract) external onlyOwner {
         receiptContract = ReceiptNFT(_receiptContract);
         batching.setReceiptNFT(_receiptContract);
+        emit SetReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
@@ -699,6 +674,7 @@ contract StrategyRouter is Ownable {
     function setExchange(address newExchange) external onlyOwner {
         exchange = Exchange(newExchange);
         batching.setExchange(newExchange);
+        emit SetExchange(newExchange);
     }
 
     /// @notice Set address for collecting fees from rewards.
@@ -706,12 +682,14 @@ contract StrategyRouter is Ownable {
     function setFeeAddress(address _feeAddress) external onlyOwner {
         if (_feeAddress == address(0)) revert();
         feeAddress = _feeAddress;
+        emit SetFeeAddress(_feeAddress);
     }
 
     /// @notice Set percent to take of rewards for owners.
     /// @dev Admin function.
     function setFeePercent(uint256 percent) external onlyOwner {
         feePercent = percent;
+        emit SetFeePercent(percent);
     }
 
     /// @notice Minimum usd needed to be able to close the cycle.
@@ -719,6 +697,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
+        emit SetMinUsdPerCycle(amount);
     }
 
     /// @notice Minimum to be deposited in the batching.
@@ -726,6 +705,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setMinDeposit(uint256 amount) external onlyOwner {
         batching.setMinDeposit(amount);
+        emit SetMinDeposit(amount);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
@@ -733,6 +713,7 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setCycleDuration(uint256 duration) external onlyOwner {
         cycleDuration = duration;
+        emit SetCycleDuration(duration);
     }
 
     /// @notice Add strategy.
@@ -802,7 +783,7 @@ contract StrategyRouter is Ownable {
         // deposit withdrawn funds into other strategies
         for (uint256 i; i < len; i++) {
             uint256 depositAmount = (withdrawnAmount *
-                getStrategyPercentWeight(i)) / 1e18;
+                getStrategyPercentWeight(i)) / PRECISION;
             address strategyDepositToken = strategies[i].depositToken;
 
             depositAmount = StrategyRouterLib.trySwap(
@@ -859,7 +840,7 @@ contract StrategyRouter is Ownable {
         uint256[] memory toSell = new uint256[](len);
         for (uint256 i; i < len; i++) {
             uint256 desiredBalance = (totalBalance *
-                getStrategyPercentWeight(i)) / 1e18;
+                getStrategyPercentWeight(i)) / PRECISION;
             desiredBalance = StrategyRouterLib.fromUniform(
                 desiredBalance,
                 _strategiesTokens[i]
@@ -959,7 +940,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken
     ) private {
         (
-            uint256 strategiesBalance,
+            uint256 strategiesLockedUsd,
             uint256[] memory balances
         ) = getStrategiesValue();
         uint256 len = strategies.length;
@@ -1016,7 +997,7 @@ contract StrategyRouter is Ownable {
             }
         }
 
-        // swap different tokens until withraw amount is fulfilled
+        // swap tokens one by one until withraw amount is fulfilled
         if (amountInUsd != 0) {
             for (uint256 i; i < len; i++) {
                 address token = strategies[i].depositToken;

@@ -33,12 +33,6 @@ contract Batching is Ownable {
         uint256 amount
     );
 
-    // Events for setters.
-    event SetOracle(address newAddress);
-    event SetReceiptNFT(address newAddress);
-    event SetExchange(address newAddress);
-    event SetMinDeposit(uint256 newAmount);
-
     /* ERRORS */
 
     error AlreadySupportedToken();
@@ -264,21 +258,18 @@ contract Batching is Ownable {
     /// @dev Admin function.
     function setOracle(address _oracle) external onlyOwner {
         oracle = IUsdOracle(_oracle);
-        emit SetOracle(address(_oracle));
     }
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
     function setReceiptNFT(address  _receiptContract) external onlyOwner {
         receiptContract = ReceiptNFT(_receiptContract);
-        emit SetReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
     function setExchange(address newExchange) external onlyOwner {
         exchange = Exchange(newExchange);
-        emit SetExchange(newExchange);
     }
 
     /// @notice Minimum to be deposited in the batching.
@@ -286,7 +277,6 @@ contract Batching is Ownable {
     /// @dev Admin function.
     function setMinDeposit(uint256 amount) external onlyOwner {
         minDeposit = amount;
-        emit SetMinDeposit(amount);
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
