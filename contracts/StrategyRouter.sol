@@ -83,6 +83,8 @@ contract StrategyRouter is Ownable {
         uint256 startAt;
         // batching USD value before deposited into strategies
         uint256 totalDeposited;
+        // price per share in USD
+        uint256 pricePerShare;
         // USD value received by strategies
         uint256 receivedByStrategies;
         // amount of shares cross withdrawn from batching
@@ -196,7 +198,21 @@ contract StrategyRouter is Ownable {
         uint256 receivedByStrategies = balanceAfterDeposit -
             balanceAfterCompound;
 
-        sharesToken.mint(address(this), receivedByStrategies);
+       uint256 totalShares = sharesToken.totalSupply();
+        if (totalShares == 0) {
+            sharesToken.mint(address(this), receivedByStrategies);
+            cycles[_currentCycleId].pricePerShare =
+                balanceAfterDeposit * PRECISION /
+                sharesToken.totalSupply();
+        } else {
+            cycles[_currentCycleId].pricePerShare =
+                balanceAfterCompound * PRECISION /
+                totalShares;
+
+            uint256 newShares = receivedByStrategies * PRECISION /
+                cycles[_currentCycleId].pricePerShare;
+            sharesToken.mint(address(this), newShares);
+        }
 
         cycles[_currentCycleId].receivedByStrategies =
             receivedByStrategies +
@@ -319,6 +335,7 @@ contract StrategyRouter is Ownable {
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) /
             totalShares;
+        
         return (amountShares * currentPricePerShare) / PRECISION;
     }
 

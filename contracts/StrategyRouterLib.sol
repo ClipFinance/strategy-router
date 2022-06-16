@@ -18,7 +18,8 @@ import "./StrategyRouter.sol";
 library StrategyRouterLib {
     error CycleNotClosed();
 
-    uint8 constant UNIFORM_DECIMALS = 18;
+    uint8 private constant UNIFORM_DECIMALS = 18;
+    uint256 private constant PRECISION = 1e18;
 
     function getStrategiesValue(
         IUsdOracle oracle,
@@ -63,7 +64,7 @@ library StrategyRouterLib {
         // adjust according to what was actually deposited into strategies
         uint256 oldValueAdjusted = (oldValue * cycles[receipt.cycleId].receivedByStrategies) /
             cycles[receipt.cycleId].totalDeposited;
-        return oldValueAdjusted;
+        return oldValueAdjusted * PRECISION / cycles[receipt.cycleId].pricePerShare;
     }
 
     /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.
