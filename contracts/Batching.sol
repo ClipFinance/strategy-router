@@ -12,7 +12,7 @@ import "./Exchange.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -62,11 +62,7 @@ contract Batching is Ownable {
 
     // Universal Functions
 
-    function supportsToken(address tokenAddress)
-        public
-        view
-        returns (bool)
-    {
+    function supportsToken(address tokenAddress) public view returns (bool) {
         return supportedTokens.contains(tokenAddress);
     }
 
@@ -158,7 +154,9 @@ contract Batching is Ownable {
 
         uint256 amountToTransfer;
         // try withdraw requested token directly
-        if (balances[supportedTokens.indexOf(withdrawToken)] >= valueToWithdraw) {
+        if (
+            balances[supportedTokens.indexOf(withdrawToken)] >= valueToWithdraw
+        ) {
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
                 withdrawToken
             );
@@ -202,7 +200,7 @@ contract Batching is Ownable {
                     ? balances[i]
                     : valueToWithdraw;
 
-                unchecked{
+                unchecked {
                     valueToWithdraw -= toSwap;
                 }
                 // convert usd value into token amount
@@ -211,7 +209,7 @@ contract Batching is Ownable {
                 toSwap = fromUniform(toSwap, token);
                 // swap for requested token
                 amountToTransfer += _trySwap(toSwap, token, withdrawToken);
-                if(valueToWithdraw == 0) break;
+                if (valueToWithdraw == 0) break;
             }
         }
         IERC20(withdrawToken).transfer(withdrawer, amountToTransfer);
@@ -230,7 +228,11 @@ contract Batching is Ownable {
         uint256 _amount
     ) external onlyOwner {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
-        if (fromUniform(minDeposit, depositToken) > _amount)
+        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
+            depositToken
+        );
+        uint256 depositedUsd = toUniform(_amount * price / 10**priceDecimals, depositToken);
+        if (minDeposit > depositedUsd)
             revert DepositUnderMinimum();
 
         uint256 amountUniform = toUniform(_amount, depositToken);
@@ -262,7 +264,7 @@ contract Batching is Ownable {
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
-    function setReceiptNFT(address  _receiptContract) external onlyOwner {
+    function setReceiptNFT(address _receiptContract) external onlyOwner {
         receiptContract = ReceiptNFT(_receiptContract);
     }
 
@@ -341,13 +343,21 @@ contract Batching is Ownable {
 
         // we fill in strategies balances with balances of remaining tokens that are supported as deposits but are not
         // accepted in strategies
-        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
-            _strategiesAndSupportedTokensBalances[i] = _balances[i - strategiesCount];
+        for (
+            uint256 i = strategiesCount;
+            i < _strategiesAndSupportedTokensBalances.length;
+            i++
+        ) {
+            _strategiesAndSupportedTokensBalances[i] = _balances[
+                i - strategiesCount
+            ];
         }
 
         // point 6a
         uint256[] memory toBuy = new uint256[](strategiesCount);
-        uint256[] memory toSell = new uint256[](_strategiesAndSupportedTokensBalances.length);
+        uint256[] memory toSell = new uint256[](
+            _strategiesAndSupportedTokensBalances.length
+        );
         for (uint256 i; i < strategiesCount; i++) {
             uint256 desiredBalance = (totalInBatch *
                 router.getStrategyPercentWeight(i)) / 1e18;
@@ -359,9 +369,15 @@ contract Batching is Ownable {
             unchecked {
                 // point 6b
                 if (desiredBalance > _strategiesAndSupportedTokensBalances[i]) {
-                    toBuy[i] = desiredBalance - _strategiesAndSupportedTokensBalances[i];
-                } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
-                    toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
+                    toBuy[i] =
+                        desiredBalance -
+                        _strategiesAndSupportedTokensBalances[i];
+                } else if (
+                    desiredBalance < _strategiesAndSupportedTokensBalances[i]
+                ) {
+                    toSell[i] =
+                        _strategiesAndSupportedTokensBalances[i] -
+                        desiredBalance;
                 }
             }
         }
@@ -369,7 +385,11 @@ contract Batching is Ownable {
         // point 7
         // all tokens we accept to deposit but are not part of strategies therefore we are going to swap them
         // to tokens that strategies are accepting
-        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
+        for (
+            uint256 i = strategiesCount;
+            i < _strategiesAndSupportedTokensBalances.length;
+            i++
+        ) {
             toSell[i] = _strategiesAndSupportedTokensBalances[i];
         }
 
