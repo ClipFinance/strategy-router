@@ -22,7 +22,7 @@ module.exports = function strategyTest(strategyName) {
     let amountWithdraw;
 
     before(async function () {
-      [owner, feeAddress] = await ethers.getSigners();
+      [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
 
       snapshotId = await provider.send("evm_snapshot");
 

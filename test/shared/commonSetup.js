@@ -93,7 +93,7 @@ async function setupCore() {
 // Setup core params for testing with TestCurrency
 async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
 
-  const [owner, feeAddress] = await ethers.getSigners();
+  const [owner,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
   await router.setExchange(exchange.address);
@@ -178,7 +178,7 @@ async function setupPancakePlugin(exchange, usdc, usdt, busd) {
 
 // Setup core params that are similar (or the same) as those that will be set in production
 async function setupParamsOnBNB(router, oracle, exchange) {
-  const [owner, feeAddress] = await ethers.getSigners();
+  const [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
   await router.setExchange(exchange.address);
@@ -191,7 +191,6 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 }
 
 async function setupPluginsOnBNB(exchange) {
-  const [owner, feeAddress] = await ethers.getSigners();
 
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
