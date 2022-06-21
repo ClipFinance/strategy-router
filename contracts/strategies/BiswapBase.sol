@@ -72,6 +72,7 @@ contract BiswapBase is Ownable, IStrategy {
 
         // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
         // since we swap on dexA and adding liquidity on dexB
+        
         // e.g. in the following console log, when swapping 100k 
         // the ratio of the received tokens is 1.01 and reserves ratio is 1.05
 

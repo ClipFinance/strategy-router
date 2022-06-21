@@ -163,7 +163,6 @@ describe("Test ReceiptNFT", function () {
         });
     });
 
-    // TODO implement
     describe("Changing amount", function () {
         it("Manager can change amount of existing receipt", async function () {
             let amount = parseEther("3");

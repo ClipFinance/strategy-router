@@ -13,7 +13,7 @@ import "./SharesToken.sol";
 import "./Batching.sol";
 import "./StrategyRouterLib.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 contract StrategyRouter is Ownable {
     /* EVENTS */
@@ -155,7 +155,8 @@ contract StrategyRouter is Ownable {
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchingValueInUsd, ) = getBatchingValue();
 
-        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
+        uint256 strategiesDebtInShares = cycles[_currentCycleId]
+            .strategiesDebtInShares;
         uint256 strategiesDebtInUsd;
 
         if (strategiesDebtInShares > 0)
@@ -172,7 +173,8 @@ contract StrategyRouter is Ownable {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
-                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
+                    (uint256 priceUsd, uint8 priceDecimals) = oracle
+                        .getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[
                         tokens[i]
                     ] = StrategyRouterLib.changeDecimals(
@@ -205,26 +207,29 @@ contract StrategyRouter is Ownable {
                     depositAmountsInTokens[i]
                 );
 
-                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
+                IStrategy(strategies[i].strategyAddress).deposit(
+                    depositAmountsInTokens[i]
+                );
             }
         }
 
         // step 7
         (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
-        uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
+        uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd -
+            balanceAfterCompoundInUsd;
 
-       uint256 totalShares = sharesToken.totalSupply();
+        uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].pricePerShare =
-                balanceAfterDepositInUsd * PRECISION /
+                (balanceAfterDepositInUsd * PRECISION) /
                 sharesToken.totalSupply();
         } else {
             cycles[_currentCycleId].pricePerShare =
-                balanceAfterCompoundInUsd * PRECISION /
+                (balanceAfterCompoundInUsd * PRECISION) /
                 totalShares;
 
-            uint256 newShares = receivedByStrategiesInUsd * PRECISION /
+            uint256 newShares = (receivedByStrategiesInUsd * PRECISION) /
                 cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
@@ -351,7 +356,7 @@ contract StrategyRouter is Ownable {
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) /
             totalShares;
-        
+
         return (amountShares * currentPricePerShare) / PRECISION;
     }
 
@@ -951,11 +956,10 @@ contract StrategyRouter is Ownable {
         batching._withdraw(msg.sender, valueToWithdraw, withdrawToken);
     }
 
-    /// @param amountInUsd - USD value to withdraw. 18 decimals
-    function _withdrawFromStrategies(
-        uint256 amountInUsd,
-        address withdrawToken
-    ) private {
+    /// @param amountInUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
+    function _withdrawFromStrategies(uint256 amountInUsd, address withdrawToken)
+        private
+    {
         (
             uint256 strategiesLockedUsd,
             uint256[] memory balances
@@ -963,57 +967,52 @@ contract StrategyRouter is Ownable {
         uint256 len = strategies.length;
 
         uint256 amountToTransfer;
-        // try withdraw requested token directly
-        for (uint256 i; i < len; i++) {
-            if (
-                strategies[i].depositToken == withdrawToken &&
-                balances[i] >= amountInUsd
-            ) {
-                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                    withdrawToken
-                );
-                amountToTransfer =
-                    (amountInUsd * 10**priceDecimals) /
-                    price;
-                amountToTransfer = StrategyRouterLib.fromUniform(
-                    amountToTransfer,
-                    withdrawToken
-                );
-                amountToTransfer = IStrategy(strategies[i].strategyAddress)
-                    .withdraw(amountToTransfer);
-                amountInUsd = 0;
-                break;
-            }
-        }
 
-        // try withdraw token which balance is enough to do only 1 swap
-        if (amountInUsd != 0) {
-            for (uint256 i; i < len; i++) {
-                if (balances[i] >= amountInUsd) {
-                    address token = strategies[i].depositToken;
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getTokenUsdPrice(token);
-                    amountToTransfer =
-                        (amountInUsd * 10**priceDecimals) /
-                        price;
-                    amountToTransfer = StrategyRouterLib.fromUniform(
-                        amountToTransfer,
-                        token
-                    );
-                    amountToTransfer = IStrategy(strategies[i].strategyAddress)
-                        .withdraw(amountToTransfer);
-                    amountToTransfer = StrategyRouterLib.trySwap(
-                        exchange,
-                        amountToTransfer,
-                        token,
-                        withdrawToken
-                    );
-                    amountInUsd = 0;
+        // find token to withdraw requested token without extra swaps
+        // otherwise try to find token that is sufficient to fulfill requested amount
+        uint256 found = type(uint256).max; // index of strategy, uint.max means not found
+        for (uint256 i; i < len; i++) {
+            address curToken = strategies[i].depositToken;
+            if (balances[i] >= amountInUsd) {
+                if (curToken == withdrawToken) {
+                    found = i;
                     break;
+                } else {
+                    found = i;
                 }
             }
         }
 
+        if (found != type(uint256).max) {
+            address token = strategies[found].depositToken;
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
+                token
+            );
+            // convert usd to token amount
+            amountToTransfer = (amountInUsd * 10**priceDecimals) / price;
+            // convert uniform decimals to token decimas
+            amountToTransfer = StrategyRouterLib.fromUniform(
+                amountToTransfer,
+                token
+            );
+            // withdraw from strategy
+            amountToTransfer = IStrategy(strategies[found].strategyAddress)
+                .withdraw(amountToTransfer);
+            // is withdrawn token not the one that's requested?
+            if (token != withdrawToken) {
+                // swap withdrawn token to the requested one
+                console.log(amountToTransfer);
+                amountToTransfer = StrategyRouterLib.trySwap(
+                    exchange,
+                    amountToTransfer,
+                    token,
+                    withdrawToken
+                );
+            }
+            amountInUsd = 0;
+        }
+
+        // if we didn't fulfilled withdraw amount above,
         // swap tokens one by one until withraw amount is fulfilled
         if (amountInUsd != 0) {
             for (uint256 i; i < len; i++) {
@@ -1023,9 +1022,7 @@ contract StrategyRouter is Ownable {
                     token
                 );
 
-                toSwap = balances[i] < amountInUsd
-                    ? balances[i]
-                    : amountInUsd;
+                toSwap = balances[i] < amountInUsd ? balances[i] : amountInUsd;
                 unchecked {
                     amountInUsd -= toSwap;
                 }
