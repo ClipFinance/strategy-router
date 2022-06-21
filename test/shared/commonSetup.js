@@ -4,7 +4,8 @@ let { getUSDC, getBUSD, getUSDT, deploy } = require("../utils");
 
 module.exports = {
   setupTokens, setupCore, deployFakeStrategy,
-  setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams
+  setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams, setupRouterParams,
+  setupFakePrices, setupPancakePlugin
 };
 
 async function deployFakeStrategy({ router, token, weight = 10_000, profitPercent = 10_000 }) {
@@ -129,6 +130,50 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   // await pancakePlugin.setUseWeth(bsw, usdt, true);
   // await pancakePlugin.setUseWeth(bsw, usdc, true);
 
+}
+
+async function setupRouterParams(router, oracle, exchange) {
+
+  const [owner, feeAddress] = await ethers.getSigners();
+  // Setup router params
+  await router.setMinUsdPerCycle(parseUniform("0.9"));
+  await router.setExchange(exchange.address);
+  await router.setOracle(oracle.address);
+  await router.setFeePercent(2000);
+  await router.setFeeAddress(feeAddress.address);
+  await router.setCycleDuration(1);
+}
+
+async function setupFakePrices(oracle, usdc, usdt, busd) {
+  // Setup fake prices
+  let usdtAmount = parseUnits("0.99", await usdt.decimals());
+  await oracle.setPrice(usdt.address, usdtAmount);
+  let busdAmount = parseUnits("1.01", await busd.decimals());
+  await oracle.setPrice(busd.address, busdAmount);
+  let usdcAmount = parseUnits("1.0", await usdc.decimals());
+  await oracle.setPrice(usdc.address, usdcAmount);
+}
+
+async function setupPancakePlugin(exchange, usdc, usdt, busd) {
+  let bsw = hre.networkVariables.bsw;
+
+  let pancakePlugin = await deploy("UniswapPlugin");
+  let pancake = (pancakePlugin).address;
+  // Setup exchange params
+  busd = busd.address;
+  usdc = usdc.address;
+  usdt = usdt.address;
+  await exchange.setPlugin(
+      [busd, busd, usdc, bsw, bsw, bsw],
+      [usdt, usdc, usdt, busd, usdt, usdc],
+      [pancake, pancake, pancake, pancake, pancake, pancake]
+  );
+
+  // pancake plugin params
+  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
+  // await pancakePlugin.setUseWeth(bsw, busd, true);
+  // await pancakePlugin.setUseWeth(bsw, usdt, true);
+  // await pancakePlugin.setUseWeth(bsw, usdc, true);
 }
 
 // Setup core params that are similar (or the same) as those that will be set in production

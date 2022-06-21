@@ -14,7 +14,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
 
     struct ReceiptData {
         uint256 cycleId;
-        uint256 amount;
+        uint256 amount; // in token
         address token;
     }
 

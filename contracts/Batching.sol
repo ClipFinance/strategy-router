@@ -108,12 +108,12 @@ contract Batching is Ownable {
         address withdrawer,
         uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256[] calldata amounts
+        uint256[] calldata receiptTokenAmounts
     ) public onlyOwner {
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = router.currentCycleId();
-        uint256 valueToWithdraw;
+        uint256 valueToWithdrawUsd;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != withdrawer)
@@ -124,28 +124,26 @@ contract Batching is Ownable {
             );
             // only for receipts in batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                receipt.token
-            );
+            (uint256 originalDepositedTokenPriceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
-            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
+            if (receiptTokenAmounts[i] >= receipt.amount || receiptTokenAmounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValue = ((receipt.amount * price) /
+                uint256 receiptValueUsd = ((receipt.amount * originalDepositedTokenPriceUsd) /
                     10**priceDecimals);
-                valueToWithdraw += receiptValue;
+                valueToWithdrawUsd += receiptValueUsd;
                 receiptContract.burn(receiptId);
             } else {
                 // withdraw only part of receipt and update receipt
-                uint256 amountValue = ((amounts[i] * price) /
+                uint256 tokenAmountValueUsd = ((receiptTokenAmounts[i] * originalDepositedTokenPriceUsd) /
                     10**priceDecimals);
-                valueToWithdraw += amountValue;
+                valueToWithdrawUsd += tokenAmountValueUsd;
                 receiptContract.setAmount(
                     receiptId,
-                    receipt.amount - amounts[i]
+                    receipt.amount - receiptTokenAmounts[i]
                 );
             }
         }
-        _withdraw(withdrawer, valueToWithdraw, withdrawToken);
+        _withdraw(withdrawer, valueToWithdrawUsd, withdrawToken);
     }
 
     function _withdraw(
@@ -172,11 +170,8 @@ contract Batching is Ownable {
             for (uint256 i; i < balances.length; i++) {
                 if (balances[i] >= valueToWithdraw) {
                     address token = supportedTokens.at(i);
-                    (uint256 price, uint8 priceDecimals) = oracle
-                        .getTokenUsdPrice(token);
-                    amountToTransfer =
-                        (valueToWithdraw * 10**priceDecimals) /
-                        price;
+                    (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+                    amountToTransfer = (valueToWithdraw * 10**priceDecimals) / price;
                     amountToTransfer = fromUniform(amountToTransfer, token);
                     amountToTransfer = _trySwap(
                         amountToTransfer,
