@@ -98,7 +98,7 @@ contract Batching is Ownable {
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported token that user wish to receive.
-    /// @param amounts Amounts to withdraw from each passed receipt.
+    /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function withdraw(
         address withdrawer,

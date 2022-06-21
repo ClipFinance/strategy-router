@@ -94,7 +94,7 @@ describe("Test Batching", function () {
             expect(newReceipt.cycleId).to.be.equal(1);
             expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
         });
-        it("should revert when user deposits deppeged token that numerically match minimum amount", async function () {
+        it("should revert when user deposits depegged token that numerically match minimum amount", async function () {
             await router.setMinDeposit(parseUniform("1.0"));
             await oracle.setPrice(busd.address, parseBusd("0.1"));
             await expect(router.depositToBatch(busd.address, parseBusd("2.0")))

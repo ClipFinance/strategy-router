@@ -1,6 +1,6 @@
 const { parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-let { getUSDC, getBUSD, getUSDT, deploy } = require("../utils");
+const { getUSDC, getBUSD, getUSDT, deploy, parseUniform } = require("../utils");
 
 module.exports = {
   setupTokens, setupCore, deployFakeStrategy,

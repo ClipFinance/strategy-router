@@ -18,7 +18,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         address token;
     }
 
-    uint256 private _tokenIdCounter;
+    uint256 private _receiptsCounter;
 
     mapping(uint256 => ReceiptData) public receipts;
     mapping(address => bool) public managers;
@@ -46,14 +46,14 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         address token,
         address wallet
     ) external onlyManager {
-        uint256 _tokenId = _tokenIdCounter;
-        receipts[_tokenId] = ReceiptData({
+        uint256 _receiptId = _receiptsCounter;
+        receipts[_receiptId] = ReceiptData({
             cycleId: cycleId,
             token: token,
             amount: amount
         });
-        _mint(wallet, _tokenId);
-        _tokenIdCounter++;
+        _mint(wallet, _receiptId);
+        _receiptsCounter++;
     }
 
     function burn(uint256 tokenId) external onlyManager {
@@ -90,7 +90,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         unchecked {
             if (start >= stop) revert InvalidQueryRange();
             uint256 tokenIdsIdx;
-            uint256 stopLimit = _tokenIdCounter;
+            uint256 stopLimit = _receiptsCounter;
             // Set `stop = min(stop, stopLimit)`.
             if (stop > stopLimit) {
                 // At this point `start` could be greater than `stop`.
