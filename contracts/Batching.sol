@@ -139,6 +139,7 @@ contract Batching is Ownable {
                 );
             }
         }
+        console.log(valueToWithdrawUsd);
         _withdraw(withdrawer, valueToWithdrawUsd, withdrawToken);
     }
 
@@ -162,6 +163,7 @@ contract Batching is Ownable {
             amountToTransfer = fromUniform(amountToTransfer, withdrawToken);
             valueToWithdraw = 0;
         }
+        console.log(amountToTransfer, valueToWithdraw);
 
         // try withdraw token which balance is enough to do only 1 swap
         if (valueToWithdraw != 0) {
@@ -182,6 +184,7 @@ contract Batching is Ownable {
             }
         }
 
+        console.log(amountToTransfer, valueToWithdraw);
         // swap different tokens until withraw amount is fulfilled
         if (valueToWithdraw != 0) {
             for (uint256 i; i < balances.length; i++) {
@@ -194,6 +197,7 @@ contract Batching is Ownable {
                 toSwap = balances[i] < valueToWithdraw
                     ? balances[i]
                     : valueToWithdraw;
+        console.log(toSwap, balances[i]);
 
                 unchecked {
                     valueToWithdraw -= toSwap;
@@ -207,6 +211,7 @@ contract Batching is Ownable {
                 if (valueToWithdraw == 0) break;
             }
         }
+        console.log(amountToTransfer, valueToWithdraw);
         IERC20(withdrawToken).transfer(withdrawer, amountToTransfer);
         emit WithdrawFromBatching(withdrawer, withdrawToken, amountToTransfer);
     }
@@ -500,7 +505,7 @@ contract Batching is Ownable {
     ) private returns (uint256 result) {
         if (from != to) {
             IERC20(from).transfer(address(exchange), amount);
-            result = exchange.swapRouted(amount, from, to, address(this));
+            result = exchange.swap(amount, from, to, address(this));
             return result;
         }
         return amount;

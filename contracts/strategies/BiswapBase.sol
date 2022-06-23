@@ -63,7 +63,7 @@ contract BiswapBase is Ownable, IStrategy {
         // console.log(halfWithFee, dexFee, amountA, amountB);
 
         tokenA.transfer(address(exchange), amountB);
-        amountB = exchange.swapRouted(
+        amountB = exchange.swap(
             amountB,
             address(tokenA),
             address(tokenB),
@@ -139,7 +139,7 @@ contract BiswapBase is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         tokenB.transfer(address(exchange), amountB);
-        amountA += exchange.swapRouted(
+        amountA += exchange.swap(
             amountB,
             address(tokenB),
             address(tokenA),
@@ -233,7 +233,7 @@ contract BiswapBase is Ownable, IStrategy {
         if (amountB > 0) {
             Exchange exchange = strategyRouter.exchange();
             tokenB.transfer(address(exchange), amountB);
-            amountA += exchange.swapRouted(
+            amountA += exchange.swap(
                 amountB,
                 address(tokenB),
                 address(tokenA),
@@ -259,7 +259,7 @@ contract BiswapBase is Ownable, IStrategy {
         ) {
             toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
-            exchange.swapRouted(
+            exchange.swap(
                 toSwap,
                 address(tokenB),
                 address(tokenA),
@@ -271,7 +271,7 @@ contract BiswapBase is Ownable, IStrategy {
         ) {
             toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
-            exchange.swapRouted(
+            exchange.swap(
                 toSwap,
                 address(tokenA),
                 address(tokenB),
@@ -293,7 +293,7 @@ contract BiswapBase is Ownable, IStrategy {
 
         Exchange exchange = strategyRouter.exchange();
         bsw.transfer(address(exchange), amountA);
-        receivedA = exchange.swapRouted(
+        receivedA = exchange.swap(
             amountA,
             address(bsw),
             address(tokenA),
@@ -301,7 +301,7 @@ contract BiswapBase is Ownable, IStrategy {
         );
 
         bsw.transfer(address(exchange), amountB);
-        receivedB = exchange.swapRouted(
+        receivedB = exchange.swap(
             amountB,
             address(bsw),
             address(tokenB),
@@ -320,7 +320,7 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 fee = (amount * feePercent) / PERCENT_DENOMINATOR;
         if (fee > 0 && feeAddress != address(0)) {
             bsw.transfer(address(exchange), fee);
-            exchange.swapRouted(fee, address(bsw), address(tokenA), feeAddress);
+            exchange.swap(fee, address(bsw), address(tokenA), feeAddress);
         }
         return amount - fee;
     }

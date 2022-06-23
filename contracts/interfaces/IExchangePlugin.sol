@@ -7,6 +7,7 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 // import "hardhat/console.sol";
 
 interface IExchangePlugin {
+    
     function swap(
         uint256 amountA,
         address tokenA,
@@ -14,8 +15,16 @@ interface IExchangePlugin {
         address to
     ) external returns (uint256 amountReceivedTokenB);
 
+    /// @notice Returns percent taken by DEX on which we swap provided tokens.
+    /// @dev Fee percent has 18 decimals.
     function getFee(address tokenA, address tokenB)
         external
         view
         returns (uint256 feePercent);
+
+    /// @notice Synonym of the uniswapV2's function, estimates amount you receive after swap.
+    function getAmountOut(uint256 amountA, address tokenA, address tokenB)
+        external
+        view
+        returns (uint256 amountOut);
 }

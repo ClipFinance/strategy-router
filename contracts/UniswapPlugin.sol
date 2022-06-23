@@ -56,13 +56,32 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getFee(address , address )
+    function getFee(address, address)
         public
-        pure 
+        pure
         override
         returns (uint256 feePercent)
     {
         return 25e16; // 0.25% with 18 decimals
+    }
+
+    function getAmountOut(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) external view override returns (uint256 amountOut) {
+        if (isUseWeth(tokenA, tokenB)) {
+            address[] memory path = new address[](3);
+            path[0] = address(tokenA);
+            path[1] = uniswapRouter.WETH();
+            path[2] = address(tokenB);
+            return uniswapRouter.getAmountsOut(amountA, path)[2];
+        } else {
+            address[] memory path = new address[](3);
+            path[0] = address(tokenA);
+            path[1] = address(tokenB);
+            return uniswapRouter.getAmountsOut(amountA, path)[1];
+        }
     }
 
     function _swapThroughWETH(
