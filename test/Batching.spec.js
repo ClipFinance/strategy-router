@@ -43,20 +43,6 @@ describe("Test Batching", function () {
         await usdc.approve(router.address, parseUsdc("1000000"));
         await usdt.approve(router.address, parseUsdt("1000000"));
 
-        // setup supported tokens
-        await router.setSupportedToken(usdc.address, true);
-        await router.setSupportedToken(busd.address, true);
-        await router.setSupportedToken(usdt.address, true);
-
-        // add fake strategies
-        await deployFakeStrategy({ router, token: busd });
-        await deployFakeStrategy({ router, token: usdc });
-        await deployFakeStrategy({ router, token: usdt });
-
-        // admin initial deposit to set initial shares and pps
-        await router.depositToBatch(busd.address, parseBusd("1"));
-        await router.depositToStrategies();
-
     });
 
     beforeEach(async function () {
@@ -72,6 +58,31 @@ describe("Test Batching", function () {
     });
 
     describe("deposit", function () {
+        // snapshot to revert state changes that are made in this scope
+        let _snapshot;
+
+        before(async () => {
+            _snapshot = await provider.send("evm_snapshot");
+
+            // setup supported tokens
+            await router.setSupportedToken(usdc.address, true);
+            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(usdt.address, true);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdt });
+
+            // admin initial deposit to set initial shares and pps
+            await router.depositToBatch(busd.address, parseBusd("1"));
+            await router.depositToStrategies();
+
+        });
+
+        after(async () => {
+            await provider.send("evm_revert", [_snapshot]);
+        });
 
         it("should revert depositToBatch no allowance", async function () {
             await busd.approve(router.address, 0);
@@ -103,13 +114,14 @@ describe("Test Batching", function () {
     });
 
     describe("getBatchingTotalUsdValue", function () {
+
         it("happy paths: 1 supported token", async function () {
             await oracle.setPrice(busd.address, parseBusd("0.5"));
 
-            await router.removeStrategy(1);
-            await router.removeStrategy(1);
-            await router.setSupportedToken(usdt.address, false);
-            await router.setSupportedToken(usdc.address, false);
+            // setup supported tokens
+            await router.setSupportedToken(busd.address, true);
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
 
             await router.depositToBatch(busd.address, parseBusd("100.0"))
             let { totalBalance, balances } = await router.getBatchingValue();
@@ -121,6 +133,16 @@ describe("Test Batching", function () {
             await oracle.setPrice(busd.address, parseBusd("0.9"));
             await oracle.setPrice(usdc.address, parseUsdc("0.9"));
             await oracle.setPrice(usdt.address, parseUsdt("1.1"));
+
+            // setup supported tokens
+            await router.setSupportedToken(usdc.address, true);
+            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(usdt.address, true);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdt });
 
             await router.depositToBatch(busd.address, parseBusd("100.0"))
             await router.depositToBatch(usdc.address, parseUsdc("100.0"))
@@ -135,6 +157,32 @@ describe("Test Batching", function () {
     });
 
     describe("withdraw", function () {
+
+        // snapshot to revert state changes that are made in this scope
+        let _snapshot;
+
+        before(async () => {
+            _snapshot = await provider.send("evm_snapshot");
+
+            // setup supported tokens
+            await router.setSupportedToken(usdc.address, true);
+            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(usdt.address, true);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdt });
+
+            // admin initial deposit to set initial shares and pps
+            await router.depositToBatch(busd.address, parseBusd("1"));
+            await router.depositToStrategies();
+
+        });
+
+        after(async () => {
+            await provider.send("evm_revert", [_snapshot]);
+        });
 
         it("shouldn't be able to withdrawFromBatching receipt that doesn't belong to you", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"))
@@ -206,19 +254,10 @@ describe("Test Batching", function () {
 
     describe("setSupportedToken", function () {
 
-        before(async () => {
-            // remove strategies and clear supported tokens to be able to test the target function
-            await router.removeStrategy(2);
-            await router.removeStrategy(1);
-            await router.setSupportedToken(usdt.address, false);
-            await router.setSupportedToken(usdc.address, false);
-            expect((await router.getSupportedTokens()).length).to.be.equal(1);
-        })
-
         it("should add supported token", async function () {
             await router.setSupportedToken(usdt.address, true);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
-                `${busd.address},${usdt.address}`
+                `${usdt.address}`
             );
         });
 
@@ -227,7 +266,7 @@ describe("Test Batching", function () {
             await router.setSupportedToken(usdt.address, false);
             await router.setSupportedToken(usdt.address, true);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
-                `${busd.address},${usdt.address}`
+                `${usdt.address}`
             );
         });
 
@@ -237,17 +276,19 @@ describe("Test Batching", function () {
         });
 
         it("should revert when removing token that is in use by strategy", async function () {
+            await router.setSupportedToken(busd.address, true);
+            await deployFakeStrategy({ router, token: busd });
             await expect(router.setSupportedToken(busd.address, false)).to.be.reverted;
         });
 
         it("pass address that is not a token", async function () {
             await router.setSupportedToken(owner.address, true);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
-                `${busd.address},${owner.address}`
+                `${owner.address}`
             );
             await router.setSupportedToken(owner.address, false);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
-                `${busd.address}`
+                ``
             );
         });
     });
