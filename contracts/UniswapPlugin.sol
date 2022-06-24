@@ -50,9 +50,18 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
         if (isUseWeth(tokenA, tokenB)) {
-            return _swapThroughWETH(amountA, tokenA, tokenB, to);
+            address[] memory path = new address[](3);
+            path[0] = address(tokenA);
+            path[1] = uniswapRouter.WETH();
+            path[2] = address(tokenB);
+
+            return _swap(amountA, path, to);
         } else {
-            return _swapDirect(amountA, tokenA, tokenB, to);
+            address[] memory path = new address[](2);
+            path[0] = address(tokenA);
+            path[1] = address(tokenB);
+
+            return _swap(amountA, path, to);
         }
     }
 
@@ -82,33 +91,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
             path[1] = address(tokenB);
             return uniswapRouter.getAmountsOut(amountA, path)[1];
         }
-    }
-
-    function _swapThroughWETH(
-        uint256 amountA,
-        address tokenA,
-        address tokenB,
-        address to
-    ) private returns (uint256 amountReceivedTokenB) {
-        address[] memory path = new address[](3);
-        path[0] = address(tokenA);
-        path[1] = uniswapRouter.WETH();
-        path[2] = address(tokenB);
-
-        return _swap(amountA, path, to);
-    }
-
-    function _swapDirect(
-        uint256 amountA,
-        address tokenA,
-        address tokenB,
-        address to
-    ) private returns (uint256 amountReceivedTokenB) {
-        address[] memory path = new address[](2);
-        path[0] = address(tokenA);
-        path[1] = address(tokenB);
-
-        return _swap(amountA, path, to);
     }
 
     function _swap(
