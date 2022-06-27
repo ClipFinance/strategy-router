@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
-const { skipTimeAndBlocks, MaxUint256, deploy, provider } = require("./utils");
+const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter with two real strategies on bnb chain", function () {
@@ -103,6 +103,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain", function (
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
     await router.depositToStrategies();
+    
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("100"),
       parseUniform("1.5")

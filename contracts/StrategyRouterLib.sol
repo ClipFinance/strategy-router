@@ -90,7 +90,7 @@ library StrategyRouterLib {
     ) internal returns (uint256 result) {
         if (from != to) {
             IERC20(from).transfer(address(exchange), amount);
-            result = exchange.swapRouted(amount, from, to, address(this));
+            result = exchange.swap(amount, from, to, address(this));
             return result;
         }
         return amount;

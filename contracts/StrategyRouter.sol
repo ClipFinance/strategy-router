@@ -1001,7 +1001,6 @@ contract StrategyRouter is Ownable {
             // is withdrawn token not the one that's requested?
             if (token != withdrawToken) {
                 // swap withdrawn token to the requested one
-                console.log(amountToTransfer);
                 amountToTransfer = StrategyRouterLib.trySwap(
                     exchange,
                     amountToTransfer,

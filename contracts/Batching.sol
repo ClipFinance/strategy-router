@@ -12,7 +12,7 @@ import "./Exchange.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -500,7 +500,7 @@ contract Batching is Ownable {
     ) private returns (uint256 result) {
         if (from != to) {
             IERC20(from).transfer(address(exchange), amount);
-            result = exchange.swapRouted(amount, from, to, address(this));
+            result = exchange.swap(amount, from, to, address(this));
             return result;
         }
         return amount;

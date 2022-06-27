@@ -35,7 +35,7 @@ contract Exchange is Ownable {
     }
 
     function getPlugin(address tokenA, address tokenB)
-        public 
+        public
         view
         returns (address)
     {
@@ -43,24 +43,41 @@ contract Exchange is Ownable {
         return plugins[token0][token1];
     }
 
-    function getFee(address tokenA, address tokenB) public view returns (uint256 feePercent) {
+    function getFee(address tokenA, address tokenB)
+        public
+        view
+        returns (uint256 feePercent)
+    {
         address plugin = getPlugin(address(tokenA), address(tokenB));
         return IExchangePlugin(plugin).getFee(tokenA, tokenB);
     }
 
-    function swapRouted(
+    function getAmountOut(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) external view returns (uint256 amountOut) {
+        address plugin = getPlugin(address(tokenA), address(tokenB));
+        return IExchangePlugin(plugin).getAmountOut(amountA, tokenA, tokenB);
+    }
+
+    function swap(
         uint256 amountA,
         address tokenA,
         address tokenB,
         address to
     ) public returns (uint256 amountReceived) {
         address plugin = getPlugin(address(tokenA), address(tokenB));
-        if(plugin == address(0)) revert RouteNotFound();
+        if (plugin == address(0)) revert RouteNotFound();
         ERC20(tokenA).transfer(plugin, amountA);
-        amountReceived = IExchangePlugin(plugin).swap(amountA, tokenA, tokenB, to);
+        amountReceived = IExchangePlugin(plugin).swap(
+            amountA,
+            tokenA,
+            tokenB,
+            to
+        );
         if (amountReceived == 0) revert RoutedSwapFailed();
     }
-
 
     function sortTokens(address tokenA, address tokenB)
         internal

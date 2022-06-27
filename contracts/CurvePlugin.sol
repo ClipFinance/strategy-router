@@ -49,6 +49,23 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         return fee * (1e18 / feeDenominator);
     }
 
+    function getAmountOut(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) external view override returns (uint256 amountOut) {
+        address pool = getPool(tokenA, tokenB);
+
+        int128 _tokenAIndex = coinIds[address(pool)][tokenA];
+        int128 _tokenBIndex = coinIds[address(pool)][tokenB];
+
+        return ICurvePool(pool).get_dy(
+            _tokenAIndex,
+            _tokenBIndex,
+            amountA
+        );
+    }
+
     function swap(
         uint256 amountA,
         address tokenA,
