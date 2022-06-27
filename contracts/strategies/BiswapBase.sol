@@ -54,7 +54,6 @@ contract BiswapBase is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-
         Exchange exchange = strategyRouter.exchange();
         uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
 
@@ -72,8 +71,8 @@ contract BiswapBase is Ownable, IStrategy {
 
         // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
         // since we swap on dexA and adding liquidity on dexB
-        
-        // e.g. in the following console log, when swapping 100k 
+
+        // e.g. in the following console log, when swapping 100k
         // the ratio of the received tokens is 1.01 and reserves ratio is 1.05
 
         // (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
@@ -82,7 +81,7 @@ contract BiswapBase is Ownable, IStrategy {
         //     amountA,
         //     amountB,
         //     (r0 * 1e18) / r1,
-        //     (amountB * 1e18) / amountA
+        //     (amountA * 1e18) / amountB
         // );
 
         tokenA.approve(address(biswapRouter), amountA);
@@ -325,17 +324,15 @@ contract BiswapBase is Ownable, IStrategy {
         return amount - fee;
     }
 
-    function calculateSwapAmount(
-        uint256 amount,
-        uint256 dexFee
-    ) private pure returns (uint256 amountAfterFee) {
-        // We take half of the input amount and then calc how much to increase that half
-        // in order to receive 50/50 after swap, only accounting for swap fee and not slippage
-        // thus it still won't be exactly 50/50.
-        // So the formula: fee * 2 / (fee + 1), where fee is float e.g. 1.06
-
-        uint256 halfWithFee = ((1e18 + dexFee) * 2 * 1e18) /
-            (1e18 * 2 + dexFee);
+    function calculateSwapAmount(uint256 amount, uint256 dexFee)
+        private
+        view
+        returns (uint256 amountAfterFee)
+    {
+        (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
+            .getReserves();
+        uint256 halfWithFee = (2 * r0 * (dexFee + 1e18) * 1e18) /
+            (r0 * (dexFee + 1e18) + r1 * 1e18);
         uint256 amountB = ((amount / 2) * halfWithFee) / 1e18; // 1e18 fee denominatorf
         return amountB;
     }
