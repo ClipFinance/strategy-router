@@ -9,7 +9,7 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
@@ -59,7 +59,6 @@ contract BiswapBase is Ownable, IStrategy {
 
         uint256 amountB = calculateSwapAmount(amount, dexFee);
         uint256 amountA = amount - amountB;
-        // console.log(halfWithFee, dexFee, amountA, amountB);
 
         tokenA.transfer(address(exchange), amountB);
         amountB = exchange.swap(
@@ -68,21 +67,6 @@ contract BiswapBase is Ownable, IStrategy {
             address(tokenB),
             address(this)
         );
-
-        // TODO: Is there a way to swap tokens to get perfect (or better) ratio to addLiquidity?
-        // since we swap on dexA and adding liquidity on dexB
-
-        // e.g. in the following console log, when swapping 100k
-        // the ratio of the received tokens is 1.01 and reserves ratio is 1.05
-
-        // (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
-        //     .getReserves();
-        // console.log(
-        //     amountA,
-        //     amountB,
-        //     (r0 * 1e18) / r1,
-        //     (amountA * 1e18) / amountB
-        // );
 
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
@@ -284,11 +268,9 @@ contract BiswapBase is Ownable, IStrategy {
         private
         returns (uint256 receivedA, uint256 receivedB)
     {
-        uint256 bswAmountAfterCommission = collectProtocolCommission(bswAmount);
-
         // sell for lp ratio
-        uint256 amountA = bswAmountAfterCommission / 2;
-        uint256 amountB = bswAmountAfterCommission - amountA;
+        uint256 amountA = bswAmount / 2;
+        uint256 amountB = bswAmount - amountA;
 
         Exchange exchange = strategyRouter.exchange();
         bsw.transfer(address(exchange), amountA);
@@ -306,22 +288,47 @@ contract BiswapBase is Ownable, IStrategy {
             address(tokenB),
             address(this)
         );
+
+        (receivedA, receivedB) = collectProtocolCommission(receivedA, receivedB);
     }
 
-    function collectProtocolCommission(uint256 amount)
+    function collectProtocolCommission(uint256 amountA, uint256 amountB)
         private
-        returns (uint256 amountAfterFee)
+        returns (uint256 amountAfterFeeA, uint256 amountAfterFeeB)
     {
-        Exchange exchange = strategyRouter.exchange();
-
         uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
         address feeAddress = StrategyRouter(strategyRouter).feeAddress();
-        uint256 fee = (amount * feePercent) / PERCENT_DENOMINATOR;
-        if (fee > 0 && feeAddress != address(0)) {
-            bsw.transfer(address(exchange), fee);
-            exchange.swap(fee, address(bsw), address(tokenA), feeAddress);
+        uint256 ratioUint;
+        uint256 feeAmount = ((amountA + amountB) * feePercent) /
+            PERCENT_DENOMINATOR;
+        {
+            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
+                .getReserves();
+
+            // equation: (a - (c*v))/(b - (c-c*v)) = z/x
+            // solution for v = (a*x - b*z + c*z) / (c * (z+x))
+            // a,b is current token amounts, z,x is pair reserves, c is total fee amount to take from a+b
+            // v is ratio to apply to feeAmount and take fee from a and b
+            // a and z should be converted to same decimals as token b
+            int256 numerator = int256(amountA * r1 + feeAmount * r0) -
+                int256(amountB * r0);
+            int256 denominator = int256(feeAmount * (r0 + r1));
+            int256 ratio = (numerator * 1e18) / denominator;
+            // ratio here could be negative or greater than 1.0
+            // only need to be between 0 and 1
+            if (ratio < 0) ratio = 0;
+            if (ratio > 1e18) ratio = 1e18;
+
+            ratioUint = uint256(ratio);
         }
-        return amount - fee;
+
+        uint256 comissionA = (feeAmount * ratioUint) / 1e18;
+        uint256 comissionB = feeAmount - comissionA;
+
+        tokenA.transfer(feeAddress, comissionA);
+        tokenB.transfer(feeAddress, comissionB);
+
+        return (amountA - comissionA, amountB - comissionB);
     }
 
     function calculateSwapAmount(uint256 amount, uint256 dexFee)
