@@ -71,7 +71,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         override
         returns (uint256 feePercent)
     {
-        return 25e16; // 0.25% with 18 decimals
+        return 25e14; // 0.25% or 0.0025 with 18 decimals
     }
 
     function getAmountOut(

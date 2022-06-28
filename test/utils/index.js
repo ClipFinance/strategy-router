@@ -42,7 +42,7 @@ async function getTokens(tokenAddress, holderAddress) {
   let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
   let decimals = await tokenContract.decimals();
   let parse = (args) => parseUnits(args, decimals);
-  let tokenAmount = parse("500000");
+  let tokenAmount = parse("10000000");
   let to = owner.address;
 
   await hre.network.provider.request({
