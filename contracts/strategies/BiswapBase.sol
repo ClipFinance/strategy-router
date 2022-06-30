@@ -342,7 +342,7 @@ contract BiswapBase is Ownable, IStrategy {
             .getReserves();
         uint256 halfWithFee = (2 * r0 * (dexFee + 1e18) * 1e18) /
             (r0 * (dexFee + 1e18) + r1 * 1e18);
-        uint256 amountB = ((amount / 2) * halfWithFee) / 1e18; // 1e18 fee denominatorf
+        uint256 amountB = ((amount / 2) * halfWithFee) / 1e18; // 1e18 fee denominator
         return amountB;
     }
 }

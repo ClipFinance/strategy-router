@@ -12,7 +12,7 @@ import "./Exchange.sol";
 import "./EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -41,7 +41,7 @@ contract Batching is Ownable {
     error NotReceiptOwner();
     error CycleClosed();
     error DepositUnderMinimum();
-    error NotEnoughInBatching();
+    error NotEnoughBalanceInBatching();
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
@@ -71,13 +71,13 @@ contract Batching is Ownable {
         return supportedTokens.values();
     }
 
-    function getBatchingValue()
+    function getBatchingValueUsd()
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances)
+        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
     {
-        balances = new uint256[](supportedTokens.length());
-        for (uint256 i; i < balances.length; i++) {
+        supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
+        for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             address token = supportedTokens.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
 
@@ -86,42 +86,47 @@ contract Batching is Ownable {
             );
             balance = ((balance * price) / 10**priceDecimals);
             balance = toUniform(balance, token);
-            balances[i] = balance;
-            totalBalance += balance;
+            supportedTokenBalancesUsd[i] = balance;
+            totalBalanceUsd += balance;
         }
     }
 
     // User Functions
 
     /// @notice Withdraw tokens from batching while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
-    /// @notice Receipt is burned if withdraw whole amount noted in it.
+    /// @notice On partial withdraw the receipt that partly fulfills requested amount will be updated.
+    /// @notice Receipt is burned if withdrawn is whole amount
     /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported token that user wish to receive.
+    /// @param withdrawToken Supported token that user wishes to receive.
     /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function withdraw(
-        address withdrawer,
+        address receiptOwner,
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata receiptTokenAmounts
-    ) public onlyOwner {
+    )
+        public
+        onlyOwner
+        returns (uint256 withdrawalTokenAmountToTransfer)
+    {
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = router.currentCycleId();
         uint256 valueToWithdrawUsd;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != withdrawer)
+            if (receiptContract.ownerOf(receiptId) != receiptOwner)
                 revert NotReceiptOwner();
 
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
-                receiptId
-            );
-            // only for receipts in batching
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
+
+            // only for receipts in current batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
             (uint256 originalDepositedTokenPriceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
+            /* higher token amount may be passed than in tokens in receipt as we expect javascript to handle big numbers
+               not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
             if (receiptTokenAmounts[i] >= receipt.amount || receiptTokenAmounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
                 uint256 receiptValueUsd = ((receipt.amount * originalDepositedTokenPriceUsd) /
@@ -139,76 +144,94 @@ contract Batching is Ownable {
                 );
             }
         }
-        _withdraw(withdrawer, valueToWithdrawUsd, withdrawToken);
+
+        withdrawalTokenAmountToTransfer = _withdraw(valueToWithdrawUsd, withdrawToken);
+
+        IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
     }
 
     function _withdraw(
-        address withdrawer,
-        uint256 valueToWithdraw,
+        uint256 valueToWithdrawUsd,
         address withdrawToken
-    ) public onlyOwner {
-        (uint256 totalBalance, uint256[] memory balances) = getBatchingValue();
-        if (totalBalance < valueToWithdraw) revert NotEnoughInBatching();
+    ) public
+        onlyOwner
+        returns (uint256)
+    {
+        (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
+        if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 
-        uint256 amountToTransfer;
-        // try withdraw requested token directly
+        uint256 tokenAmountToTransfer; // final token amount to transfer to user from batching
+        uint256 withdrawTokenIndex;
+
+         // try withdraw requested token directly where is more than enough of same token in batching
         if (
-            balances[supportedTokens.indexOf(withdrawToken)] >= valueToWithdraw
+            supportedTokenBalancesUsd[supportedTokens.indexOf(withdrawToken)] >= valueToWithdrawUsd
         ) {
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
+            tokenAmountToTransfer = convertUsdAmountToTokenAmount(valueToWithdrawUsd, withdrawToken);
+            return tokenAmountToTransfer;
+        } else {
+            // not enough withdraw token in batching, save withdraw token index
+            withdrawTokenIndex = supportedTokens.indexOf(withdrawToken);
+            // deduct usd amount of withdraw token
+            valueToWithdrawUsd -= supportedTokenBalancesUsd[withdrawTokenIndex];
+            tokenAmountToTransfer = convertUsdAmountToTokenAmount(
+                supportedTokenBalancesUsd[withdrawTokenIndex],
                 withdrawToken
             );
-            amountToTransfer = (valueToWithdraw * 10**priceDecimals) / price;
-            amountToTransfer = fromUniform(amountToTransfer, withdrawToken);
-            valueToWithdraw = 0;
         }
 
-        // try withdraw token which balance is enough to do only 1 swap
-        if (valueToWithdraw != 0) {
-            for (uint256 i; i < balances.length; i++) {
-                if (balances[i] >= valueToWithdraw) {
-                    address token = supportedTokens.at(i);
-                    (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-                    amountToTransfer = (valueToWithdraw * 10**priceDecimals) / price;
-                    amountToTransfer = fromUniform(amountToTransfer, token);
-                    amountToTransfer = _trySwap(
-                        amountToTransfer,
-                        token,
-                        withdrawToken
-                    );
-                    valueToWithdraw = 0;
-                    break;
-                }
-            }
-        }
+        uint256 tokenAmountToSwap;
 
-        // swap different tokens until withraw amount is fulfilled
-        if (valueToWithdraw != 0) {
-            for (uint256 i; i < balances.length; i++) {
-                address token = supportedTokens.at(i);
-                uint256 toSwap;
-                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                    token
+        // find another token which balance is enough to withdraw with only 1 swap
+        for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
+            if (i == withdrawTokenIndex) continue; // skip withdraw token in order to avoid unnecessary swap
+            if (supportedTokenBalancesUsd[i] >= valueToWithdrawUsd) {
+                address supportedToken = supportedTokens.at(i);
+                tokenAmountToSwap = convertUsdAmountToTokenAmount(valueToWithdrawUsd, supportedToken);
+                tokenAmountToTransfer += _trySwap(
+                    tokenAmountToSwap,
+                    supportedToken,
+                    withdrawToken
                 );
-
-                toSwap = balances[i] < valueToWithdraw
-                    ? balances[i]
-                    : valueToWithdraw;
-
-                unchecked {
-                    valueToWithdraw -= toSwap;
-                }
-                // convert usd value into token amount
-                toSwap = (toSwap * 10**priceDecimals) / price;
-                // adjust decimals of the token amount
-                toSwap = fromUniform(toSwap, token);
-                // swap for requested token
-                amountToTransfer += _trySwap(toSwap, token, withdrawToken);
-                if (valueToWithdraw == 0) break;
+            return tokenAmountToTransfer;
             }
         }
-        IERC20(withdrawToken).transfer(withdrawer, amountToTransfer);
-        emit WithdrawFromBatching(withdrawer, withdrawToken, amountToTransfer);
+
+        // otherwise swap different tokens until withdraw amount is fulfilled
+        for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
+            if (i == withdrawTokenIndex) continue;
+            address token = supportedTokens.at(i);
+            (uint256 tokenUsdPrice, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+
+            // guarantees that valueToWithdrawUsd will never be less than 0
+            uint256 tokenUsdToSwap = supportedTokenBalancesUsd[i] < valueToWithdrawUsd
+                ? supportedTokenBalancesUsd[i]
+                : valueToWithdrawUsd;
+
+            // above we checked for underflow, so we don't need to check here again for that
+            unchecked {
+                valueToWithdrawUsd -= tokenUsdToSwap;
+            }
+            // convert usd value into token amount
+            tokenAmountToSwap = (tokenUsdToSwap * 10**priceDecimals) / tokenUsdPrice;
+            // adjust decimals of the token amount
+            tokenAmountToSwap = fromUniform(tokenAmountToSwap, token);
+            // swap for requested token
+            tokenAmountToTransfer += _trySwap(tokenAmountToSwap, token, withdrawToken);
+            if (valueToWithdrawUsd == 0) break;
+        }
+        return tokenAmountToTransfer;
+    }
+
+    /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
+    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token)
+        internal
+        view
+        returns (uint256 tokenAmountToTransfer)
+    {
+        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
+        tokenAmountToTransfer = (valueUsd * 10** oraclePriceDecimals) / tokenUsdPrice;
+        tokenAmountToTransfer = fromUniform(tokenAmountToTransfer, token);
     }
 
     /// @notice Deposit token into batching.
