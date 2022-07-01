@@ -22,13 +22,13 @@ async function setupFakeTokens() {
   let totalSupply = (100_000_000).toString();
 
   let parseUsdc = (args) => parseUnits(args, 18);
-  let usdc = await deploy("TestCurrency", parseUsdc(totalSupply), 18);
+  let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
 
   let parseBusd = (args) => parseUnits(args, 8);
-  let busd = await deploy("TestCurrency", parseBusd(totalSupply), 8);
+  let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
 
   let parseUsdt = (args) => parseUnits(args, 6);
-  let usdt = await deploy("TestCurrency", parseUsdt(totalSupply), 6);
+  let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
@@ -90,7 +90,7 @@ async function setupCore() {
   return { oracle, exchange, router, receiptContract, batching, sharesToken, INITIAL_SHARES };
 }
 
-// Setup core params for testing with TestCurrency
+// Setup core params for testing with MockToken
 async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
 
   const [owner,,,,,,,,,feeAddress] = await ethers.getSigners();
