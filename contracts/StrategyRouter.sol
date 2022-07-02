@@ -153,7 +153,7 @@ contract StrategyRouter is Ownable {
         */
         // step 1
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchingValueInUsd, ) = getBatchingValue();
+        (uint256 batchingValueInUsd, ) = getBatchingValueUsd();
 
         uint256 strategiesDebtInShares = cycles[_currentCycleId]
             .strategiesDebtInShares;
@@ -316,12 +316,12 @@ contract StrategyRouter is Ownable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batching usd value.
     /// @return balances Array of usd value of token balances in the batching.
-    function getBatchingValue()
+    function getBatchingValueUsd()
         public
         view
         returns (uint256 totalBalance, uint256[] memory balances)
     {
-        return batching.getBatchingValue();
+        return batching.getBatchingValueUsd();
     }
 
     /// @notice Returns amount of shares locked by multiple receipts.
@@ -521,8 +521,10 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata amounts
-    ) public {
-        batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
+    ) public
+    {
+        uint256 withdrawalTokenAmountToTransfer = batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
+        emit WithdrawFromBatching(msg.sender, withdrawToken, withdrawalTokenAmountToTransfer);
     }
 
     /// @notice Withdraw tokens from batching while receipts are in strategies.
@@ -607,7 +609,7 @@ contract StrategyRouter is Ownable {
         }
 
         if (fromBatchAmount > 0) {
-            (uint256 totalBalance, ) = getBatchingValue();
+            (uint256 totalBalance, ) = getBatchingValueUsd();
 
             if (fromBatchAmount <= totalBalance) {
                 // withdraw 100% from batching
@@ -639,7 +641,7 @@ contract StrategyRouter is Ownable {
 
         uint256 fromStratsAmount = sharesToUsd(shares);
 
-        (uint256 totalBalance, ) = getBatchingValue();
+        (uint256 totalBalance, ) = getBatchingValueUsd();
 
         if (fromStratsAmount <= totalBalance) {
             crossWithdrawShares(shares, withdrawToken);
@@ -953,7 +955,7 @@ contract StrategyRouter is Ownable {
         uint256 valueToWithdraw,
         address withdrawToken
     ) private {
-        batching._withdraw(msg.sender, valueToWithdraw, withdrawToken);
+        batching._withdraw(valueToWithdraw, withdrawToken);
     }
 
     /// @param amountInUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.

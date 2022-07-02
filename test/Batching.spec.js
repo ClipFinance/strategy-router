@@ -124,7 +124,7 @@ describe("Test Batching", function () {
             await deployFakeStrategy({ router, token: busd });
 
             await router.depositToBatch(busd.address, parseBusd("100.0"))
-            let { totalBalance, balances } = await router.getBatchingValue();
+            let { totalBalance, balances } = await router.getBatchingValueUsd();
             expect(totalBalance).to.be.equal(parseUniform("50"));
             expect(balances.toString()).to.be.equal(`${parseUniform("50")}`);
         });
@@ -148,7 +148,7 @@ describe("Test Batching", function () {
             await router.depositToBatch(usdc.address, parseUsdc("100.0"))
             await router.depositToBatch(usdt.address, parseUsdt("100.0"))
 
-            let { totalBalance, balances } = await router.getBatchingValue();
+            let { totalBalance, balances } = await router.getBatchingValueUsd();
             // 0.9 + 0.9 + 1.1 = 2.9
             expect(totalBalance).to.be.equal(parseUniform("290"));
             expect(balances.toString()).to.be.equal(`${parseUniform("90")},${parseUniform("90")},${parseUniform("110")}`);
