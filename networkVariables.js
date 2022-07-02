@@ -28,6 +28,6 @@ function bnbChain() {
   return bnb;
 }
 
-const config = { bnb: bnbChain(), bnbTest: bnbChain() };
+const config = { bnb: bnbChain(), bnbTest: bnbChain(), localhost: bnbChain(), };
 
 module.exports = config;

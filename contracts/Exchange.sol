@@ -13,14 +13,23 @@ contract Exchange is Ownable {
     error RoutedSwapFailed();
     error RouteNotFound();
 
+    struct RouteParams {
+        // default exchange to use, could have low slippage but also lower liquidity
+        address defaultRoute;
+        // whenever input amount is over limit, then should use secondRoute
+        uint256 limit;
+        // second exchange, could have higher slippage but also higher liquidity
+        address secondRoute;
+    }
+
     // which plugin to use for swap for this pair
-    // tokenA -> tokenB -> plugin
-    mapping(address => mapping(address => address)) private plugins;
+    // tokenA -> tokenB -> RouteParams
+    mapping(address => mapping(address => RouteParams)) public routes;
 
     constructor() {}
 
     /// @notice Choose plugin where pair of tokens should be swapped.
-    function setPlugin(
+    function setRoute(
         address[] calldata tokensA,
         address[] calldata tokensB,
         address[] calldata plugin
@@ -30,25 +39,45 @@ contract Exchange is Ownable {
                 tokensA[i],
                 tokensB[i]
             );
-            plugins[token0][token1] = plugin[i];
+            routes[token0][token1].defaultRoute = plugin[i];
         }
     }
 
-    function getPlugin(address tokenA, address tokenB)
-        public
-        view
-        returns (address)
-    {
-        (address token0, address token1) = sortTokens(tokenA, tokenB);
-        return plugins[token0][token1];
+    function setRouteEx(
+        address[] calldata tokensA,
+        address[] calldata tokensB,
+        RouteParams[] calldata _routes
+    ) external onlyOwner {
+        for (uint256 i = 0; i < tokensA.length; i++) {
+            (address token0, address token1) = sortTokens(
+                tokensA[i],
+                tokensB[i]
+            );
+            routes[token0][token1] = _routes[i];
+        }
     }
 
-    function getFee(address tokenA, address tokenB)
-        public
-        view
-        returns (uint256 feePercent)
-    {
-        address plugin = getPlugin(address(tokenA), address(tokenB));
+    function getPlugin(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) public view returns (address) {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        uint256 limit = routes[token0][token1].limit;
+        address plugin;
+        if (amountA < limit || limit == 0)
+            plugin = routes[token0][token1].defaultRoute;
+        else plugin = routes[token0][token1].secondRoute;
+        if (plugin == address(0)) revert RouteNotFound();
+        return plugin;
+    }
+
+    function getFee(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) public view returns (uint256 feePercent) {
+        address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
         return IExchangePlugin(plugin).getFee(tokenA, tokenB);
     }
 
@@ -57,7 +86,7 @@ contract Exchange is Ownable {
         address tokenA,
         address tokenB
     ) external view returns (uint256 amountOut) {
-        address plugin = getPlugin(address(tokenA), address(tokenB));
+        address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
         return IExchangePlugin(plugin).getAmountOut(amountA, tokenA, tokenB);
     }
 
@@ -67,8 +96,7 @@ contract Exchange is Ownable {
         address tokenB,
         address to
     ) public returns (uint256 amountReceived) {
-        address plugin = getPlugin(address(tokenA), address(tokenB));
-        if (plugin == address(0)) revert RouteNotFound();
+        address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
         ERC20(tokenA).transfer(plugin, amountA);
         amountReceived = IExchangePlugin(plugin).swap(
             amountA,

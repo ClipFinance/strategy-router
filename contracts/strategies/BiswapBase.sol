@@ -9,7 +9,7 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
@@ -55,9 +55,9 @@ contract BiswapBase is Ownable, IStrategy {
 
     function deposit(uint256 amount) external override onlyOwner {
         Exchange exchange = strategyRouter.exchange();
-        uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
 
-        uint256 amountB = calculateSwapAmount(amount, dexFee);
+        uint256 dexFee = exchange.getFee(amount/2, address(tokenA), address(tokenB));
+        uint256 amountB = calculateSwapAmount(amount/2, dexFee);
         uint256 amountA = amount - amountB;
 
         tokenA.transfer(address(exchange), amountB);
@@ -232,7 +232,6 @@ contract BiswapBase is Ownable, IStrategy {
     /// @dev Swaps leftover tokens for a better ratio for LP.
     function fix_leftover(uint256 amountIgnore) private {
         Exchange exchange = strategyRouter.exchange();
-        uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
         uint256 amountB = tokenB.balanceOf(address(this));
         uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
@@ -240,7 +239,8 @@ contract BiswapBase is Ownable, IStrategy {
             amountB > amountA &&
             (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B
         ) {
-            toSwap = calculateSwapAmount(toSwap, dexFee);
+            uint256 dexFee = exchange.getFee(toSwap/2, address(tokenA), address(tokenB));
+            toSwap = calculateSwapAmount(toSwap/2, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -252,7 +252,8 @@ contract BiswapBase is Ownable, IStrategy {
             amountA > amountB &&
             (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A
         ) {
-            toSwap = calculateSwapAmount(toSwap, dexFee);
+            uint256 dexFee = exchange.getFee(toSwap/2, address(tokenA), address(tokenB));
+            toSwap = calculateSwapAmount(toSwap/2, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -333,16 +334,16 @@ contract BiswapBase is Ownable, IStrategy {
         return (amountA - comissionA, amountB - comissionB);
     }
 
-    function calculateSwapAmount(uint256 amount, uint256 dexFee)
+    function calculateSwapAmount(uint256 half, uint256 dexFee)
         private
         view
         returns (uint256 amountAfterFee)
     {
         (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
             .getReserves();
-        uint256 halfWithFee = (2 * r0 * (dexFee + 1e18) * 1e18) /
-            (r0 * (dexFee + 1e18) + r1 * 1e18);
-        uint256 amountB = ((amount / 2) * halfWithFee) / 1e18; // 1e18 fee denominatorf
+        uint256 halfWithFee = (2 * r0 * (dexFee + 1e18)) /
+            (r0 * (dexFee + 1e18) / 1e18 + r1);
+        uint256 amountB = (half * halfWithFee) / 1e18; 
         return amountB;
     }
 }
