@@ -65,6 +65,7 @@ async function getTokens(tokenAddress, holderAddress) {
 
 // skip hardhat network blocks
 async function skipBlocks(blocksNum) {
+  blocksNum = Math.round(blocksNum);
   blocksNum = "0x" + blocksNum.toString(16);
   await hre.network.provider.send("hardhat_mine", [blocksNum]);
 }

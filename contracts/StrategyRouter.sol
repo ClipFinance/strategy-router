@@ -521,10 +521,18 @@ contract StrategyRouter is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata amounts
-    ) public
-    {
-        uint256 withdrawalTokenAmountToTransfer = batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
-        emit WithdrawFromBatching(msg.sender, withdrawToken, withdrawalTokenAmountToTransfer);
+    ) public {
+        uint256 withdrawalTokenAmountToTransfer = batching.withdraw(
+            msg.sender,
+            receiptIds,
+            withdrawToken,
+            amounts
+        );
+        emit WithdrawFromBatching(
+            msg.sender,
+            withdrawToken,
+            withdrawalTokenAmountToTransfer
+        );
     }
 
     /// @notice Withdraw tokens from batching while receipts are in strategies.
@@ -955,7 +963,16 @@ contract StrategyRouter is Ownable {
         uint256 valueToWithdraw,
         address withdrawToken
     ) private {
-        batching._withdraw(valueToWithdraw, withdrawToken);
+        uint256 withdrawalTokenAmountToTransfer = batching._withdraw(
+            valueToWithdraw,
+            withdrawToken
+        );
+
+        batching.transfer(
+            withdrawToken,
+            msg.sender,
+            withdrawalTokenAmountToTransfer
+        );
     }
 
     /// @param amountInUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.

@@ -130,7 +130,7 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(usdt.address, parseUsdt("1"));
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.depositToBatch(usdc.address, parseUsdc("1"));
-      // console.log(await router.getBatchingValue());
+      // console.log(await router.getBatchingValueUsd());
 
       await verifyTokensRatio([1, 1, 1]);
 
@@ -406,7 +406,7 @@ describe("Test rebalance functions", function () {
   }
 
   async function getTokenBalances() {
-    let [total, balances] = await router.getBatchingValue();
+    let [total, balances] = await router.getBatchingValueUsd();
     return { total, balances };
   }
 
