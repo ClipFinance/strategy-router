@@ -59,11 +59,7 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         int128 _tokenAIndex = coinIds[address(pool)][tokenA];
         int128 _tokenBIndex = coinIds[address(pool)][tokenB];
 
-        return ICurvePool(pool).get_dy(
-            _tokenAIndex,
-            _tokenBIndex,
-            amountA
-        );
+        return ICurvePool(pool).get_dy(_tokenAIndex, _tokenBIndex, amountA);
     }
 
     function swap(
@@ -78,34 +74,19 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         int128 _tokenAIndex = coinIds[address(pool)][tokenA];
         int128 _tokenBIndex = coinIds[address(pool)][tokenB];
 
-        uint256 received = ICurvePool(pool).exchange(
-            _tokenAIndex,
-            _tokenBIndex,
-            amountA,
-            0
-        );
+        uint256 received = ICurvePool(pool).exchange(_tokenAIndex, _tokenBIndex, amountA, 0);
 
         IERC20(tokenB).transfer(to, received);
 
         return received;
     }
 
-    function getPool(address tokenA, address tokenB)
-        internal
-        view
-        returns (address)
-    {
+    function getPool(address tokenA, address tokenB) internal view returns (address) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         return pools[token0][token1];
     }
 
-    function sortTokens(address tokenA, address tokenB)
-        internal
-        pure
-        returns (address token0, address token1)
-    {
-        (token0, token1) = tokenA < tokenB
-            ? (tokenA, tokenB)
-            : (tokenB, tokenA);
+    function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
+        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
     }
 }

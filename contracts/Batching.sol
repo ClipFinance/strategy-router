@@ -27,11 +27,7 @@ contract Batching is Ownable {
     /// @notice Fires when user withdraw from batching.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatching(
-        address indexed user,
-        address token,
-        uint256 amount
-    );
+    event WithdrawFromBatching(address indexed user, address token, uint256 amount);
 
     /* ERRORS */
 
@@ -74,19 +70,14 @@ contract Batching is Ownable {
     function getBatchingValueUsd()
         public
         view
-        returns (
-            uint256 totalBalanceUsd,
-            uint256[] memory supportedTokenBalancesUsd
-        )
+        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
     {
         supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             address token = supportedTokens.at(i);
             uint256 balance = ERC20(token).balanceOf(address(this));
 
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                token
-            );
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
             balance = ((balance * price) / 10**priceDecimals);
             balance = toUniform(balance, token);
             supportedTokenBalancesUsd[i] = balance;
@@ -115,77 +106,45 @@ contract Batching is Ownable {
         uint256 valueToWithdrawUsd;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != receiptOwner)
-                revert NotReceiptOwner();
+            if (receiptContract.ownerOf(receiptId) != receiptOwner) revert NotReceiptOwner();
 
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(
-                receiptId
-            );
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
 
             // only for receipts in current batching
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-            (
-                uint256 originalDepositedTokenPriceUsd,
-                uint8 priceDecimals
-            ) = oracle.getTokenUsdPrice(receipt.token);
+            (uint256 originalDepositedTokenPriceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
             /* higher token amount may be passed than in tokens in receipt as we expect javascript to handle big numbers
                not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
-            if (
-                receiptTokenAmounts[i] >= receipt.amount ||
-                receiptTokenAmounts[i] == 0
-            ) {
+            if (receiptTokenAmounts[i] >= receipt.amount || receiptTokenAmounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValueUsd = ((receipt.amount *
-                    originalDepositedTokenPriceUsd) / 10**priceDecimals);
+                uint256 receiptValueUsd = ((receipt.amount * originalDepositedTokenPriceUsd) / 10**priceDecimals);
                 valueToWithdrawUsd += receiptValueUsd;
                 receiptContract.burn(receiptId);
             } else {
                 // withdraw only part of receipt and update receipt
-                uint256 tokenAmountValueUsd = ((receiptTokenAmounts[i] *
-                    originalDepositedTokenPriceUsd) / 10**priceDecimals);
+                uint256 tokenAmountValueUsd = ((receiptTokenAmounts[i] * originalDepositedTokenPriceUsd) /
+                    10**priceDecimals);
                 valueToWithdrawUsd += tokenAmountValueUsd;
-                receiptContract.setAmount(
-                    receiptId,
-                    receipt.amount - receiptTokenAmounts[i]
-                );
+                receiptContract.setAmount(receiptId, receipt.amount - receiptTokenAmounts[i]);
             }
         }
 
-        withdrawalTokenAmountToTransfer = _withdraw(
-            valueToWithdrawUsd,
-            withdrawToken
-        );
+        withdrawalTokenAmountToTransfer = _withdraw(valueToWithdrawUsd, withdrawToken);
 
-        IERC20(withdrawToken).transfer(
-            receiptOwner,
-            withdrawalTokenAmountToTransfer
-        );
+        IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
     }
 
-    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken)
-        public
-        onlyOwner
-        returns (uint256)
-    {
-        (
-            uint256 totalBalanceUsd,
-            uint256[] memory supportedTokenBalancesUsd
-        ) = getBatchingValueUsd();
-        if (totalBalanceUsd < valueToWithdrawUsd)
-            revert NotEnoughBalanceInBatching();
+    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken) public onlyOwner returns (uint256) {
+        (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
+        if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 
         uint256 tokenAmountToTransfer; // final token amount to transfer to user from batching
         uint256 withdrawTokenIndex = supportedTokens.indexOf(withdrawToken);
 
         // try withdraw requested token directly where is more than enough of same token in batching
-        if (
-            supportedTokenBalancesUsd[withdrawTokenIndex] >= valueToWithdrawUsd
-        ) {
-            tokenAmountToTransfer = convertUsdAmountToTokenAmount(
-                valueToWithdrawUsd,
-                withdrawToken
-            );
+        if (supportedTokenBalancesUsd[withdrawTokenIndex] >= valueToWithdrawUsd) {
+            tokenAmountToTransfer = convertUsdAmountToTokenAmount(valueToWithdrawUsd, withdrawToken);
             return tokenAmountToTransfer;
         } else {
             // not enough withdraw token in batching
@@ -204,15 +163,8 @@ contract Batching is Ownable {
             if (i == withdrawTokenIndex) continue; // skip withdraw token in order to avoid unnecessary swap
             if (supportedTokenBalancesUsd[i] >= valueToWithdrawUsd) {
                 address supportedToken = supportedTokens.at(i);
-                tokenAmountToSwap = convertUsdAmountToTokenAmount(
-                    valueToWithdrawUsd,
-                    supportedToken
-                );
-                tokenAmountToTransfer += _trySwap(
-                    tokenAmountToSwap,
-                    supportedToken,
-                    withdrawToken
-                );
+                tokenAmountToSwap = convertUsdAmountToTokenAmount(valueToWithdrawUsd, supportedToken);
+                tokenAmountToTransfer += _trySwap(tokenAmountToSwap, supportedToken, withdrawToken);
                 return tokenAmountToTransfer;
             }
         }
@@ -221,12 +173,10 @@ contract Batching is Ownable {
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             if (i == withdrawTokenIndex) continue;
             address token = supportedTokens.at(i);
-            (uint256 tokenUsdPrice, uint8 priceDecimals) = oracle
-                .getTokenUsdPrice(token);
+            (uint256 tokenUsdPrice, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
 
             // guarantees that tokenUsdToSwap won't be greater than valueToWithdrawUsd
-            uint256 tokenUsdToSwap = supportedTokenBalancesUsd[i] <
-                valueToWithdrawUsd
+            uint256 tokenUsdToSwap = supportedTokenBalancesUsd[i] < valueToWithdrawUsd
                 ? supportedTokenBalancesUsd[i]
                 : valueToWithdrawUsd;
 
@@ -235,33 +185,20 @@ contract Batching is Ownable {
                 valueToWithdrawUsd -= tokenUsdToSwap;
             }
             // convert usd value into token amount
-            tokenAmountToSwap =
-                (tokenUsdToSwap * 10**priceDecimals) /
-                tokenUsdPrice;
+            tokenAmountToSwap = (tokenUsdToSwap * 10**priceDecimals) / tokenUsdPrice;
             // adjust decimals of the token amount
             tokenAmountToSwap = fromUniform(tokenAmountToSwap, token);
             // swap for requested token
-            tokenAmountToTransfer += _trySwap(
-                tokenAmountToSwap,
-                token,
-                withdrawToken
-            );
+            tokenAmountToTransfer += _trySwap(tokenAmountToSwap, token, withdrawToken);
             if (valueToWithdrawUsd == 0) break;
         }
         return tokenAmountToTransfer;
     }
 
     /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
-    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token)
-        internal
-        view
-        returns (uint256 tokenAmount)
-    {
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle
-            .getTokenUsdPrice(token);
-        tokenAmount =
-            (valueUsd * 10**oraclePriceDecimals) /
-            tokenUsdPrice;
+    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token) internal view returns (uint256 tokenAmount) {
+        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
+        tokenAmount = (valueUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
         tokenAmount = fromUniform(tokenAmount, token);
     }
 
@@ -277,24 +214,14 @@ contract Batching is Ownable {
         uint256 _amount
     ) external onlyOwner {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
-        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-            depositToken
-        );
-        uint256 depositedUsd = toUniform(
-            (_amount * price) / 10**priceDecimals,
-            depositToken
-        );
+        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
+        uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
         if (minDeposit > depositedUsd) revert DepositUnderMinimum();
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
         emit Deposit(depositor, depositToken, _amount);
-        receiptContract.mint(
-            router.currentCycleId(),
-            amountUniform,
-            depositToken,
-            depositor
-        );
+        receiptContract.mint(router.currentCycleId(), amountUniform, depositToken, depositor);
     }
 
     function transfer(
@@ -375,9 +302,7 @@ contract Batching is Ownable {
         // point 4
         uint256 strategiesCount = router.getStrategiesCount();
 
-        uint256[] memory _strategiesAndSupportedTokensBalances = new uint256[](
-            strategiesCount + supportedTokensCount
-        );
+        uint256[] memory _strategiesAndSupportedTokensBalances = new uint256[](strategiesCount + supportedTokensCount);
 
         // point 5
         // We fill in strategies balances with tokens that strategies are accepting and ignoring duplicates
@@ -394,41 +319,23 @@ contract Batching is Ownable {
 
         // we fill in strategies balances with balances of remaining tokens that are supported as deposits but are not
         // accepted in strategies
-        for (
-            uint256 i = strategiesCount;
-            i < _strategiesAndSupportedTokensBalances.length;
-            i++
-        ) {
-            _strategiesAndSupportedTokensBalances[i] = _balances[
-                i - strategiesCount
-            ];
+        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
+            _strategiesAndSupportedTokensBalances[i] = _balances[i - strategiesCount];
         }
 
         // point 6a
         uint256[] memory toBuy = new uint256[](strategiesCount);
-        uint256[] memory toSell = new uint256[](
-            _strategiesAndSupportedTokensBalances.length
-        );
+        uint256[] memory toSell = new uint256[](_strategiesAndSupportedTokensBalances.length);
         for (uint256 i; i < strategiesCount; i++) {
-            uint256 desiredBalance = (totalInBatch *
-                router.getStrategyPercentWeight(i)) / 1e18;
-            desiredBalance = fromUniform(
-                desiredBalance,
-                router.getStrategyDepositToken(i)
-            );
+            uint256 desiredBalance = (totalInBatch * router.getStrategyPercentWeight(i)) / 1e18;
+            desiredBalance = fromUniform(desiredBalance, router.getStrategyDepositToken(i));
             // we skip safemath check since we already do comparison in if clauses
             unchecked {
                 // point 6b
                 if (desiredBalance > _strategiesAndSupportedTokensBalances[i]) {
-                    toBuy[i] =
-                        desiredBalance -
-                        _strategiesAndSupportedTokensBalances[i];
-                } else if (
-                    desiredBalance < _strategiesAndSupportedTokensBalances[i]
-                ) {
-                    toSell[i] =
-                        _strategiesAndSupportedTokensBalances[i] -
-                        desiredBalance;
+                    toBuy[i] = desiredBalance - _strategiesAndSupportedTokensBalances[i];
+                } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
+                    toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
                 }
             }
         }
@@ -436,11 +343,7 @@ contract Batching is Ownable {
         // point 7
         // all tokens we accept to deposit but are not part of strategies therefore we are going to swap them
         // to tokens that strategies are accepting
-        for (
-            uint256 i = strategiesCount;
-            i < _strategiesAndSupportedTokensBalances.length;
-            i++
-        ) {
+        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
             toSell[i] = _strategiesAndSupportedTokensBalances[i];
         }
 
@@ -468,23 +371,13 @@ contract Batching is Ownable {
                     curSell should have sellToken decimals
                     */
                     uint256 curSell = toSellUniform > toBuyUniform
-                        ? changeDecimals(
-                            toBuyUniform,
-                            UNIFORM_DECIMALS,
-                            ERC20(sellToken).decimals()
-                        )
+                        ? changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals())
                         : toSell[i];
 
                     // no need to swap small amounts
-                    if (
-                        toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD
-                    ) {
+                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
                         toSell[i] = 0;
-                        toBuy[j] -= changeDecimals(
-                            curSell,
-                            ERC20(sellToken).decimals(),
-                            ERC20(buyToken).decimals()
-                        );
+                        toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                         break;
                     }
                     uint256 received = _trySwap(curSell, sellToken, buyToken);
@@ -492,11 +385,7 @@ contract Batching is Ownable {
                     _strategiesAndSupportedTokensBalances[i] -= curSell;
                     _strategiesAndSupportedTokensBalances[j] += received;
                     toSell[i] -= curSell;
-                    toBuy[j] -= changeDecimals(
-                        curSell,
-                        ERC20(sellToken).decimals(),
-                        ERC20(buyToken).decimals()
-                    );
+                    toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                 }
             }
         }
@@ -511,12 +400,8 @@ contract Batching is Ownable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported)
-        external
-        onlyOwner
-    {
-        if (supported && supportsToken(tokenAddress))
-            revert AlreadySupportedToken();
+    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
+        if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
         if (supported) {
             supportedTokens.add(tokenAddress);
@@ -563,22 +448,12 @@ contract Batching is Ownable {
     }
 
     /// @dev Change decimal places from token decimals to `UNIFORM_DECIMALS`.
-    function toUniform(uint256 amount, address token)
-        private
-        view
-        returns (uint256)
-    {
-        return
-            changeDecimals(amount, ERC20(token).decimals(), UNIFORM_DECIMALS);
+    function toUniform(uint256 amount, address token) private view returns (uint256) {
+        return changeDecimals(amount, ERC20(token).decimals(), UNIFORM_DECIMALS);
     }
 
     /// @dev Convert decimal places from `UNIFORM_DECIMALS` to token decimals.
-    function fromUniform(uint256 amount, address token)
-        private
-        view
-        returns (uint256)
-    {
-        return
-            changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
+    function fromUniform(uint256 amount, address token) private view returns (uint256) {
+        return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
     }
 }

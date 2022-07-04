@@ -35,10 +35,7 @@ contract Exchange is Ownable {
         address[] calldata plugin
     ) external onlyOwner {
         for (uint256 i = 0; i < tokensA.length; i++) {
-            (address token0, address token1) = sortTokens(
-                tokensA[i],
-                tokensB[i]
-            );
+            (address token0, address token1) = sortTokens(tokensA[i], tokensB[i]);
             routes[token0][token1].defaultRoute = plugin[i];
         }
     }
@@ -49,10 +46,7 @@ contract Exchange is Ownable {
         RouteParams[] calldata _routes
     ) external onlyOwner {
         for (uint256 i = 0; i < tokensA.length; i++) {
-            (address token0, address token1) = sortTokens(
-                tokensA[i],
-                tokensB[i]
-            );
+            (address token0, address token1) = sortTokens(tokensA[i], tokensB[i]);
             routes[token0][token1] = _routes[i];
         }
     }
@@ -65,8 +59,7 @@ contract Exchange is Ownable {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         uint256 limit = routes[token0][token1].limit;
         address plugin;
-        if (amountA < limit || limit == 0)
-            plugin = routes[token0][token1].defaultRoute;
+        if (amountA < limit || limit == 0) plugin = routes[token0][token1].defaultRoute;
         else plugin = routes[token0][token1].secondRoute;
         if (plugin == address(0)) revert RouteNotFound();
         return plugin;
@@ -98,22 +91,11 @@ contract Exchange is Ownable {
     ) public returns (uint256 amountReceived) {
         address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
         ERC20(tokenA).transfer(plugin, amountA);
-        amountReceived = IExchangePlugin(plugin).swap(
-            amountA,
-            tokenA,
-            tokenB,
-            to
-        );
+        amountReceived = IExchangePlugin(plugin).swap(amountA, tokenA, tokenB, to);
         if (amountReceived == 0) revert RoutedSwapFailed();
     }
 
-    function sortTokens(address tokenA, address tokenB)
-        internal
-        pure
-        returns (address token0, address token1)
-    {
-        (token0, token1) = tokenA < tokenB
-            ? (tokenA, tokenB)
-            : (tokenB, tokenA);
+    function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
+        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
     }
 }
