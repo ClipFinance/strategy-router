@@ -118,7 +118,7 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   busd = busd.address;
   usdc = usdc.address;
   usdt = usdt.address;
-  await exchange.setPlugin(
+  await exchange.setRoute(
     [busd, busd, usdc, bsw, bsw, bsw],
     [usdt, usdc, usdt, busd, usdt, usdc],
     [pancake, pancake, pancake, pancake, pancake, pancake]
@@ -163,7 +163,7 @@ async function setupPancakePlugin(exchange, usdc, usdt, busd) {
   busd = busd.address;
   usdc = usdc.address;
   usdt = usdt.address;
-  await exchange.setPlugin(
+  await exchange.setRoute(
       [busd, busd, usdc, bsw, bsw, bsw],
       [usdt, usdc, usdt, busd, usdt, usdc],
       [pancake, pancake, pancake, pancake, pancake, pancake]
@@ -202,7 +202,7 @@ async function setupPluginsOnBNB(exchange) {
   let pancakePlugin = await deploy("UniswapPlugin");
 
   // Setup exchange params
-  await exchange.setPlugin(
+  await exchange.setRoute(
     [busd, busd, usdc, bsw, bsw, bsw],
     [usdt, usdc, usdt, busd, usdt, usdc],
     [acsPlugin.address, acsPlugin.address, acsPlugin.address, 

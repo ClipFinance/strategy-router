@@ -20,6 +20,7 @@ module.exports = function strategyTest(strategyName) {
 
     let amountDeposit;
     let amountWithdraw;
+    let snapshotId;
 
     before(async function () {
       [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();

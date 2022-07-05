@@ -23,33 +23,19 @@ contract ChainlinkOracle is Ownable {
     }
 
     /// @notice Set price feed for token / usd.
-    function setPriceFeed(
-        address token,
-        address feed
-    ) external onlyOwner {
+    function setPriceFeed(address token, address feed) external onlyOwner {
         feeds[token][Denominations.USD] = feed;
     }
 
     /**
      * Returns the latest token / usd price and its decimals
      */
-    function getTokenUsdPrice(address base)
-        public
-        view
-        returns (uint256 price, uint8 decimals)
-    {
-        AggregatorV3Interface feed = AggregatorV3Interface(feeds[base][Denominations.USD]);   
+    function getTokenUsdPrice(address base) public view returns (uint256 price, uint8 decimals) {
+        AggregatorV3Interface feed = AggregatorV3Interface(feeds[base][Denominations.USD]);
 
-        (
-            ,
-            int256 _price,
-            ,
-            uint256 updatedAt, 
+        (, int256 _price, , uint256 updatedAt, ) = feed.latestRoundData();
 
-        ) = feed.latestRoundData();
-
-        if (updatedAt <= block.timestamp - 24 hours)
-            revert StaleChainlinkPrice();
+        if (updatedAt <= block.timestamp - 24 hours) revert StaleChainlinkPrice();
         if (_price <= 0) revert BadPrice();
 
         return (uint256(_price), feed.decimals());

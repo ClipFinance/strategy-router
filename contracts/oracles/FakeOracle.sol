@@ -13,7 +13,7 @@ contract FakeOracle is IUsdOracle, Ownable {
     error BadPrice();
 
     struct Price {
-        uint price;
+        uint256 price;
         uint8 decimals;
     }
 
@@ -31,18 +31,13 @@ contract FakeOracle is IUsdOracle, Ownable {
 
     // set fake prices
     function setPrice(address base, uint256 price) public {
-        prices[base][Denominations.USD] = Price(price, ERC20(base).decimals()); 
+        prices[base][Denominations.USD] = Price(price, ERC20(base).decimals());
     }
 
     /**
      * Returns the latest token / usd price and its decimals
      */
-    function getTokenUsdPrice(address base)
-        public
-        view
-        override
-        returns (uint256 price, uint8 decimals)
-    {
+    function getTokenUsdPrice(address base) public view override returns (uint256 price, uint8 decimals) {
         price = prices[base][Denominations.USD].price;
         decimals = prices[base][Denominations.USD].decimals;
     }

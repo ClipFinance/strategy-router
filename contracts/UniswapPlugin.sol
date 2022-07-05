@@ -34,11 +34,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         useWeth[token0][token1] = _useWeth;
     }
 
-    function isUseWeth(address tokenA, address tokenB)
-        public
-        view
-        returns (bool)
-    {
+    function isUseWeth(address tokenA, address tokenB) public view returns (bool) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         return useWeth[token0][token1];
     }
@@ -65,12 +61,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getFee(address, address)
-        public
-        pure
-        override
-        returns (uint256 feePercent)
-    {
+    function getFee(address, address) public pure override returns (uint256 feePercent) {
         return 25e14; // 0.25% or 0.0025 with 18 decimals
     }
 
@@ -100,26 +91,16 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     ) private returns (uint256 amountReceivedTokenB) {
         IERC20(path[0]).approve(address(uniswapRouter), amountA);
 
-        uint256 received = uniswapRouter.swapExactTokensForTokens(
-            amountA,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        )[path.length - 1];
+        uint256 received = uniswapRouter.swapExactTokensForTokens(amountA, 0, path, address(this), block.timestamp)[
+            path.length - 1
+        ];
 
         IERC20(path[path.length - 1]).transfer(to, received);
 
         return received;
     }
 
-    function sortTokens(address tokenA, address tokenB)
-        internal
-        pure
-        returns (address token0, address token1)
-    {
-        (token0, token1) = tokenA < tokenB
-            ? (tokenA, tokenB)
-            : (tokenB, tokenA);
+    function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
+        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
     }
 }

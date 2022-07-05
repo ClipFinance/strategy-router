@@ -140,15 +140,14 @@ contract Batching is Ownable {
         if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 
         uint256 tokenAmountToTransfer; // final token amount to transfer to user from batching
-        uint256 withdrawTokenIndex;
+        uint256 withdrawTokenIndex = supportedTokens.indexOf(withdrawToken);
 
         // try withdraw requested token directly where is more than enough of same token in batching
-        if (supportedTokenBalancesUsd[supportedTokens.indexOf(withdrawToken)] >= valueToWithdrawUsd) {
+        if (supportedTokenBalancesUsd[withdrawTokenIndex] >= valueToWithdrawUsd) {
             tokenAmountToTransfer = convertUsdAmountToTokenAmount(valueToWithdrawUsd, withdrawToken);
             return tokenAmountToTransfer;
         } else {
-            // not enough withdraw token in batching, save withdraw token index
-            withdrawTokenIndex = supportedTokens.indexOf(withdrawToken);
+            // not enough withdraw token in batching
             // deduct usd amount of withdraw token
             valueToWithdrawUsd -= supportedTokenBalancesUsd[withdrawTokenIndex];
             tokenAmountToTransfer = convertUsdAmountToTokenAmount(

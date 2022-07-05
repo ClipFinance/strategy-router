@@ -5,7 +5,7 @@ const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSet
 const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = require("./utils");
 
 
-describe("Test StrategyRouter with two real strategies on bnb chain", function () {
+describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
 
   let owner;
   // mock tokens with different decimals

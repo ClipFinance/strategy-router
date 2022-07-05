@@ -35,8 +35,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
 
     function setAmount(uint256 tokenId, uint256 amount) external onlyManager {
         if (!_exists(tokenId)) revert NonExistingToken();
-        if (receipts[tokenId].amount < amount)
-            revert ReceiptAmountCanOnlyDecrease();
+        if (receipts[tokenId].amount < amount) revert ReceiptAmountCanOnlyDecrease();
         receipts[tokenId].amount = amount;
     }
 
@@ -47,11 +46,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
         address wallet
     ) external onlyManager {
         uint256 _receiptId = _receiptsCounter;
-        receipts[_receiptId] = ReceiptData({
-            cycleId: cycleId,
-            token: token,
-            amount: amount
-        });
+        receipts[_receiptId] = ReceiptData({cycleId: cycleId, token: token, amount: amount});
         _mint(wallet, _receiptId);
         _receiptsCounter++;
     }
@@ -62,11 +57,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
     }
 
     /// @notice Get receipt data recorded in NFT.
-    function getReceipt(uint256 tokenId)
-        external
-        view
-        returns (ReceiptData memory)
-    {
+    function getReceipt(uint256 tokenId) external view returns (ReceiptData memory) {
         if (_exists(tokenId) == false) revert NonExistingToken();
         return receipts[tokenId];
     }
@@ -141,11 +132,7 @@ contract ReceiptNFT is ERC721("Receipt NFT", "RECEIPT") {
      * multiple smaller scans if the collection is large enough to cause
      * an out-of-gas error.
      */
-    function getTokensOfOwner(address owner)
-        public
-        view
-        returns (uint256[] memory tokenIds)
-    {
+    function getTokensOfOwner(address owner) public view returns (uint256[] memory tokenIds) {
         uint256 balance = balanceOf(owner);
         tokenIds = new uint256[](balance);
         uint256 tokenId;

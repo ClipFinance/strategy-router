@@ -73,7 +73,7 @@ async function main() {
     hre.networkVariables.acs4usd.tokens,
     hre.networkVariables.acs4usd.coinIds
   )).wait();
-  await (await exchange.setPlugin(
+  await (await exchange.setRoute(
     [
       hre.networkVariables.busd,
       hre.networkVariables.busd,
