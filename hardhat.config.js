@@ -40,7 +40,7 @@ module.exports = {
     hardhat: {
       forking: {
         url: process.env.BNB_URL,
-        blockNumber: 18089846, // use this only with archival node
+        blockNumber: 19232650, // use this only with archival node
         enabled: true
       },
       // allowUnlimitedContractSize: true,
@@ -77,6 +77,29 @@ module.exports = {
     compilers: [
       {
         version: "0.8.4",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "istanbul",
+          outputSelection: {
+            "*": {
+              "": ["ast"],
+              "*": [
+                "evm.bytecode.object",
+                "evm.deployedBytecode.object",
+                "abi",
+                "evm.bytecode.sourceMap",
+                "evm.deployedBytecode.sourceMap",
+                "metadata",
+              ],
+            },
+          },
+        },
+      },
+      {
+        version: "0.6.6",
         settings: {
           optimizer: {
             enabled: true,
