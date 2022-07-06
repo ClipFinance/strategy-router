@@ -4,6 +4,7 @@ const { ethers, artifacts } = require("hardhat");
 const { provider, deploy, MaxUint256 } = require("./utils");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
 const { deployMockContract } = require("ethereum-waffle");
+const { BigNumber } = require("ethers");
 
 describe("Test Exchange", function () {
     let owner, nonOwner, stubPlugin, stubPlugin2;
@@ -80,7 +81,10 @@ describe("Test Exchange", function () {
         });
         it("should store default route", async function () {
             await exchange.setRoute([usdc.address], [busd.address], [stubPlugin.address]);
-            let route = await exchange.routes(usdc.address, busd.address);
+            let [token0, token1] = BigNumber.from(usdc.address).lt(BigNumber.from(busd.address)) 
+                ? [usdc.address, busd.address] 
+                : [busd.address, usdc.address];
+            let route = await exchange.routes(token0, token1);
             expect(route.defaultRoute).to.be.equal(stubPlugin.address);
         });
     });
@@ -93,7 +97,10 @@ describe("Test Exchange", function () {
         it("should store all RouteParams", async function () {
             let routeParams = { defaultRoute: stubPlugin.address, limit: parseEther("1"), secondRoute: stubPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
-            let route = await exchange.routes(usdc.address, busd.address);
+            let [token0, token1] = BigNumber.from(usdc.address).lt(BigNumber.from(busd.address)) 
+                ? [usdc.address, busd.address] 
+                : [busd.address, usdc.address];
+            let route = await exchange.routes(token0, token1);
             expect(route.defaultRoute).to.be.equal(routeParams.defaultRoute);
             expect(route.limit).to.be.equal(routeParams.limit);
             expect(route.secondRoute).to.be.equal(routeParams.secondRoute);

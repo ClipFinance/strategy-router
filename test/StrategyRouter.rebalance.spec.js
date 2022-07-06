@@ -182,15 +182,15 @@ describe("Test rebalance functions", function () {
       await router.addStrategy(farm2.address, busd.address, 7000);
       await router.addStrategy(farm.address, usdt.address, 3000);
 
-      await router.depositToBatch(usdt.address, parseUsdt("220100"));
-      await router.depositToBatch(busd.address, parseBusd("92300"));
-      await router.depositToBatch(usdc.address, parseUsdc("397600"));
+      await router.depositToBatch(usdt.address, parseUsdt("2201"));
+      await router.depositToBatch(busd.address, parseBusd("923"));
+      await router.depositToBatch(usdc.address, parseUsdc("3976"));
 
       await verifyTokensRatio([13, 56, 31]);
 
       let ret = await router.callStatic.rebalanceBatching();
       // console.log(ret);
-      await verifyRatioOfReturnedData([5740, 2460], ret);
+      await verifyRatioOfReturnedData([7, 3], ret);
 
       let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
       // console.log("gasUsed", gas);
@@ -384,7 +384,7 @@ describe("Test rebalance functions", function () {
   // weights order should match 'tokens' order
   async function verifyTokensRatio(weights) {
     assert((await router.getSupportedTokens()).length == weights.length);
-    const ERROR_THRESHOLD = 0.16;
+    const ERROR_THRESHOLD = 0.6;
     const { total: totalUsd, balances: tokenBalancesUsd } = await getTokenBalances();
     let totalWeight = weights.reduce((e, acc) => acc + e);
     // console.log("Total weight: " + totalWeight);
@@ -400,7 +400,7 @@ describe("Test rebalance functions", function () {
       totalWeightsSum += percentBalance;
       // console.log("-- Cycle #" + i + " passed, starting next cycle #" + (i+1));
     }
-    expect(totalWeightsSum).to.be.eq(100);
+    expect(totalWeightsSum).to.be.closeTo(100, 0.1);
   }
 
   async function verifyStrategiesRatio(weights) {

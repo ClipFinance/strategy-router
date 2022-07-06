@@ -3,7 +3,7 @@
     {
       "files": "*.sol",
       "options": {
-        "printWidth": 121
+        "printWidth": 120
       }
     }
   ]

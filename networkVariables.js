@@ -12,7 +12,7 @@ function bnbChain() {
     // current token holders for tests, 
     // may not work based on block number used in forking, in such case try find other holders
     busdHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
-    usdcHolder: "0x6782472a11987e6f4a8afb10def25b498cb622db",
+    usdcHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
     usdtHolder: "0xf977814e90da44bfa03b6295a0616a897441acec"
   };
 
