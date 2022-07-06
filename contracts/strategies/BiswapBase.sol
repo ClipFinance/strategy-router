@@ -51,7 +51,7 @@ contract BiswapBase is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getFee(amount / 2, address(tokenA), address(tokenB));
         uint256 amountB = calculateSwapAmount(amount / 2, dexFee);
@@ -77,14 +77,19 @@ contract BiswapBase is Ownable, IStrategy {
         farm.deposit(poolId, liquidity);
     }
 
-    function withdraw(uint256 amount) external override onlyOwner returns (uint256 amountWithdrawn) {
+    function withdraw(uint256 strategyTokenAmountToWithdraw)
+        external
+        override
+        onlyOwner
+        returns (uint256 amountWithdrawn)
+    {
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
         address token1 = IUniswapV2Pair(address(lpToken)).token1();
         uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
         uint256 balance1 = IERC20(token1).balanceOf(address(lpToken));
 
-        uint256 amountA = amount / 2;
-        uint256 amountB = amount - amountA;
+        uint256 amountA = strategyTokenAmountToWithdraw / 2;
+        uint256 amountB = strategyTokenAmountToWithdraw - amountA;
 
         (balance0, balance1) = token0 == address(tokenA) ? (balance0, balance1) : (balance1, balance0);
 
@@ -104,7 +109,7 @@ contract BiswapBase is Ownable, IStrategy {
             block.timestamp
         );
 
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
         tokenB.transfer(address(exchange), amountB);
         amountA += exchange.swap(amountB, address(tokenB), address(tokenA), address(this));
         tokenA.transfer(msg.sender, amountA);
@@ -188,7 +193,7 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 amountB = tokenB.balanceOf(address(this));
 
         if (amountB > 0) {
-            Exchange exchange = strategyRouter.exchange();
+            Exchange exchange = strategyRouter.getExchange();
             tokenB.transfer(address(exchange), amountB);
             amountA += exchange.swap(amountB, address(tokenB), address(tokenA), address(this));
         }
@@ -200,7 +205,7 @@ contract BiswapBase is Ownable, IStrategy {
 
     /// @dev Swaps leftover tokens for a better ratio for LP.
     function fix_leftover(uint256 amountIgnore) private {
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
         uint256 amountB = tokenB.balanceOf(address(this));
         uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
@@ -223,7 +228,7 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 amountA = bswAmount / 2;
         uint256 amountB = bswAmount - amountA;
 
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
         bsw.transfer(address(exchange), amountA);
         receivedA = exchange.swap(amountA, address(bsw), address(tokenA), address(this));
 
