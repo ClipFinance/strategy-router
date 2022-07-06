@@ -54,8 +54,8 @@ contract BiswapBase is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override onlyOwner {
-        Exchange exchange = strategyRouter.exchange();
-        uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
+        Exchange exchange = strategyRouter.getExchange();
+        uint256 dexFee = exchange.getFee(amount, address(tokenA), address(tokenB));
 
         uint256 amountB = calculateSwapAmount(amount, dexFee);
         uint256 amountA = amount - amountB;
@@ -85,7 +85,7 @@ contract BiswapBase is Ownable, IStrategy {
         farm.deposit(poolId, liquidity);
     }
 
-    function withdraw(uint256 amount)
+    function withdraw(uint256 strategyTokenAmountToWithdraw)
         external
         override
         onlyOwner
@@ -96,8 +96,8 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
         uint256 balance1 = IERC20(token1).balanceOf(address(lpToken));
 
-        uint256 amountA = amount / 2;
-        uint256 amountB = amount - amountA;
+        uint256 amountA = strategyTokenAmountToWithdraw / 2;
+        uint256 amountB = strategyTokenAmountToWithdraw - amountA;
 
         (balance0, balance1) = token0 == address(tokenA)
             ? (balance0, balance1)
@@ -120,7 +120,7 @@ contract BiswapBase is Ownable, IStrategy {
             block.timestamp
         );
 
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
         tokenB.transfer(address(exchange), amountB);
         amountA += exchange.swap(
             amountB,
@@ -214,7 +214,7 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 amountB = tokenB.balanceOf(address(this));
 
         if (amountB > 0) {
-            Exchange exchange = strategyRouter.exchange();
+            Exchange exchange = strategyRouter.getExchange();
             tokenB.transfer(address(exchange), amountB);
             amountA += exchange.swap(
                 amountB,
@@ -231,8 +231,8 @@ contract BiswapBase is Ownable, IStrategy {
 
     /// @dev Swaps leftover tokens for a better ratio for LP.
     function fix_leftover(uint256 amountIgnore) private {
-        Exchange exchange = strategyRouter.exchange();
-        uint256 dexFee = exchange.getFee(address(tokenA), address(tokenB));
+        Exchange exchange = strategyRouter.getExchange();
+        uint256 dexFee = exchange.getFee(amountIgnore, address(tokenA), address(tokenB));
         uint256 amountB = tokenB.balanceOf(address(this));
         uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
@@ -272,7 +272,7 @@ contract BiswapBase is Ownable, IStrategy {
         uint256 amountA = bswAmount / 2;
         uint256 amountB = bswAmount - amountA;
 
-        Exchange exchange = strategyRouter.exchange();
+        Exchange exchange = strategyRouter.getExchange();
         bsw.transfer(address(exchange), amountA);
         receivedA = exchange.swap(
             amountA,
