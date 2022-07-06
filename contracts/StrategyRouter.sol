@@ -324,6 +324,14 @@ contract StrategyRouter is Ownable {
         return batching.getBatchingValueUsd();
     }
 
+    function getExchange()
+        public
+        view
+        returns (Exchange)
+    {
+        return exchange;
+    }
+
     /// @notice Returns amount of shares locked by multiple receipts.
     /// @notice Cycle noted in receipts should be closed.
     function receiptsToShares(uint256[] calldata receiptIds)
@@ -405,7 +413,7 @@ contract StrategyRouter is Ownable {
         uint256 shares
     ) external {
         if (shares == 0) revert AmountNotSpecified();
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
+        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 unlockedShares = _unlockShares(receiptIds);
 
@@ -422,9 +430,9 @@ contract StrategyRouter is Ownable {
         }
 
         // shares into usd using current PPS
-        uint256 valueToWithdraw = sharesToUsd(shares);
+        uint256 usdToWithdraw = sharesToUsd(shares);
         sharesToken.burn(address(this), shares);
-        _withdrawFromStrategies(valueToWithdraw, withdrawToken);
+        _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
 
     /// @notice Withdraw tokens from strategies while receipts are in batching.
@@ -440,7 +448,7 @@ contract StrategyRouter is Ownable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public {
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
+        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = currentCycleId;
         uint256 toWithdraw;
@@ -482,17 +490,19 @@ contract StrategyRouter is Ownable {
         cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
     }
 
-    /// @notice Withdraw tokens from strategies by shares.
+    /// @notice Withdraw tokens from strategies by shares. This scenario takes place when user has withdrawn from strategy
+    /// where he has before taken out from receiptIds partially receipt amount so we created him shares
+    /// instead of new receipt
     /// @param shares Amount of shares to withdraw.
     /// @param withdrawToken Supported token that user wish to receive.
     function withdrawShares(uint256 shares, address withdrawToken) public {
         if (sharesToken.balanceOf(msg.sender) < shares)
             revert InsufficientShares();
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
+        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 amount = sharesToUsd(shares);
+        uint256 withdrawAmountUsd = sharesToUsd(shares);
         sharesToken.burn(msg.sender, shares);
-        _withdrawFromStrategies(amount, withdrawToken);
+        _withdrawFromStrategies(withdrawAmountUsd, withdrawToken);
     }
 
     /// @notice Withdraw tokens from batching by shares.
@@ -958,98 +968,88 @@ contract StrategyRouter is Ownable {
         batching._withdraw(valueToWithdraw, withdrawToken);
     }
 
-    /// @param amountInUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
-    function _withdrawFromStrategies(uint256 amountInUsd, address withdrawToken)
+    /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
+    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken)
         private
     {
         (
             uint256 strategiesLockedUsd,
-            uint256[] memory balances
+            uint256[] memory strategyTokenBalancesUsd
         ) = getStrategiesValue();
-        uint256 len = strategies.length;
+        uint256 strategiesCount = strategies.length;
 
-        uint256 amountToTransfer;
+        uint256 tokenAmountToWithdraw;
 
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
-        uint256 found = type(uint256).max; // index of strategy, uint.max means not found
-        for (uint256 i; i < len; i++) {
-            address curToken = strategies[i].depositToken;
-            if (balances[i] >= amountInUsd) {
-                if (curToken == withdrawToken) {
-                    found = i;
-                    break;
-                } else {
-                    found = i;
-                }
+        uint256 supportedTokenId = type(uint256).max; // index of strategy, uint.max means not found
+        for (uint256 i; i < strategiesCount; i++) {
+            address strategyDepositToken = strategies[i].depositToken;
+            if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
+                supportedTokenId = i;
+                if (strategyDepositToken == withdrawToken) break;
             }
         }
 
-        if (found != type(uint256).max) {
-            address token = strategies[found].depositToken;
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                token
-            );
+        if (supportedTokenId != type(uint256).max) {
+            address tokenAddress = strategies[supportedTokenId].depositToken;
+            (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
+
             // convert usd to token amount
-            amountToTransfer = (amountInUsd * 10**priceDecimals) / price;
+            tokenAmountToWithdraw = (withdrawAmountUsd * 10** oraclePriceDecimals) / tokenUsdPrice;
             // convert uniform decimals to token decimas
-            amountToTransfer = StrategyRouterLib.fromUniform(
-                amountToTransfer,
-                token
-            );
+            tokenAmountToWithdraw = StrategyRouterLib.fromUniform(tokenAmountToWithdraw, tokenAddress);
+
             // withdraw from strategy
-            amountToTransfer = IStrategy(strategies[found].strategyAddress)
-                .withdraw(amountToTransfer);
+            tokenAmountToWithdraw = IStrategy(strategies[supportedTokenId].strategyAddress)
+            .withdraw(tokenAmountToWithdraw);
             // is withdrawn token not the one that's requested?
-            if (token != withdrawToken) {
+            if (tokenAddress != withdrawToken) {
                 // swap withdrawn token to the requested one
-                amountToTransfer = StrategyRouterLib.trySwap(
+                tokenAmountToWithdraw = StrategyRouterLib.trySwap(
                     exchange,
-                    amountToTransfer,
-                    token,
+                    tokenAmountToWithdraw,
+                    tokenAddress,
                     withdrawToken
                 );
             }
-            amountInUsd = 0;
+            withdrawAmountUsd = 0;
         }
 
         // if we didn't fulfilled withdraw amount above,
         // swap tokens one by one until withraw amount is fulfilled
-        if (amountInUsd != 0) {
-            for (uint256 i; i < len; i++) {
-                address token = strategies[i].depositToken;
-                uint256 toSwap;
-                (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(
-                    token
-                );
+        if (withdrawAmountUsd != 0) {
+            for (uint256 i; i < strategiesCount; i++) {
+                address tokenAddress = strategies[i].depositToken;
+                uint256 tokenAmountToSwap;
+                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
 
-                toSwap = balances[i] < amountInUsd ? balances[i] : amountInUsd;
-                unchecked {
-                    amountInUsd -= toSwap;
-                }
+                // at this moment its in USD
+                tokenAmountToSwap = strategyTokenBalancesUsd[i] < withdrawAmountUsd ? strategyTokenBalancesUsd[i] : withdrawAmountUsd;
+            unchecked {
+                withdrawAmountUsd -= tokenAmountToSwap;
+            }
                 // convert usd value into token amount
-                toSwap = (toSwap * 10**priceDecimals) / price;
+                tokenAmountToSwap = (tokenAmountToSwap * 10** oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
-                toSwap = StrategyRouterLib.fromUniform(toSwap, token);
-                toSwap = IStrategy(strategies[i].strategyAddress).withdraw(
-                    toSwap
-                );
+                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, tokenAddress);
+                tokenAmountToSwap = IStrategy(strategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                 // swap for requested token
-                amountToTransfer += StrategyRouterLib.trySwap(
+                tokenAmountToWithdraw += StrategyRouterLib.trySwap(
                     exchange,
-                    toSwap,
-                    token,
+                    tokenAmountToSwap,
+                    tokenAddress,
                     withdrawToken
                 );
-                if (amountInUsd == 0) break;
+                if (withdrawAmountUsd == 0) break;
             }
         }
 
-        IERC20(withdrawToken).transfer(msg.sender, amountToTransfer);
+        IERC20(withdrawToken).transfer(msg.sender, tokenAmountToWithdraw);
         emit WithdrawFromStrategies(
             msg.sender,
             withdrawToken,
-            amountToTransfer
+            tokenAmountToWithdraw
         );
     }
 
