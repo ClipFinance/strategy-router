@@ -62,7 +62,7 @@ contract StrategyRouter is Ownable {
     error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
-    // error InitialSharesAreUnwithdrawable();
+    error NotWhitelistedUnlocker();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -113,6 +113,12 @@ contract StrategyRouter is Ownable {
 
     StrategyInfo[] public strategies;
     mapping(uint256 => Cycle) public cycles;
+    mapping(address => bool) public whitelistedUnlockers;
+
+    modifier onlyUnlocker() {
+        if (whitelistedUnlockers[msg.sender] == false) revert NotWhitelistedUnlocker();
+        _;
+    }
 
     constructor(address _exchange, address _oracle) {
         sharesToken = new SharesToken();
@@ -291,6 +297,12 @@ contract StrategyRouter is Ownable {
             uint256 receiptId = receiptIds[i];
             shares += StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
         }
+    }
+
+    /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
+    /// @notice Cycle noted in receipts should be closed.
+    function unlockSharesFromReceipts(uint256[] calldata receiptIds) public onlyUnlocker {
+        StrategyRouterLib.unlockSharesFromReceipts(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
     }
 
     /// @notice Returns usd value of shares.
@@ -573,6 +585,11 @@ contract StrategyRouter is Ownable {
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
         batching.setSupportedToken(tokenAddress, supported);
+    }
+
+    /// @dev Admin function.
+    function setUnlocker(address unlockerAddress, bool isWhitelisted) external onlyOwner {
+        whitelistedUnlockers[unlockerAddress] = isWhitelisted;
     }
 
     /// @notice Set address of oracle contract.

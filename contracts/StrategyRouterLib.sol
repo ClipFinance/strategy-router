@@ -99,4 +99,42 @@ library StrategyRouterLib {
     function fromUniform(uint256 amount, address token) internal view returns (uint256) {
         return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
     }
+
+    function unlockSharesFromReceipts(
+        uint256[] calldata receiptIds,
+        ReceiptNFT _receiptContract,
+        SharesToken _sharesToken,
+        uint256 _currentCycleId,
+        mapping(uint256 => StrategyRouter.Cycle) storage cycles
+    ) public {
+        if (receiptIds.length == 0) revert();
+        uint256 sameOwnerShares;
+        // address sameOwnerAddress;
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            // uint256 shares = StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            uint256 shares = receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            address receiptOwner = _receiptContract.ownerOf(receiptId);
+            if (i + 1 < receiptIds.length) {
+                uint256 nextReceiptId = receiptIds[i + 1];
+                address nextReceiptOwner = _receiptContract.ownerOf(nextReceiptId);
+                if (nextReceiptOwner == receiptOwner) {
+                    sameOwnerShares += shares;
+                    // sameOwnerAddress = nextReceiptOwner;
+                } else {
+                    // this is the last receipt in a row of the same owner
+                    sameOwnerShares += shares;
+                    _sharesToken.transfer(receiptOwner, sameOwnerShares);
+                    sameOwnerShares = 0;
+                    // sameOwnerAddress = address(0);
+                }
+            } else {
+                // this is the last receipt in the list, if previous owner is different then
+                // sameOwnerShares is 0, otherwise it contain amount unlocked for that owner
+                sameOwnerShares += shares;
+                _sharesToken.transfer(receiptOwner, sameOwnerShares);
+            }
+            _receiptContract.burn(receiptId);
+        }
+    }
 }

@@ -40,7 +40,7 @@ module.exports = {
     hardhat: {
       forking: {
         url: process.env.BNB_URL,
-        blockNumber: 19232650, // use this only with archival node
+        // blockNumber: 19232650, // use this only with archival node
         enabled: true
       },
       // allowUnlimitedContractSize: true,

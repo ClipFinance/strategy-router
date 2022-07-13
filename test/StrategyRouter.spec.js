@@ -279,4 +279,97 @@ describe("Test StrategyRouter", function () {
 
   });
 
+  describe("unlockSharesFromReceipts", function () {
+    it("should revert when caller not whitelisted unlocker", async function () {
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToStrategies();
+      await expect(router.unlockSharesFromReceipts([1])).to.be.revertedWith("NotWhitelistedUnlocker()");
+    });
+
+    it("should unlock list of 1 receipt", async function () {
+      await router.setUnlocker(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToStrategies();
+      let receiptsShares = await router.receiptsToShares([1]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      await router.unlockSharesFromReceipts([1]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      expect(receipts.toString()).to.be.equal("0");
+    });
+
+    it("should unlock list of 2 receipt same owner", async function () {
+      await router.setUnlocker(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToStrategies();
+      let receiptsShares = await router.receiptsToShares([1]);
+      let receiptsShares2 = await router.receiptsToShares([2]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      await router.unlockSharesFromReceipts([1,2]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares.add(receiptsShares2));
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      expect(receipts.toString()).to.be.equal("0");
+    });
+
+    it("should unlock list of 2 receipt with different owners", async function () {
+      [,,,,owner2] = await ethers.getSigners();
+      await router.setUnlocker(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await busd.transfer(owner2.address, parseBusd("10"));
+      await busd.connect(owner2).approve(router.address, parseBusd("10"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToStrategies();
+      let receiptsShares = await router.receiptsToShares([1]);
+      let receiptsShares2 = await router.receiptsToShares([2]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      let oldBalance2 = await sharesToken.balanceOf(owner2.address);
+      await router.unlockSharesFromReceipts([1,2]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      let newBalance2 = await sharesToken.balanceOf(owner2.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      expect(newBalance2.sub(oldBalance2)).to.be.equal(receiptsShares2);
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      let receipts2 = await receiptContract.getTokensOfOwner(owner2.address);
+      expect(receipts.toString()).to.be.equal("0");
+      expect(receipts2.toString()).to.be.equal("");
+    });
+
+    it("should unlock list of 4 receipt, two different owners", async function () {
+      [,,,,owner2] = await ethers.getSigners();
+      await router.setUnlocker(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await busd.transfer(owner2.address, parseBusd("100"));
+      await busd.connect(owner2).approve(router.address, parseBusd("100"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToStrategies();
+      let receiptsShares = await router.receiptsToShares([1,2]);
+      let receiptsShares2 = await router.receiptsToShares([3,4]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      let oldBalance2 = await sharesToken.balanceOf(owner2.address);
+      await router.unlockSharesFromReceipts([1,2,3,4]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      let newBalance2 = await sharesToken.balanceOf(owner2.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      expect(newBalance2.sub(oldBalance2)).to.be.equal(receiptsShares2);
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      let receipts2 = await receiptContract.getTokensOfOwner(owner2.address);
+      expect(receipts.toString()).to.be.equal("0");
+      expect(receipts2.toString()).to.be.equal("");
+    });
+
+  });
+
 });
