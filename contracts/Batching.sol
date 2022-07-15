@@ -133,9 +133,9 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
             /* higher token amount may be passed than in tokens in receipt as we expect javascript to handle big numbers
                not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
-            if (receiptTokenAmounts[i] >= receipt.amount || receiptTokenAmounts[i] == 0) {
+            if (receiptTokenAmounts[i] >= receipt.tokenAmountUniform || receiptTokenAmounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValueUsd = ((receipt.amount * originalDepositedTokenPriceUsd) / 10**priceDecimals);
+                uint256 receiptValueUsd = ((receipt.tokenAmountUniform * originalDepositedTokenPriceUsd) / 10**priceDecimals);
                 valueToWithdrawUsd += receiptValueUsd;
                 receiptContract.burn(receiptId);
             } else {
@@ -143,7 +143,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
                 uint256 tokenAmountValueUsd = ((receiptTokenAmounts[i] * originalDepositedTokenPriceUsd) /
                     10**priceDecimals);
                 valueToWithdrawUsd += tokenAmountValueUsd;
-                receiptContract.setAmount(receiptId, receipt.amount - receiptTokenAmounts[i]);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - receiptTokenAmounts[i]);
             }
         }
 

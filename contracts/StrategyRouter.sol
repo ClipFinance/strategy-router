@@ -18,12 +18,7 @@ import "./StrategyRouterLib.sol";
 
 // import "hardhat/console.sol";
 
-contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
-
-    /// Owner can do anything, such as calling setters or managing moderator role
-    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
-    /// Moderators can redeem shares from receipts on behalf of users
-    bytes32 public constant MODERATOR_ROLE = keccak256("MODERATOR_ROLE");
+contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /* EVENTS */
 
@@ -34,7 +29,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     /// @notice Fires when batching is deposited into strategies.
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
-    event DepositToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
     /// @notice Fires when user withdraw from batching.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -71,6 +66,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
+    error NotModerator();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -121,6 +117,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     StrategyInfo[] public strategies;
     mapping(uint256 => Cycle) public cycles;
+    mapping(address => bool) public moderators;
+
+    modifier onlyModerators() {
+        if (!moderators[msg.sender]) revert NotModerator();
+        _;
+    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -135,13 +137,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
         Batching _batching,
         ReceiptNFT _receiptNft
     ) external initializer {
-        __AccessControl_init();
+        __Ownable_init();
         __UUPSUpgradeable_init();
-
-        _grantRole(MODERATOR_ROLE, msg.sender);
-        _grantRole(OWNER_ROLE, msg.sender);
-        // owners should be able to manage moderators
-        _setRoleAdmin(MODERATOR_ROLE, OWNER_ROLE);
 
         batching = _batching;
         receiptContract = _receiptNft;
@@ -151,17 +148,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
         cycles[0].startAt = block.timestamp;
         cycleDuration = 1 days;
+        moderators[owner()] = true;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(OWNER_ROLE) {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // Universal Functions
 
-    /// @notice Deposit money collected in the batching into strategies.
+    /// @notice Send pending money collected in the batch into the strategies.
     /// @notice Can be called when `cycleDuration` seconds has been passed or
     ///         batch usd value has reached `minUsdPerCycle`.
     /// @dev Only callable by user wallets.
-    function depositToStrategies() external {
+    function allocateToStrategies() external {
         /*
         step 1 - preparing data and assigning local variables for later reference
         step 2 - check requirements to launch a cycle
@@ -244,7 +242,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
         cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd + strategiesDebtInUsd;
         cycles[_currentCycleId].totalDepositedInUsd = batchingValueInUsd + strategiesDebtInUsd;
 
-        emit DepositToStrategies(_currentCycleId, receivedByStrategiesInUsd);
+        emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
         // start new cycle
         ++currentCycleId;
         cycles[_currentCycleId].startAt = block.timestamp;
@@ -315,19 +313,19 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Returns amount of shares locked by multiple receipts.
     /// @notice Cycle noted in receipts should be closed.
-    function receiptsToShares(uint256[] calldata receiptIds) public view returns (uint256 shares) {
+    function calculateSharesFromReceipts(uint256[] calldata receiptIds) public view returns (uint256 shares) {
         ReceiptNFT _receiptContract = receiptContract;
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            shares += StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
         }
     }
 
     /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
     /// @notice Cycle noted in receipts should be closed.
-    function unlockSharesFromReceipts(uint256[] calldata receiptIds) public onlyRole(MODERATOR_ROLE) {
-        StrategyRouterLib.unlockSharesFromReceipts(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
+    function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
+        StrategyRouterLib.redeemReceiptsToShares(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
     }
 
     /// @notice Returns usd value of shares.
@@ -423,14 +421,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
-            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
-                uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
+                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
                 toWithdraw += receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
                 toWithdraw += amountValue;
-                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
             }
         }
 
@@ -539,16 +537,16 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
             ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
-            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
+            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
                 fromBatchAmount += receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 // withdraw only part of receipt and update receipt
                 uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
                 fromBatchAmount += amountValue;
-                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
             }
         }
 
@@ -609,13 +607,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyRole(OWNER_ROLE) {
+    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
         batching.setSupportedToken(tokenAddress, supported);
+    }
+
+    /// @dev Admin function.
+    function setModerator(address moderator, bool isWhitelisted) external onlyOwner {
+        moderators[moderator] = isWhitelisted;
     }
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(address _oracle) external onlyRole(OWNER_ROLE) {
+    function setOracle(address _oracle) external onlyOwner {
         oracle = IUsdOracle(_oracle);
         batching.setOracle(_oracle);
         emit SetOracle(address(_oracle));
@@ -623,7 +626,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyRole(OWNER_ROLE) {
+    function setReceiptNFT(address _receiptContract) external onlyOwner {
         receiptContract = ReceiptNFT(_receiptContract);
         batching.setReceiptNFT(_receiptContract);
         emit SetReceiptNFT(_receiptContract);
@@ -631,7 +634,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(address newExchange) external onlyRole(OWNER_ROLE) {
+    function setExchange(address newExchange) external onlyOwner {
         exchange = Exchange(newExchange);
         batching.setExchange(newExchange);
         emit SetExchange(newExchange);
@@ -639,7 +642,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Set address for collecting fees from rewards.
     /// @dev Admin function.
-    function setFeeAddress(address _feeAddress) external onlyRole(OWNER_ROLE) {
+    function setFeeAddress(address _feeAddress) external onlyOwner {
         if (_feeAddress == address(0)) revert();
         feeAddress = _feeAddress;
         emit SetFeeAddress(_feeAddress);
@@ -647,7 +650,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Set percent to take of rewards for owners.
     /// @dev Admin function.
-    function setFeePercent(uint256 percent) external onlyRole(OWNER_ROLE) {
+    function setFeePercent(uint256 percent) external onlyOwner {
         feePercent = percent;
         emit SetFeePercent(percent);
     }
@@ -655,7 +658,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     /// @notice Minimum usd needed to be able to close the cycle.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinUsdPerCycle(uint256 amount) external onlyRole(OWNER_ROLE) {
+    function setMinUsdPerCycle(uint256 amount) external onlyOwner {
         minUsdPerCycle = amount;
         emit SetMinUsdPerCycle(amount);
     }
@@ -663,7 +666,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyRole(OWNER_ROLE) {
+    function setMinDeposit(uint256 amount) external onlyOwner {
         batching.setMinDeposit(amount);
         emit SetMinDeposit(amount);
     }
@@ -671,7 +674,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     /// @notice Minimum time needed to be able to close the cycle.
     /// @param duration Duration of cycle in seconds.
     /// @dev Admin function.
-    function setCycleDuration(uint256 duration) external onlyRole(OWNER_ROLE) {
+    function setCycleDuration(uint256 duration) external onlyOwner {
         cycleDuration = duration;
         emit SetCycleDuration(duration);
     }
@@ -686,7 +689,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
         address _strategyAddress,
         address _depositTokenAddress,
         uint256 _weight
-    ) external onlyRole(OWNER_ROLE) {
+    ) external onlyOwner {
         if (!supportsToken(_depositTokenAddress)) revert UnsupportedToken();
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
@@ -706,14 +709,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
     /// @param _strategyId Id of the strategy.
     /// @param _weight Weight of the strategy.
     /// @dev Admin function.
-    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyRole(OWNER_ROLE) {
+    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
         strategies[_strategyId].weight = _weight;
     }
 
     /// @notice Remove strategy, deposit its balance in other strategies.
     /// @param _strategyId Id of the strategy.
     /// @dev Admin function.
-    function removeStrategy(uint256 _strategyId) external onlyRole(OWNER_ROLE) {
+    function removeStrategy(uint256 _strategyId) external onlyOwner {
         if (strategies.length < 2) revert CantRemoveLastStrategy();
         StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
         IStrategy removedStrategy = IStrategy(removedStrategyInfo.strategyAddress);
@@ -753,14 +756,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalanceBatching() external onlyRole(OWNER_ROLE) returns (uint256[] memory balances) {
+    function rebalanceBatching() external onlyOwner returns (uint256[] memory balances) {
         return batching.rebalance();
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
-    function rebalanceStrategies() external onlyRole(OWNER_ROLE) returns (uint256[] memory balances) {
+    function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
         uint256 totalBalance;
 
         uint256 len = strategies.length;
@@ -934,7 +937,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradea
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
-            shares += StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
             receiptContract.burn(receiptId);
             emit UnlockShares(msg.sender, receiptId, shares);
         }

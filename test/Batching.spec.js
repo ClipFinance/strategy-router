@@ -76,7 +76,7 @@ describe("Test Batching", function () {
 
             // admin initial deposit to set initial shares and pps
             await router.depositToBatch(busd.address, parseBusd("1"));
-            await router.depositToStrategies();
+            await router.allocateToStrategies();
 
         });
 
@@ -101,7 +101,7 @@ describe("Test Batching", function () {
             let newReceipt = await receiptContract.getReceipt(1);
             expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
             expect(newReceipt.token).to.be.equal(busd.address);
-            expect(newReceipt.amount).to.be.equal(parseUniform("100"));
+            expect(newReceipt.tokenAmountUniform).to.be.equal(parseUniform("100"));
             expect(newReceipt.cycleId).to.be.equal(1);
             expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
         });
@@ -176,7 +176,7 @@ describe("Test Batching", function () {
 
             // admin initial deposit to set initial shares and pps
             await router.depositToBatch(busd.address, parseBusd("1"));
-            await router.depositToStrategies();
+            await router.allocateToStrategies();
 
         });
 
@@ -218,7 +218,7 @@ describe("Test Batching", function () {
             newBalance = await usdc.balanceOf(owner.address);
 
             let receipt = await receiptContract.getReceipt(1);
-            expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
             expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
         });
 
@@ -247,7 +247,7 @@ describe("Test Batching", function () {
             newBalance = await usdc.balanceOf(owner.address);
 
             let receipt = await receiptContract.getReceipt(1);
-            expect(receipt.amount).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
             expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
         });
     });

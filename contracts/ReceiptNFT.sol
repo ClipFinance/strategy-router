@@ -2,13 +2,12 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 // import "hardhat/console.sol";
 
-contract ReceiptNFT is ERC721, AccessControl, Initializable {
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+contract ReceiptNFT is ERC721, Ownable, Initializable {
 
     error NonExistingToken();
     error ReceiptAmountCanOnlyDecrease();
@@ -18,30 +17,31 @@ contract ReceiptNFT is ERC721, AccessControl, Initializable {
 
     struct ReceiptData {
         uint256 cycleId;
-        uint256 amount; // in token
+        uint256 tokenAmountUniform; // in token
         address token;
     }
 
     uint256 private _receiptsCounter;
 
     mapping(uint256 => ReceiptData) public receipts;
+    mapping(address => bool) public managers;
+
+    modifier onlyManager() {
+        if (managers[msg.sender] == false) revert NotManager();
+        _;
+    }
 
     constructor() ERC721("Receipt NFT", "RECEIPT") {}
 
     function initialize(address strategyRouter, address batching) external initializer {
-        _grantRole(MANAGER_ROLE, strategyRouter);
-        _grantRole(MANAGER_ROLE, batching);
+        managers[strategyRouter] = true;
+        managers[batching] = true;
     }
 
-    /// Override required by solidity
-    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, AccessControl) returns (bool) {
-        return ERC721.supportsInterface(interfaceId);
-    }
-
-    function setAmount(uint256 tokenId, uint256 amount) external onlyRole(MANAGER_ROLE) {
-        if (!_exists(tokenId)) revert NonExistingToken();
-        if (receipts[tokenId].amount < amount) revert ReceiptAmountCanOnlyDecrease();
-        receipts[tokenId].amount = amount;
+    function setAmount(uint256 receiptId, uint256 amount) external onlyManager {
+        if (!_exists(receiptId)) revert NonExistingToken();
+        if (receipts[receiptId].tokenAmountUniform < amount) revert ReceiptAmountCanOnlyDecrease();
+        receipts[receiptId].tokenAmountUniform = amount;
     }
 
     function mint(
@@ -49,22 +49,22 @@ contract ReceiptNFT is ERC721, AccessControl, Initializable {
         uint256 amount,
         address token,
         address wallet
-    ) external onlyRole(MANAGER_ROLE) {
+    ) external onlyManager {
         uint256 _receiptId = _receiptsCounter;
-        receipts[_receiptId] = ReceiptData({cycleId: cycleId, token: token, amount: amount});
+        receipts[_receiptId] = ReceiptData({cycleId: cycleId, token: token, tokenAmountUniform: amount});
         _mint(wallet, _receiptId);
         _receiptsCounter++;
     }
 
-    function burn(uint256 tokenId) external onlyRole(MANAGER_ROLE) {
-        _burn(tokenId);
-        delete receipts[tokenId];
+    function burn(uint256 receiptId) external onlyManager {
+        _burn(receiptId);
+        delete receipts[receiptId];
     }
 
     /// @notice Get receipt data recorded in NFT.
-    function getReceipt(uint256 tokenId) external view returns (ReceiptData memory) {
-        if (_exists(tokenId) == false) revert NonExistingToken();
-        return receipts[tokenId];
+    function getReceipt(uint256 receiptId) external view returns (ReceiptData memory) {
+        if (_exists(receiptId) == false) revert NonExistingToken();
+        return receipts[receiptId];
     }
 
     /**
@@ -76,54 +76,54 @@ contract ReceiptNFT is ERC721, AccessControl, Initializable {
      *
      * Requirements:
      *
-     * - `start <= tokenId < stop`
+     * - `start <= receiptId < stop`
      */
     function getTokensOfOwnerIn(
         address owner,
         uint256 start,
         uint256 stop
-    ) public view returns (uint256[] memory tokenIds) {
+    ) public view returns (uint256[] memory receiptIds) {
         unchecked {
             if (start >= stop) revert InvalidQueryRange();
-            uint256 tokenIdsIdx;
+            uint256 receiptIdsIdx;
             uint256 stopLimit = _receiptsCounter;
             // Set `stop = min(stop, stopLimit)`.
             if (stop > stopLimit) {
                 // At this point `start` could be greater than `stop`.
                 stop = stopLimit;
             }
-            uint256 tokenIdsMaxLength = balanceOf(owner);
-            // Set `tokenIdsMaxLength = min(balanceOf(owner), stop - start)`,
+            uint256 receiptIdsMaxLength = balanceOf(owner);
+            // Set `receiptIdsMaxLength = min(balanceOf(owner), stop - start)`,
             // to cater for cases where `balanceOf(owner)` is too big.
             if (start < stop) {
                 uint256 rangeLength = stop - start;
-                if (rangeLength < tokenIdsMaxLength) {
-                    tokenIdsMaxLength = rangeLength;
+                if (rangeLength < receiptIdsMaxLength) {
+                    receiptIdsMaxLength = rangeLength;
                 }
             } else {
-                tokenIdsMaxLength = 0;
+                receiptIdsMaxLength = 0;
             }
-            tokenIds = new uint256[](tokenIdsMaxLength);
-            if (tokenIdsMaxLength == 0) {
-                return tokenIds;
+            receiptIds = new uint256[](receiptIdsMaxLength);
+            if (receiptIdsMaxLength == 0) {
+                return receiptIds;
             }
 
-            // We want to scan tokens in range [start <= tokenId < stop].
-            // And if whole range is owned by user or when tokenIdsMaxLength is less than range,
+            // We want to scan tokens in range [start <= receiptId < stop].
+            // And if whole range is owned by user or when receiptIdsMaxLength is less than range,
             // then we also want to exit loop when array is full.
-            uint256 tokenId = start;
-            while (tokenId != stop && tokenIdsIdx != tokenIdsMaxLength) {
-                if (_exists(tokenId) && ownerOf(tokenId) == owner) {
-                    tokenIds[tokenIdsIdx++] = tokenId;
+            uint256 receiptId = start;
+            while (receiptId != stop && receiptIdsIdx != receiptIdsMaxLength) {
+                if (_exists(receiptId) && ownerOf(receiptId) == owner) {
+                    receiptIds[receiptIdsIdx++] = receiptId;
                 }
-                tokenId++;
+                receiptId++;
             }
 
             // If after scan we haven't filled array, then downsize the array to fit.
             assembly {
-                mstore(tokenIds, tokenIdsIdx)
+                mstore(receiptIds, receiptIdsIdx)
             }
-            return tokenIds;
+            return receiptIds;
         }
     }
 
@@ -137,16 +137,16 @@ contract ReceiptNFT is ERC721, AccessControl, Initializable {
      * multiple smaller scans if the collection is large enough to cause
      * an out-of-gas error.
      */
-    function getTokensOfOwner(address owner) public view returns (uint256[] memory tokenIds) {
+    function getTokensOfOwner(address owner) public view returns (uint256[] memory receiptIds) {
         uint256 balance = balanceOf(owner);
-        tokenIds = new uint256[](balance);
-        uint256 tokenId;
+        receiptIds = new uint256[](balance);
+        uint256 receiptId;
 
         while (balance > 0) {
-            if (_exists(tokenId) && ownerOf(tokenId) == owner) {
-                tokenIds[--balance] = tokenId;
+            if (_exists(receiptId) && ownerOf(receiptId) == owner) {
+                receiptIds[--balance] = receiptId;
             }
-            tokenId++;
+            receiptId++;
         }
     }
 }
