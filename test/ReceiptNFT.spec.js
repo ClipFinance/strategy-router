@@ -18,7 +18,8 @@ describe("Test ReceiptNFT", function () {
         [fakeStrategyRouter, fakeBatching, nonManager, nftRecipient] = await ethers.getSigners();
 
         // get instance that is controlled by fakeStrategyRouter (one of managers)
-        receiptContractStrategyRouter = await deploy("ReceiptNFT", fakeStrategyRouter.address, fakeBatching.address);
+        receiptContractStrategyRouter = await deploy("ReceiptNFT");
+        await receiptContractStrategyRouter.initialize(fakeStrategyRouter.address, fakeBatching.address);
 
         // get instance that is controlled by fakeBatching (one of managers)
         receiptContractBatching = receiptContractStrategyRouter.connect(fakeBatching);
@@ -72,19 +73,21 @@ describe("Test ReceiptNFT", function () {
         });
 
         it("Non manager is not able to mint", async function () {
+            let MANAGER_ROLE = await receiptContractNonManager.MANAGER_ROLE();
+            let errorMsg = `AccessControl: account ${nonManager.address.toString().toLowerCase()} is missing role ${MANAGER_ROLE}`;
             // non-manager fails to mint to himself
             await expect(receiptContractNonManager.mint(0, 0, fakeTokenAddress, nonManager.address))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWith(errorMsg);
             // non-manager fails to mint to 3rd-party nft recipient
             await expect(receiptContractNonManager.mint(0, 0, fakeTokenAddress, nftRecipient.address))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWith(errorMsg);
 
             // manager mint token id 0
             await receiptContractStrategyRouter.mint(0, 0, fakeTokenAddress, fakeStrategyRouter.address);
 
             // non-manager fails to burn or setAmount
-            await expect(receiptContractNonManager.burn(0)).to.be.revertedWith("NotManager()");
-            await expect(receiptContractNonManager.setAmount(0, 0)).to.be.revertedWith("NotManager()");
+            await expect(receiptContractNonManager.burn(0)).to.be.revertedWith(errorMsg);
+            await expect(receiptContractNonManager.setAmount(0, 0)).to.be.revertedWith(errorMsg);
 
         });
 
@@ -116,7 +119,9 @@ describe("Test ReceiptNFT", function () {
             let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(1);
 
-            await expect(receiptContractNonManager.burn(1)).to.be.revertedWith("NotManager");
+            let MANAGER_ROLE = await receiptContractNonManager.MANAGER_ROLE();
+            let errorMsg = `AccessControl: account ${nonManager.address.toString().toLowerCase()} is missing role ${MANAGER_ROLE}`;
+            await expect(receiptContractNonManager.burn(1)).to.be.revertedWith(errorMsg);
         });
 
         it("Non-existing receipt can not be burned", async function () {
@@ -188,8 +193,11 @@ describe("Test ReceiptNFT", function () {
             let amount = parseEther("3");
             await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("1");
+
+            let MANAGER_ROLE = await receiptContractNonManager.MANAGER_ROLE();
+            let errorMsg = `AccessControl: account ${nonManager.address.toString().toLowerCase()} is missing role ${MANAGER_ROLE}`;
             await expect(receiptContractNonManager.setAmount(0, amount))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWith(errorMsg);
         });
 
         it("Can't change amount non-existing receipt", async function () {

@@ -1,6 +1,6 @@
 {
   "name": "strategy-router",
-  "scripts":{
+  "scripts": {
     "test": "hardhat test"
   },
   "devDependencies": {
@@ -9,6 +9,7 @@
     "@nomiclabs/hardhat-etherscan": "^3.0.3",
     "@nomiclabs/hardhat-waffle": "^2.0.0",
     "@openzeppelin/contracts": "^4.5.0",
+    "@openzeppelin/hardhat-upgrades": "^1.19.0",
     "@uniswap/v2-core": "^1.0.1",
     "@uniswap/v2-periphery": "^1.1.0-beta.0",
     "chai": "^4.3.6",
@@ -24,5 +25,8 @@
   "engines": {
     "npm": ">=6.14.0",
     "node": ">=14.15.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable": "^4.7.0"
   }
 }

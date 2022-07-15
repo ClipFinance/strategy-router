@@ -6,6 +6,7 @@ require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
+require('@openzeppelin/hardhat-upgrades');
 require('solidity-docgen');
 
 const networkVariables = require('./networkVariables');

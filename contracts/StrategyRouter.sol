@@ -3,7 +3,10 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
@@ -15,7 +18,13 @@ import "./StrategyRouterLib.sol";
 
 // import "hardhat/console.sol";
 
-contract StrategyRouter is Ownable {
+contract StrategyRouter is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+
+    /// Owner can do anything, such as calling setters or managing moderator role
+    bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
+    /// Moderators can redeem shares from receipts on behalf of users
+    bytes32 public constant MODERATOR_ROLE = keccak256("MODERATOR_ROLE");
+
     /* EVENTS */
 
     /// @notice Fires when user deposits in batching.
@@ -62,7 +71,6 @@ contract StrategyRouter is Ownable {
     error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
-    error NotWhitelistedUnlocker();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -98,7 +106,7 @@ contract StrategyRouter is Ownable {
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 private constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
-    uint256 public cycleDuration = 1 days;
+    uint256 public cycleDuration;
     uint256 public minUsdPerCycle;
     uint256 public minDeposit;
     uint256 public feePercent;
@@ -113,22 +121,39 @@ contract StrategyRouter is Ownable {
 
     StrategyInfo[] public strategies;
     mapping(uint256 => Cycle) public cycles;
-    mapping(address => bool) public whitelistedUnlockers;
 
-    modifier onlyUnlocker() {
-        if (whitelistedUnlockers[msg.sender] == false) revert NotWhitelistedUnlocker();
-        _;
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        // lock implementation
+        _disableInitializers();
     }
 
-    constructor(address _exchange, address _oracle) {
-        sharesToken = new SharesToken();
-        batching = new Batching(address(this));
-        receiptContract = new ReceiptNFT(address(this), address(batching));
-        batching.setExchange(_exchange);
-        batching.setOracle(_oracle);
-        batching.setReceiptNFT(address(receiptContract));
+    function initialize(
+        Exchange _exchange,
+        IUsdOracle _oracle,
+        SharesToken _sharesToken,
+        Batching _batching,
+        ReceiptNFT _receiptNft
+    ) external initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
+        _grantRole(MODERATOR_ROLE, msg.sender);
+        _grantRole(OWNER_ROLE, msg.sender);
+        // owners should be able to manage moderators
+        _setRoleAdmin(MODERATOR_ROLE, OWNER_ROLE);
+
+        batching = _batching;
+        receiptContract = _receiptNft;
+        sharesToken = _sharesToken;
+        oracle = _oracle;
+        exchange = _exchange;
+
         cycles[0].startAt = block.timestamp;
+        cycleDuration = 1 days;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(OWNER_ROLE) {}
 
     // Universal Functions
 
@@ -301,7 +326,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
     /// @notice Cycle noted in receipts should be closed.
-    function unlockSharesFromReceipts(uint256[] calldata receiptIds) public onlyUnlocker {
+    function unlockSharesFromReceipts(uint256[] calldata receiptIds) public onlyRole(MODERATOR_ROLE) {
         StrategyRouterLib.unlockSharesFromReceipts(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
     }
 
@@ -577,24 +602,20 @@ contract StrategyRouter is Ownable {
     function depositToBatch(address depositToken, uint256 _amount) external {
         batching.deposit(msg.sender, depositToken, _amount);
         IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
+        emit Deposit(msg.sender, depositToken, _amount);
     }
 
     // Admin functions
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
+    function setSupportedToken(address tokenAddress, bool supported) external onlyRole(OWNER_ROLE) {
         batching.setSupportedToken(tokenAddress, supported);
-    }
-
-    /// @dev Admin function.
-    function setUnlocker(address unlockerAddress, bool isWhitelisted) external onlyOwner {
-        whitelistedUnlockers[unlockerAddress] = isWhitelisted;
     }
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(address _oracle) external onlyOwner {
+    function setOracle(address _oracle) external onlyRole(OWNER_ROLE) {
         oracle = IUsdOracle(_oracle);
         batching.setOracle(_oracle);
         emit SetOracle(address(_oracle));
@@ -602,7 +623,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyOwner {
+    function setReceiptNFT(address _receiptContract) external onlyRole(OWNER_ROLE) {
         receiptContract = ReceiptNFT(_receiptContract);
         batching.setReceiptNFT(_receiptContract);
         emit SetReceiptNFT(_receiptContract);
@@ -610,7 +631,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(address newExchange) external onlyOwner {
+    function setExchange(address newExchange) external onlyRole(OWNER_ROLE) {
         exchange = Exchange(newExchange);
         batching.setExchange(newExchange);
         emit SetExchange(newExchange);
@@ -618,7 +639,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set address for collecting fees from rewards.
     /// @dev Admin function.
-    function setFeeAddress(address _feeAddress) external onlyOwner {
+    function setFeeAddress(address _feeAddress) external onlyRole(OWNER_ROLE) {
         if (_feeAddress == address(0)) revert();
         feeAddress = _feeAddress;
         emit SetFeeAddress(_feeAddress);
@@ -626,7 +647,7 @@ contract StrategyRouter is Ownable {
 
     /// @notice Set percent to take of rewards for owners.
     /// @dev Admin function.
-    function setFeePercent(uint256 percent) external onlyOwner {
+    function setFeePercent(uint256 percent) external onlyRole(OWNER_ROLE) {
         feePercent = percent;
         emit SetFeePercent(percent);
     }
@@ -634,7 +655,7 @@ contract StrategyRouter is Ownable {
     /// @notice Minimum usd needed to be able to close the cycle.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinUsdPerCycle(uint256 amount) external onlyOwner {
+    function setMinUsdPerCycle(uint256 amount) external onlyRole(OWNER_ROLE) {
         minUsdPerCycle = amount;
         emit SetMinUsdPerCycle(amount);
     }
@@ -642,7 +663,7 @@ contract StrategyRouter is Ownable {
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyOwner {
+    function setMinDeposit(uint256 amount) external onlyRole(OWNER_ROLE) {
         batching.setMinDeposit(amount);
         emit SetMinDeposit(amount);
     }
@@ -650,7 +671,7 @@ contract StrategyRouter is Ownable {
     /// @notice Minimum time needed to be able to close the cycle.
     /// @param duration Duration of cycle in seconds.
     /// @dev Admin function.
-    function setCycleDuration(uint256 duration) external onlyOwner {
+    function setCycleDuration(uint256 duration) external onlyRole(OWNER_ROLE) {
         cycleDuration = duration;
         emit SetCycleDuration(duration);
     }
@@ -665,7 +686,7 @@ contract StrategyRouter is Ownable {
         address _strategyAddress,
         address _depositTokenAddress,
         uint256 _weight
-    ) external onlyOwner {
+    ) external onlyRole(OWNER_ROLE) {
         if (!supportsToken(_depositTokenAddress)) revert UnsupportedToken();
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
@@ -685,14 +706,14 @@ contract StrategyRouter is Ownable {
     /// @param _strategyId Id of the strategy.
     /// @param _weight Weight of the strategy.
     /// @dev Admin function.
-    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
+    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyRole(OWNER_ROLE) {
         strategies[_strategyId].weight = _weight;
     }
 
     /// @notice Remove strategy, deposit its balance in other strategies.
     /// @param _strategyId Id of the strategy.
     /// @dev Admin function.
-    function removeStrategy(uint256 _strategyId) external onlyOwner {
+    function removeStrategy(uint256 _strategyId) external onlyRole(OWNER_ROLE) {
         if (strategies.length < 2) revert CantRemoveLastStrategy();
         StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
         IStrategy removedStrategy = IStrategy(removedStrategyInfo.strategyAddress);
@@ -732,14 +753,14 @@ contract StrategyRouter is Ownable {
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalanceBatching() external onlyOwner returns (uint256[] memory balances) {
+    function rebalanceBatching() external onlyRole(OWNER_ROLE) returns (uint256[] memory balances) {
         return batching.rebalance();
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
-    function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
+    function rebalanceStrategies() external onlyRole(OWNER_ROLE) returns (uint256[] memory balances) {
         uint256 totalBalance;
 
         uint256 len = strategies.length;

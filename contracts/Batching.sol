@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
@@ -16,18 +16,12 @@ import "./interfaces/IUsdOracle.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
-contract Batching is Ownable {
+contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
 
-    /// @notice Fires when user deposits in batching.
-    /// @param token Supported token that user want to deposit.
-    /// @param amount Amount of `token` transferred from user.
-    event Deposit(address indexed user, address token, uint256 amount);
-    /// @notice Fires when user withdraw from batching.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatching(address indexed user, address token, uint256 amount);
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant STRATEGY_ROUTER_ROLE = keccak256("STRATEGY_ROUTER");
 
     /* ERRORS */
 
@@ -52,9 +46,32 @@ contract Batching is Ownable {
 
     EnumerableSet.AddressSet private supportedTokens;
 
-    constructor(address _router) {
-        router = StrategyRouter(_router);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        // lock implementation
+        _disableInitializers();
     }
+
+    function initialize(
+        Exchange _exchange,
+        IUsdOracle _oracle,
+        StrategyRouter _router,
+        ReceiptNFT _receiptNft
+    ) external initializer {
+        __AccessControl_init();
+        __UUPSUpgradeable_init();
+
+        _grantRole(UPGRADER_ROLE, msg.sender);
+        _grantRole(STRATEGY_ROUTER_ROLE, address(_router));
+
+        // TODO: probably remove setters for these, as they already assigned here in initialization function
+        receiptContract = _receiptNft;
+        exchange = _exchange;
+        oracle = _oracle;
+        router = _router;
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
 
     // Universal Functions
 
@@ -99,7 +116,7 @@ contract Batching is Ownable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata receiptTokenAmounts
-    ) public onlyOwner returns (uint256 withdrawalTokenAmountToTransfer) {
+    ) public onlyRole(STRATEGY_ROUTER_ROLE) returns (uint256 withdrawalTokenAmountToTransfer) {
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = router.currentCycleId();
@@ -135,7 +152,11 @@ contract Batching is Ownable {
         IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
     }
 
-    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken) public onlyOwner returns (uint256) {
+    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken)
+        public
+        onlyRole(STRATEGY_ROUTER_ROLE)
+        returns (uint256)
+    {
         (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
         if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 
@@ -196,7 +217,11 @@ contract Batching is Ownable {
     }
 
     /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
-    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token) internal view returns (uint256 tokenAmountToTransfer) {
+    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token)
+        internal
+        view
+        returns (uint256 tokenAmountToTransfer)
+    {
         (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
         tokenAmountToTransfer = (valueUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
         tokenAmountToTransfer = fromUniform(tokenAmountToTransfer, token);
@@ -212,7 +237,7 @@ contract Batching is Ownable {
         address depositor,
         address depositToken,
         uint256 _amount
-    ) external onlyOwner {
+    ) external onlyRole(STRATEGY_ROUTER_ROLE) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
         uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
@@ -220,7 +245,6 @@ contract Batching is Ownable {
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
-        emit Deposit(depositor, depositToken, _amount);
         receiptContract.mint(router.currentCycleId(), amountUniform, depositToken, depositor);
     }
 
@@ -228,7 +252,7 @@ contract Batching is Ownable {
         address token,
         address to,
         uint256 amount
-    ) external onlyOwner {
+    ) external onlyRole(STRATEGY_ROUTER_ROLE) {
         ERC20(token).transfer(to, amount);
     }
 
@@ -236,32 +260,32 @@ contract Batching is Ownable {
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(address _oracle) external onlyOwner {
+    function setOracle(address _oracle) external onlyRole(STRATEGY_ROUTER_ROLE) {
         oracle = IUsdOracle(_oracle);
     }
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyOwner {
+    function setReceiptNFT(address _receiptContract) external onlyRole(STRATEGY_ROUTER_ROLE) {
         receiptContract = ReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(address newExchange) external onlyOwner {
+    function setExchange(address newExchange) external onlyRole(STRATEGY_ROUTER_ROLE) {
         exchange = Exchange(newExchange);
     }
 
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyOwner {
+    function setMinDeposit(uint256 amount) external onlyRole(STRATEGY_ROUTER_ROLE) {
         minDeposit = amount;
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalance() public onlyOwner returns (uint256[] memory balances) {
+    function rebalance() public onlyRole(STRATEGY_ROUTER_ROLE) returns (uint256[] memory balances) {
         /*
         1 store supported-tokens (set of unique addresses)
             [a,b,c]
@@ -400,7 +424,7 @@ contract Batching is Ownable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
+    function setSupportedToken(address tokenAddress, bool supported) external onlyRole(STRATEGY_ROUTER_ROLE) {
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
         if (supported) {

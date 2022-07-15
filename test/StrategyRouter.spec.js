@@ -280,14 +280,18 @@ describe("Test StrategyRouter", function () {
   });
 
   describe("unlockSharesFromReceipts", function () {
-    it("should revert when caller not whitelisted unlocker", async function () {
+    it("should revert when caller not moderator", async function () {
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToStrategies();
-      await expect(router.unlockSharesFromReceipts([1])).to.be.revertedWith("NotWhitelistedUnlocker()");
+      // owner is moderator by default, so choose another account
+      [,nonModerator] = await ethers.getSigners();
+      let MODERATOR_ROLE = await router.MODERATOR_ROLE();
+      await expect(router.connect(nonModerator).unlockSharesFromReceipts([1])).to.be.revertedWith(
+        `AccessControl: account ${nonModerator.address.toString().toLowerCase()} is missing role ${MODERATOR_ROLE}`
+      );
     });
 
     it("should unlock list of 1 receipt", async function () {
-      await router.setUnlocker(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToStrategies();
       let receiptsShares = await router.receiptsToShares([1]);
@@ -302,7 +306,6 @@ describe("Test StrategyRouter", function () {
     });
 
     it("should unlock list of 2 receipt same owner", async function () {
-      await router.setUnlocker(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToStrategies();
@@ -320,7 +323,6 @@ describe("Test StrategyRouter", function () {
 
     it("should unlock list of 2 receipt with different owners", async function () {
       [,,,,owner2] = await ethers.getSigners();
-      await router.setUnlocker(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await busd.transfer(owner2.address, parseBusd("10"));
       await busd.connect(owner2).approve(router.address, parseBusd("10"));
@@ -345,7 +347,6 @@ describe("Test StrategyRouter", function () {
 
     it("should unlock list of 4 receipt, two different owners", async function () {
       [,,,,owner2] = await ethers.getSigners();
-      await router.setUnlocker(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToBatch(busd.address, parseBusd("10"));
       await busd.transfer(owner2.address, parseBusd("100"));

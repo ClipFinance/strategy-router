@@ -1,5 +1,5 @@
 const { parseUnits } = require("ethers/lib/utils");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 const { getUSDC, getBUSD, getUSDT, deploy, parseUniform } = require("../utils");
 
 module.exports = {
@@ -71,20 +71,52 @@ async function setupCore() {
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
   let exchange = await deploy("Exchange");
+  // Deploy  ReceiptNFT
+  let receiptContract = await deploy("ReceiptNFT");
+  // Deploy Batching
+  let Batching = await ethers.getContractFactory("Batching");
+  let batching = await upgrades.deployProxy(Batching, [], {
+    initializer: false,
+    kind: 'uups',
+  });
+  await batching.deployed();
+  // Deploy SharesToken
+  let sharesToken = await deploy("SharesToken");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
+  // silence warnings about usage of external libs
+  upgrades.silenceWarnings(); 
   let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
       StrategyRouterLib: routerLib.address
     }
   });
-  let router = await StrategyRouter.deploy(exchange.address, oracle.address);
+  let router = await upgrades.deployProxy(StrategyRouter, [], {
+    initializer: false,
+    unsafeAllow: ["external-library-linking", "constructor"],
+    kind: 'uups',
+  });
   await router.deployed();
+  await sharesToken.transferOwnership(router.address);
+  // Initialize proxy and non-proxy contracts
+  await router.initialize(
+    exchange.address,
+    oracle.address,
+    sharesToken.address,
+    batching.address,
+    receiptContract.address
+  );
+  await batching.initialize(
+    exchange.address,
+    oracle.address,
+    router.address,
+    receiptContract.address
+  );
+  // Setup receipt NFT
+  await receiptContract.initialize(router.address, batching.address);
+
   // Retrieve contracts that are deployed from StrategyRouter constructor
-  let batching = await ethers.getContractAt("Batching", await router.batching());
-  let sharesToken = await ethers.getContractAt("SharesToken", await router.sharesToken());
-  let receiptContract = await ethers.getContractAt("ReceiptNFT", await router.receiptContract());
   let INITIAL_SHARES = Number(1e12);
 
   return { oracle, exchange, router, receiptContract, batching, sharesToken, INITIAL_SHARES };
@@ -96,8 +128,6 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   const [owner,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setExchange(exchange.address);
-  await router.setOracle(oracle.address);
   await router.setFeePercent(2000);
   await router.setFeeAddress(feeAddress.address);
   await router.setCycleDuration(1);
@@ -137,8 +167,6 @@ async function setupRouterParams(router, oracle, exchange) {
   const [owner, feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setExchange(exchange.address);
-  await router.setOracle(oracle.address);
   await router.setFeePercent(2000);
   await router.setFeeAddress(feeAddress.address);
   await router.setCycleDuration(1);
@@ -181,8 +209,6 @@ async function setupParamsOnBNB(router, oracle, exchange) {
   const [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setExchange(exchange.address);
-  await router.setOracle(oracle.address);
   await router.setFeePercent(2000);
   await router.setFeeAddress(feeAddress.address);
   await router.setCycleDuration(1);
