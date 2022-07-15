@@ -41,7 +41,7 @@ library StrategyRouterLib {
     }
 
     // returns amount of shares locked by receipt.
-    function receiptToShares(
+    function calculateSharesFromReceipt(
         ReceiptNFT receiptContract,
         mapping(uint256 => StrategyRouter.Cycle) storage cycles,
         uint256 currentCycleId,
@@ -50,15 +50,15 @@ library StrategyRouterLib {
         ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
 
-        // calculate old usd value
-        uint256 oldValue;
-        uint256 oldPrice = cycles[receipt.cycleId].prices[receipt.token];
-        oldValue = (receipt.amount * oldPrice) / 10**UNIFORM_DECIMALS;
-        assert(oldValue > 0);
+        uint256 depositCycleTokenPriceUsd = cycles[receipt.cycleId].prices[receipt.token];
+
+        uint256 depositedUsdValueOfReceipt = (receipt.tokenAmountUniform * depositCycleTokenPriceUsd) / PRECISION;
+        assert(depositedUsdValueOfReceipt > 0);
         // adjust according to what was actually deposited into strategies
-        uint256 oldValueAdjusted = (oldValue * cycles[receipt.cycleId].receivedByStrategiesInUsd) /
+        // example: ($1000 * $4995) / $5000 = $999
+        uint256 allocatedUsdValueOfReceipt = (depositedUsdValueOfReceipt * cycles[receipt.cycleId].receivedByStrategiesInUsd) /
             cycles[receipt.cycleId].totalDepositedInUsd;
-        return (oldValueAdjusted * PRECISION) / cycles[receipt.cycleId].pricePerShare;
+        return (allocatedUsdValueOfReceipt * PRECISION) / cycles[receipt.cycleId].pricePerShare;
     }
 
     /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.
@@ -100,7 +100,9 @@ library StrategyRouterLib {
         return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
     }
 
-    function unlockSharesFromReceipts(
+    /// @notice receiptIds should be passed here already ordered by their owners in order not to do extra transfers
+    /// @notice Example: [alice, bob, alice, bob] will do 4 transfers. [alice, alice, bob, bob] will do 2 transfers
+    function redeemReceiptsToShares(
         uint256[] calldata receiptIds,
         ReceiptNFT _receiptContract,
         SharesToken _sharesToken,
@@ -112,8 +114,8 @@ library StrategyRouterLib {
         // address sameOwnerAddress;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            // uint256 shares = StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
-            uint256 shares = receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            // uint256 shares = StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
+            uint256 shares = calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
             address receiptOwner = _receiptContract.ownerOf(receiptId);
             if (i + 1 < receiptIds.length) {
                 uint256 nextReceiptId = receiptIds[i + 1];

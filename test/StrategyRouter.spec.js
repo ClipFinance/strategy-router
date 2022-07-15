@@ -55,7 +55,7 @@ describe("Test StrategyRouter", function () {
 
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
   });
 
   beforeEach(async function () {
@@ -71,19 +71,19 @@ describe("Test StrategyRouter", function () {
   });
 
 
-  it("should depositToStrategies", async function () {
+  it("should allocateToStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
-    await router.depositToStrategies()
+    await router.allocateToStrategies()
     let strategiesBalance = await router.getStrategiesValue()
     expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
   });
 
   it("should withdrawFromStrategies whole amount", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
-    await router.depositToStrategies()
+    await router.allocateToStrategies()
 
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
@@ -94,12 +94,12 @@ describe("Test StrategyRouter", function () {
   it("should withdrawFromStrategies both nft and shares", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.depositToBatch(busd.address, parseBusd("100"))
-    await router.depositToStrategies()
+    await router.allocateToStrategies()
 
     await router.unlockShares([1]);
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
-    let receiptsShares = await router.receiptsToShares([2]);
+    let receiptsShares = await router.calculateSharesFromReceipts([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -110,11 +110,11 @@ describe("Test StrategyRouter", function () {
 
   it("crossWithdrawFromBatching", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.crossWithdrawFromBatching([1], usdc.address, receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("10000"), parseUsdc("500"));
@@ -123,13 +123,13 @@ describe("Test StrategyRouter", function () {
   it("crossWithdrawFromBatching both nft and shares", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
     await router.unlockShares([1]);
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
-    let receiptsShares = await router.receiptsToShares([2]);
+    let receiptsShares = await router.calculateSharesFromReceipts([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
 
 
@@ -143,11 +143,11 @@ describe("Test StrategyRouter", function () {
   it("crossWithdrawFromStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100000")); // nft 1
     await router.depositToBatch(busd.address, parseBusd("20000")); // 2
-    await router.depositToStrategies(); // 120k
+    await router.allocateToStrategies(); // 120k
     await router.depositToBatch(busd.address, parseBusd("10000")); // 3
     await router.depositToBatch(busd.address, parseBusd("20000")); // 4
 
-    let receiptsShares = await router.receiptsToShares([2]);
+    let receiptsShares = await router.calculateSharesFromReceipts([2]);
     await router.crossWithdrawFromBatching([2], usdc.address, receiptsShares);
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -159,9 +159,9 @@ describe("Test StrategyRouter", function () {
 
   it("withdrawShares", async function () {
     await router.depositToBatch(busd.address, parseBusd("100000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.unlockShares([1]);
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -172,10 +172,10 @@ describe("Test StrategyRouter", function () {
 
   it("crossWithdrawShares", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.unlockShares([1]);
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -187,7 +187,7 @@ describe("Test StrategyRouter", function () {
 
   it("withdrawUniversal - withdraw from batching", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -198,10 +198,10 @@ describe("Test StrategyRouter", function () {
 
   it("withdrawUniversal - withdraw shares (by receipt)", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     let amountFromShares = await router.sharesToUsd(receiptsShares);
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -212,10 +212,10 @@ describe("Test StrategyRouter", function () {
 
   it("withdrawUniversal - withdraw shares (no receipt)", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("100000"));
 
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.unlockShares([1]);
     let amountFromShares = await router.sharesToUsd(receiptsShares);
 
@@ -228,12 +228,12 @@ describe("Test StrategyRouter", function () {
   it("withdrawUniversal - withdraw batch, shares and shares by receipt", async function () {
     await router.depositToBatch(busd.address, parseBusd("10000")); // 1
     await router.depositToBatch(busd.address, parseBusd("10000")); // 2
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     await router.depositToBatch(busd.address, parseBusd("10000")); // 3
 
-    let withdrawShares = await router.receiptsToShares([1])
+    let withdrawShares = await router.calculateSharesFromReceipts([1])
     await router.unlockShares([1]);
-    let withdrawSharesFromReceipt = await router.receiptsToShares([2]);
+    let withdrawSharesFromReceipt = await router.calculateSharesFromReceipts([2]);
     let totalShares = withdrawShares.add(withdrawSharesFromReceipt);
 
     let amountReceiptBatch = (await receiptContract.getReceipt(3)).amount;
@@ -252,7 +252,7 @@ describe("Test StrategyRouter", function () {
 
     // deposit to strategies
     await router.depositToBatch(busd.address, parseBusd("10"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
     // deploy new farm
     const Farm = await ethers.getContractFactory("MockStrategy");
@@ -269,7 +269,7 @@ describe("Test StrategyRouter", function () {
 
     // withdraw user shares
     let oldBalance = await usdc.balanceOf(owner.address);
-    let receiptsShares = await router.receiptsToShares([1]);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -279,21 +279,21 @@ describe("Test StrategyRouter", function () {
 
   });
 
-  describe("unlockSharesFromReceipts", function () {
+  describe("redeemReceiptsToShares", function () {
     it("should revert when caller not whitelisted unlocker", async function () {
       await router.depositToBatch(busd.address, parseBusd("10"));
-      await router.depositToStrategies();
-      await expect(router.unlockSharesFromReceipts([1])).to.be.revertedWith("NotWhitelistedUnlocker()");
+      await router.allocateToStrategies();
+      await expect(router.redeemReceiptsToShares([1])).to.be.revertedWith("NotModerator()");
     });
 
     it("should unlock list of 1 receipt", async function () {
-      await router.setUnlocker(owner.address, true);
+      await router.setModerator(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
-      await router.depositToStrategies();
-      let receiptsShares = await router.receiptsToShares([1]);
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
 
       let oldBalance = await sharesToken.balanceOf(owner.address);
-      await router.unlockSharesFromReceipts([1]);
+      await router.redeemReceiptsToShares([1]);
       let newBalance = await sharesToken.balanceOf(owner.address);
 
       expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
@@ -302,15 +302,15 @@ describe("Test StrategyRouter", function () {
     });
 
     it("should unlock list of 2 receipt same owner", async function () {
-      await router.setUnlocker(owner.address, true);
+      await router.setModerator(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToBatch(busd.address, parseBusd("10"));
-      await router.depositToStrategies();
-      let receiptsShares = await router.receiptsToShares([1]);
-      let receiptsShares2 = await router.receiptsToShares([2]);
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
 
       let oldBalance = await sharesToken.balanceOf(owner.address);
-      await router.unlockSharesFromReceipts([1,2]);
+      await router.redeemReceiptsToShares([1,2]);
       let newBalance = await sharesToken.balanceOf(owner.address);
       expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares.add(receiptsShares2));
 
@@ -320,18 +320,18 @@ describe("Test StrategyRouter", function () {
 
     it("should unlock list of 2 receipt with different owners", async function () {
       [,,,,owner2] = await ethers.getSigners();
-      await router.setUnlocker(owner.address, true);
+      await router.setModerator(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await busd.transfer(owner2.address, parseBusd("10"));
       await busd.connect(owner2).approve(router.address, parseBusd("10"));
       await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
-      await router.depositToStrategies();
-      let receiptsShares = await router.receiptsToShares([1]);
-      let receiptsShares2 = await router.receiptsToShares([2]);
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
 
       let oldBalance = await sharesToken.balanceOf(owner.address);
       let oldBalance2 = await sharesToken.balanceOf(owner2.address);
-      await router.unlockSharesFromReceipts([1,2]);
+      await router.redeemReceiptsToShares([1,2]);
       let newBalance = await sharesToken.balanceOf(owner.address);
       let newBalance2 = await sharesToken.balanceOf(owner2.address);
       expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
@@ -345,20 +345,20 @@ describe("Test StrategyRouter", function () {
 
     it("should unlock list of 4 receipt, two different owners", async function () {
       [,,,,owner2] = await ethers.getSigners();
-      await router.setUnlocker(owner.address, true);
+      await router.setModerator(owner.address, true);
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.depositToBatch(busd.address, parseBusd("10"));
       await busd.transfer(owner2.address, parseBusd("100"));
       await busd.connect(owner2).approve(router.address, parseBusd("100"));
       await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
       await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
-      await router.depositToStrategies();
-      let receiptsShares = await router.receiptsToShares([1,2]);
-      let receiptsShares2 = await router.receiptsToShares([3,4]);
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1,2]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([3,4]);
 
       let oldBalance = await sharesToken.balanceOf(owner.address);
       let oldBalance2 = await sharesToken.balanceOf(owner2.address);
-      await router.unlockSharesFromReceipts([1,2,3,4]);
+      await router.redeemReceiptsToShares([1,2,3,4]);
       let newBalance = await sharesToken.balanceOf(owner.address);
       let newBalance2 = await sharesToken.balanceOf(owner2.address);
       expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);

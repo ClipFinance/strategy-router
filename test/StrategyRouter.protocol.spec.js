@@ -54,7 +54,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1"));
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
   });
 
   after(async function () {
@@ -75,7 +75,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("User withdraw half from current cycle", async function () {
     let receipt = await receiptContract.getReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1], usdc.address, [receipt.amount.div(2)]);
+    await router.withdrawFromBatching([1], usdc.address, [receipt.tokenAmountUniform.div(2)]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -102,7 +102,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("Deposit to strategies", async function () {
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
     
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("100"),
@@ -117,7 +117,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("Deposit to strategies", async function () {
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("200"),
@@ -127,7 +127,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
   it("Withdraw half from strategies", async function () {
     let oldBalance = await usdc.balanceOf(owner.address);
-    let shares = await router.receiptsToShares([2]);
+    let shares = await router.calculateSharesFromReceipts([2]);
     await router.withdrawFromStrategies([2], usdc.address, shares.div(2));
     let newBalance = await usdc.balanceOf(owner.address);
 
@@ -152,7 +152,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("Withdraw from strategies", async function () {
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    let shares = await router.receiptsToShares([3]);
+    let shares = await router.calculateSharesFromReceipts([3]);
     await router.withdrawFromStrategies([3], usdc.address, shares);
     let newBalance = await usdc.balanceOf(owner.address);
 
@@ -175,10 +175,10 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     for (let i = 0; i < 5; i++) {
       await router.depositToBatch(usdc.address, parseUsdc("10"));
       await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-      await router.depositToStrategies();
+      await router.allocateToStrategies();
       let receipts = await receiptContract.getTokensOfOwner(owner.address);
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
-      let shares = await router.receiptsToShares([receipts[0]]);
+      let shares = await router.calculateSharesFromReceipts([receipts[0]]);
       await router.withdrawFromStrategies([receipts[0]], usdc.address, shares);
 
       // console.log("strategies balance");
@@ -199,7 +199,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // deposit to strategies
     await router.depositToBatch(usdc.address, parseUsdc("10"));
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
     // deploy new strategy
     const Farm = await ethers.getContractFactory("BiswapBusdUsdt");
@@ -217,7 +217,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     let receipts = await receiptContract.getTokensOfOwner(owner.address);
     receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
     let oldBalance = await usdc.balanceOf(owner.address);
-    let shares = await router.receiptsToShares([receipts[0]]);
+    let shares = await router.calculateSharesFromReceipts([receipts[0]]);
     await router.withdrawFromStrategies([receipts[0]], usdc.address, shares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -259,24 +259,24 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.depositToBatch(usdc.address, parseUsdc("100000"));
     // deposit to strategies
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
     // user deposit
     await router.depositToBatch(usdc.address, parseUsdc("100"));
     await router.depositToBatch(usdc.address, parseUsdc("100"));
     // // deposit to strategies
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-    await router.depositToStrategies();
+    await router.allocateToStrategies();
 
     let receipts = await receiptContract.getTokensOfOwner(owner.address);
     // withdraw by receipt
     let oldBalance = await usdc.balanceOf(owner.address);
-    let shares = await router.receiptsToShares([10]);
+    let shares = await router.calculateSharesFromReceipts([10]);
     await router.withdrawFromStrategies([10], usdc.address, shares);
     let newBalance = await usdc.balanceOf(owner.address);
 
     oldBalance = await usdc.balanceOf(owner.address);
-    shares = await router.receiptsToShares([11]);
+    shares = await router.calculateSharesFromReceipts([11]);
     await router.withdrawFromStrategies([11], usdc.address, shares);
     newBalance = await usdc.balanceOf(owner.address);
 

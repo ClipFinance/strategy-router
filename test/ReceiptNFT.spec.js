@@ -171,7 +171,7 @@ describe("Test ReceiptNFT", function () {
             await receiptContractBatching.setAmount(0, amount);
 
             const receipt = await receiptContractStrategyRouter.getReceipt(0); 
-            expect(receipt.amount).to.be.eq(amount);
+            expect(receipt.tokenAmountUniform).to.be.eq(amount);
         });
 
         it("Manager can change amount of receipt created by other manager", async function () {
@@ -181,7 +181,7 @@ describe("Test ReceiptNFT", function () {
             await receiptContractStrategyRouter.setAmount(0, amount);
 
             const receipt = await receiptContractStrategyRouter.getReceipt(0); 
-            expect(receipt.amount).to.be.eq(amount);
+            expect(receipt.tokenAmountUniform).to.be.eq(amount);
         });
 
         it("Non manager can't change amount", async function () {
@@ -319,7 +319,7 @@ describe("Test ReceiptNFT", function () {
     async function verifyReceiptData(receiptId, cycleId, amount, token, owner) {
         const receipt = await receiptContractStrategyRouter.getReceipt(receiptId); 
         expect(receipt.cycleId).to.be.eq(cycleId);
-        expect(receipt.amount).to.be.eq(amount);
+        expect(receipt.tokenAmountUniform).to.be.eq(amount);
         expect(receipt.token).to.be.eq(token);
         expect(await receiptContractBatching.ownerOf(receiptId)).to.be.eq(owner.address);
     }

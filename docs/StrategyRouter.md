@@ -50,10 +50,10 @@ mapping(uint256 &#x3D;&gt; struct StrategyRouter.Cycle) cycles
 
 Contains info such as how much were deposited into strategies or price per share in each cycle.
 
-### depositToStrategies
+### allocateToStrategies
 
 ```solidity
-function depositToStrategies() external
+function allocateToStrategies() external
 ```
 
 Deposit money collected in the batching into strategies.

@@ -57,7 +57,7 @@ describe("Test Exchange", function () {
 
         // admin initial deposit to set initial shares and pps
         await router.depositToBatch(busd.address, parseBusd("1"));
-        await router.depositToStrategies();
+        await router.allocateToStrategies();
     });
 
     beforeEach(async function () {

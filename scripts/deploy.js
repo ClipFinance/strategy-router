@@ -144,7 +144,7 @@ async function main() {
   console.log("Initial deposit to batch...");
   await (await router.depositToBatch(usdc.address, INITIAL_DEPOSIT)).wait();
   console.log("Initial deposit to strategies...");
-  await (await router.depositToStrategies()).wait();
+  await (await router.allocateToStrategies()).wait();
 
 
   // vvvvvvvvvvvvvvvvvvvvvvvvv VERIFICATION vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv

@@ -25,7 +25,7 @@ contract StrategyRouter is Ownable {
     /// @notice Fires when batching is deposited into strategies.
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
-    event DepositToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
     /// @notice Fires when user withdraw from batching.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -62,7 +62,7 @@ contract StrategyRouter is Ownable {
     error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
-    error NotWhitelistedUnlocker();
+    error NotModerator();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -113,10 +113,10 @@ contract StrategyRouter is Ownable {
 
     StrategyInfo[] public strategies;
     mapping(uint256 => Cycle) public cycles;
-    mapping(address => bool) public whitelistedUnlockers;
+    mapping(address => bool) public moderators;
 
-    modifier onlyUnlocker() {
-        if (whitelistedUnlockers[msg.sender] == false) revert NotWhitelistedUnlocker();
+    modifier onlyModerators() {
+        if (!moderators[msg.sender]) revert NotModerator();
         _;
     }
 
@@ -128,15 +128,16 @@ contract StrategyRouter is Ownable {
         batching.setOracle(_oracle);
         batching.setReceiptNFT(address(receiptContract));
         cycles[0].startAt = block.timestamp;
+        moderators[owner()] = true;
     }
 
     // Universal Functions
 
-    /// @notice Deposit money collected in the batching into strategies.
+    /// @notice Send pending money collected in the batch into the strategies.
     /// @notice Can be called when `cycleDuration` seconds has been passed or
     ///         batch usd value has reached `minUsdPerCycle`.
     /// @dev Only callable by user wallets.
-    function depositToStrategies() external {
+    function allocateToStrategies() external {
         /*
         step 1 - preparing data and assigning local variables for later reference
         step 2 - check requirements to launch a cycle
@@ -219,7 +220,7 @@ contract StrategyRouter is Ownable {
         cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd + strategiesDebtInUsd;
         cycles[_currentCycleId].totalDepositedInUsd = batchingValueInUsd + strategiesDebtInUsd;
 
-        emit DepositToStrategies(_currentCycleId, receivedByStrategiesInUsd);
+        emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
         // start new cycle
         ++currentCycleId;
         cycles[_currentCycleId].startAt = block.timestamp;
@@ -290,19 +291,19 @@ contract StrategyRouter is Ownable {
 
     /// @notice Returns amount of shares locked by multiple receipts.
     /// @notice Cycle noted in receipts should be closed.
-    function receiptsToShares(uint256[] calldata receiptIds) public view returns (uint256 shares) {
+    function calculateSharesFromReceipts(uint256[] calldata receiptIds) public view returns (uint256 shares) {
         ReceiptNFT _receiptContract = receiptContract;
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            shares += StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
         }
     }
 
     /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
     /// @notice Cycle noted in receipts should be closed.
-    function unlockSharesFromReceipts(uint256[] calldata receiptIds) public onlyUnlocker {
-        StrategyRouterLib.unlockSharesFromReceipts(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
+    function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
+        StrategyRouterLib.redeemReceiptsToShares(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
     }
 
     /// @notice Returns usd value of shares.
@@ -398,14 +399,14 @@ contract StrategyRouter is Ownable {
 
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
-            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
-                uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
+                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
                 toWithdraw += receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
                 toWithdraw += amountValue;
-                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
             }
         }
 
@@ -514,16 +515,16 @@ contract StrategyRouter is Ownable {
             ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
 
-            if (amounts[i] >= receipt.amount || amounts[i] == 0) {
+            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValue = ((receipt.amount * price) / 10**priceDecimals);
+                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
                 fromBatchAmount += receiptValue;
                 receiptContract.burn(receiptId);
             } else {
                 // withdraw only part of receipt and update receipt
                 uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
                 fromBatchAmount += amountValue;
-                receiptContract.setAmount(receiptId, receipt.amount - amounts[i]);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
             }
         }
 
@@ -588,8 +589,8 @@ contract StrategyRouter is Ownable {
     }
 
     /// @dev Admin function.
-    function setUnlocker(address unlockerAddress, bool isWhitelisted) external onlyOwner {
-        whitelistedUnlockers[unlockerAddress] = isWhitelisted;
+    function setModerator(address moderator, bool isWhitelisted) external onlyOwner {
+        moderators[moderator] = isWhitelisted;
     }
 
     /// @notice Set address of oracle contract.
@@ -913,7 +914,7 @@ contract StrategyRouter is Ownable {
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
-            shares += StrategyRouterLib.receiptToShares(_receiptContract, cycles, _currentCycleId, receiptId);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
             receiptContract.burn(receiptId);
             emit UnlockShares(msg.sender, receiptId, shares);
         }

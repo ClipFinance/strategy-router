@@ -247,7 +247,7 @@ describe("Test rebalance functions", function () {
       await router.addStrategy(farm2.address, usdt.address, 5000);
 
       await router.depositToBatch(usdt.address, parseUsdt("1"));
-      await router.depositToStrategies();
+      await router.allocateToStrategies();
       await router.updateStrategy(0, 10000);
 
       await verifyStrategiesRatio([1, 1]);
@@ -271,7 +271,7 @@ describe("Test rebalance functions", function () {
 
       await router.depositToBatch(usdt.address, parseUsdt("2"));
       await router.depositToBatch(busd.address, parseBusd("1"));
-      await router.depositToStrategies();
+      await router.allocateToStrategies();
 
       await router.updateStrategy(0, 10000);
 
@@ -299,7 +299,7 @@ describe("Test rebalance functions", function () {
 
       await router.depositToBatch(usdt.address, parseUsdt("2"));
       await router.depositToBatch(busd.address, parseBusd("1"));
-      await router.depositToStrategies();
+      await router.allocateToStrategies();
 
       await verifyStrategiesRatio([1, 1, 1]);
 
@@ -330,7 +330,7 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(busd.address, 2);
       await router.depositToBatch(usdc.address, parseUsdc("1"));
 
-      await router.depositToStrategies();
+      await router.allocateToStrategies();
 
       await router.updateStrategy(0, 10000);
       await router.updateStrategy(1, 10001);
