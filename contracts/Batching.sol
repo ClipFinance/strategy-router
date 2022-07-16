@@ -10,8 +10,8 @@ import "./deps/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
-import "./Exchange.sol";
-import "./EnumerableSetExtension.sol";
+import "./exchange/Exchange.sol";
+import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
