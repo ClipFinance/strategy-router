@@ -33,6 +33,8 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error NotEnoughBalanceInBatching();
     error CallerIsNotStrategyRouter();
 
+    event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
+
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
@@ -57,20 +59,22 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(
+    function initialize() external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+    }
+
+    function setAddresses(
         Exchange _exchange,
         IUsdOracle _oracle,
         StrategyRouter _router,
         ReceiptNFT _receiptNft
-    ) external initializer {
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-
-        // TODO: probably remove setters for these, as they already assigned here in initialization function
-        receiptContract = _receiptNft;
+    ) external onlyOwner {
         exchange = _exchange;
         oracle = _oracle;
         router = _router;
+        receiptContract = _receiptNft;
+        emit SetAddresses(_exchange, _oracle, _router, _receiptNft);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -137,7 +141,8 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
             if (receiptTokenAmounts[i] >= receipt.tokenAmountUniform || receiptTokenAmounts[i] == 0) {
                 // withdraw whole receipt and burn receipt
-                uint256 receiptValueUsd = ((receipt.tokenAmountUniform * originalDepositedTokenPriceUsd) / 10**priceDecimals);
+                uint256 receiptValueUsd = ((receipt.tokenAmountUniform * originalDepositedTokenPriceUsd) /
+                    10**priceDecimals);
                 valueToWithdrawUsd += receiptValueUsd;
                 receiptContract.burn(receiptId);
             } else {
@@ -154,11 +159,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
     }
 
-    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken)
-        public
-        onlyStrategyRouter
-        returns (uint256)
-    {
+    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken) public onlyStrategyRouter returns (uint256) {
         (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
         if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 
@@ -259,24 +260,6 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Admin functions
-
-    /// @notice Set address of oracle contract.
-    /// @dev Admin function.
-    function setOracle(address _oracle) external onlyStrategyRouter {
-        oracle = IUsdOracle(_oracle);
-    }
-
-    /// @notice Set address of ReceiptNFT contract.
-    /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyStrategyRouter {
-        receiptContract = ReceiptNFT(_receiptContract);
-    }
-
-    /// @notice Set address of exchange contract.
-    /// @dev Admin function.
-    function setExchange(address newExchange) external onlyStrategyRouter {
-        exchange = Exchange(newExchange);
-    }
 
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.

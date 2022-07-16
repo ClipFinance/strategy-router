@@ -76,7 +76,6 @@ async function setupCore() {
   // Deploy Batching
   let Batching = await ethers.getContractFactory("Batching");
   let batching = await upgrades.deployProxy(Batching, [], {
-    initializer: false,
     kind: 'uups',
   });
   await batching.deployed();
@@ -85,7 +84,7 @@ async function setupCore() {
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
-  // silence warnings about usage of external libs
+  // silence warnings about usage of external libs, for tests
   upgrades.silenceWarnings(); 
   let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
@@ -93,21 +92,20 @@ async function setupCore() {
     }
   });
   let router = await upgrades.deployProxy(StrategyRouter, [], {
-    initializer: false,
     unsafeAllow: ["external-library-linking", "constructor"],
     kind: 'uups',
   });
   await router.deployed();
   await sharesToken.transferOwnership(router.address);
   // Initialize proxy and non-proxy contracts
-  await router.initialize(
+  await router.setAddresses(
     exchange.address,
     oracle.address,
     sharesToken.address,
     batching.address,
     receiptContract.address
   );
-  await batching.initialize(
+  await batching.setAddresses(
     exchange.address,
     oracle.address,
     router.address,

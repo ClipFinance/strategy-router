@@ -18,7 +18,6 @@ import "./StrategyRouterLib.sol";
 // import "hardhat/console.sol";
 
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
-
     /* EVENTS */
 
     /// @notice Fires when user deposits in batching.
@@ -46,14 +45,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
 
     // Events for setters.
-    event SetOracle(address newAddress);
-    event SetReceiptNFT(address newAddress);
-    event SetExchange(address newAddress);
     event SetMinDeposit(uint256 newAmount);
     event SetCycleDuration(uint256 newDuration);
     event SetMinUsdPerCycle(uint256 newAmount);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
+    event SetAddresses(
+        Exchange _exchange,
+        IUsdOracle _oracle,
+        SharesToken _sharesToken,
+        Batching _batching,
+        ReceiptNFT _receiptNft
+    );
 
     /* ERRORS */
     error AmountExceedTotalSupply();
@@ -130,25 +133,28 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(
+    function initialize() external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+
+        cycles[0].startAt = block.timestamp;
+        cycleDuration = 1 days;
+        moderators[owner()] = true;
+    }
+
+    function setAddresses(
         Exchange _exchange,
         IUsdOracle _oracle,
         SharesToken _sharesToken,
         Batching _batching,
         ReceiptNFT _receiptNft
-    ) external initializer {
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-
+    ) external onlyOwner {
+        exchange = _exchange;
+        oracle = _oracle;
+        sharesToken = _sharesToken;
         batching = _batching;
         receiptContract = _receiptNft;
-        sharesToken = _sharesToken;
-        oracle = _oracle;
-        exchange = _exchange;
-
-        cycles[0].startAt = block.timestamp;
-        cycleDuration = 1 days;
-        moderators[owner()] = true;
+        emit SetAddresses(_exchange, _oracle, _sharesToken, _batching, _receiptNft);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -311,14 +317,25 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            shares += StrategyRouterLib.calculateSharesFromReceipt(receiptId, _currentCycleId, _receiptContract, cycles);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(
+                receiptId,
+                _currentCycleId,
+                _receiptContract,
+                cycles
+            );
         }
     }
 
     /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
     /// @notice Cycle noted in receipts should be closed.
     function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
-        StrategyRouterLib.redeemReceiptsToSharesByModerators(receiptIds, currentCycleId, receiptContract, sharesToken, cycles);
+        StrategyRouterLib.redeemReceiptsToSharesByModerators(
+            receiptIds,
+            currentCycleId,
+            receiptContract,
+            sharesToken,
+            cycles
+        );
         emit RedeemReceiptsToSharesByModerators(msg.sender, receiptIds);
     }
 
@@ -568,7 +585,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // shares related code
         if (shares == 0) return;
 
-        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIdsStrats, currentCycleId, receiptContract, cycles);
+        uint256 unlockedShares = StrategyRouterLib.burnReceipts(
+            receiptIdsStrats,
+            currentCycleId,
+            receiptContract,
+            cycles
+        );
         sharesToken.transfer(msg.sender, unlockedShares);
         // if user trying to withdraw more than he have, don't allow
         uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
@@ -609,30 +631,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Admin function.
     function setModerator(address moderator, bool isWhitelisted) external onlyOwner {
         moderators[moderator] = isWhitelisted;
-    }
-
-    /// @notice Set address of oracle contract.
-    /// @dev Admin function.
-    function setOracle(address _oracle) external onlyOwner {
-        oracle = IUsdOracle(_oracle);
-        batching.setOracle(_oracle);
-        emit SetOracle(address(_oracle));
-    }
-
-    /// @notice Set address of ReceiptNFT contract.
-    /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyOwner {
-        receiptContract = ReceiptNFT(_receiptContract);
-        batching.setReceiptNFT(_receiptContract);
-        emit SetReceiptNFT(_receiptContract);
-    }
-
-    /// @notice Set address of exchange contract.
-    /// @dev Admin function.
-    function setExchange(address newExchange) external onlyOwner {
-        exchange = Exchange(newExchange);
-        batching.setExchange(newExchange);
-        emit SetExchange(newExchange);
     }
 
     /// @notice Set address for collecting fees from rewards.
@@ -849,5 +847,4 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         IERC20(withdrawToken).transfer(msg.sender, tokenAmountToWithdraw);
         emit WithdrawFromStrategies(msg.sender, withdrawToken, tokenAmountToWithdraw);
     }
-
 }
