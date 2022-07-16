@@ -44,7 +44,7 @@ module.exports = {
         // blockNumber: 19232650, // use this only with archival node
         enabled: true
       },
-      allowUnlimitedContractSize: true,
+      // allowUnlimitedContractSize: true,
       // loggingEnabled: false
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
     },

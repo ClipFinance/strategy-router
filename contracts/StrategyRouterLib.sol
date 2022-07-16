@@ -42,10 +42,10 @@ library StrategyRouterLib {
 
     // returns amount of shares locked by receipt.
     function calculateSharesFromReceipt(
-        ReceiptNFT receiptContract,
-        mapping(uint256 => StrategyRouter.Cycle) storage cycles,
+        uint256 receiptId,
         uint256 currentCycleId,
-        uint256 receiptId
+        ReceiptNFT receiptContract,
+        mapping(uint256 => StrategyRouter.Cycle) storage cycles
     ) public view returns (uint256 shares) {
         ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
         if (receipt.cycleId == currentCycleId) revert CycleNotClosed();
@@ -56,8 +56,8 @@ library StrategyRouterLib {
         assert(depositedUsdValueOfReceipt > 0);
         // adjust according to what was actually deposited into strategies
         // example: ($1000 * $4995) / $5000 = $999
-        uint256 allocatedUsdValueOfReceipt = (depositedUsdValueOfReceipt * cycles[receipt.cycleId].receivedByStrategiesInUsd) /
-            cycles[receipt.cycleId].totalDepositedInUsd;
+        uint256 allocatedUsdValueOfReceipt = (depositedUsdValueOfReceipt *
+            cycles[receipt.cycleId].receivedByStrategiesInUsd) / cycles[receipt.cycleId].totalDepositedInUsd;
         return (allocatedUsdValueOfReceipt * PRECISION) / cycles[receipt.cycleId].pricePerShare;
     }
 
@@ -102,11 +102,11 @@ library StrategyRouterLib {
 
     /// @notice receiptIds should be passed here already ordered by their owners in order not to do extra transfers
     /// @notice Example: [alice, bob, alice, bob] will do 4 transfers. [alice, alice, bob, bob] will do 2 transfers
-    function redeemReceiptsToShares(
+    function redeemReceiptsToSharesByModerators(
         uint256[] calldata receiptIds,
+        uint256 _currentCycleId,
         ReceiptNFT _receiptContract,
         SharesToken _sharesToken,
-        uint256 _currentCycleId,
         mapping(uint256 => StrategyRouter.Cycle) storage cycles
     ) public {
         if (receiptIds.length == 0) revert();
@@ -114,8 +114,7 @@ library StrategyRouterLib {
         // address sameOwnerAddress;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            // uint256 shares = StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
-            uint256 shares = calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
+            uint256 shares = calculateSharesFromReceipt(receiptId, _currentCycleId,_receiptContract, cycles);
             address receiptOwner = _receiptContract.ownerOf(receiptId);
             if (i + 1 < receiptIds.length) {
                 uint256 nextReceiptId = receiptIds[i + 1];
@@ -136,6 +135,26 @@ library StrategyRouterLib {
                 sameOwnerShares += shares;
                 _sharesToken.transfer(receiptOwner, sameOwnerShares);
             }
+            _receiptContract.burn(receiptId);
+        }
+    }
+
+    /// burn receipts and return amount of shares noted in them.
+    function burnReceipts(
+        uint256[] calldata receiptIds,
+        uint256 _currentCycleId,
+        ReceiptNFT _receiptContract,
+        mapping(uint256 => StrategyRouter.Cycle) storage cycles
+    ) public returns (uint256 shares) {
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (_receiptContract.ownerOf(receiptId) != msg.sender) revert StrategyRouter.NotReceiptOwner();
+            shares += calculateSharesFromReceipt(
+                receiptId,
+                _currentCycleId,
+                _receiptContract,
+                cycles
+            );
             _receiptContract.burn(receiptId);
         }
     }

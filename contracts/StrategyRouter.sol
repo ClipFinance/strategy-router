@@ -38,9 +38,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param amount Amount of `token` received by user.
     event WithdrawFromStrategies(address indexed user, address token, uint256 amount);
     /// @notice Fires when user converts his receipt into shares token.
-    /// @param receiptId Index of the receipt to burn.
     /// @param shares Amount of shares received by user.
-    event UnlockShares(address indexed user, uint256 receiptId, uint256 shares);
+    /// @param receiptIds Indexes of the receipts burned.
+    event RedeemReceiptsToShares(address indexed user, uint256 shares, uint256[] receiptIds);
+    /// @notice Fires when moderator converts foreign receipts into shares token.
+    /// @param receiptIds Indexes of the receipts burned.
+    event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
 
     // Events for setters.
     event SetOracle(address newAddress);
@@ -107,11 +110,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public feePercent;
     uint256 public currentCycleId;
 
-    ReceiptNFT public receiptContract;
+    ReceiptNFT private receiptContract;
     Exchange public exchange;
-    IUsdOracle public oracle;
-    SharesToken public sharesToken;
-    Batching public batching;
+    IUsdOracle private oracle;
+    SharesToken private sharesToken;
+    Batching private batching;
     address public feeAddress;
 
     StrategyInfo[] public strategies;
@@ -317,14 +320,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
+            shares += StrategyRouterLib.calculateSharesFromReceipt(receiptId, _currentCycleId, _receiptContract, cycles);
         }
     }
 
     /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
     /// @notice Cycle noted in receipts should be closed.
     function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
-        StrategyRouterLib.redeemReceiptsToShares(receiptIds, receiptContract, sharesToken, currentCycleId, cycles);
+        StrategyRouterLib.redeemReceiptsToSharesByModerators(receiptIds, currentCycleId, receiptContract, sharesToken, cycles);
+        emit RedeemReceiptsToSharesByModerators(msg.sender, receiptIds);
     }
 
     /// @notice Returns usd value of shares.
@@ -356,9 +360,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Convert receipts into share tokens. Withdraw functions doing it internally.
     /// @notice Cycle noted in receipt should be closed.
-    function unlockShares(uint256[] calldata receiptIds) public returns (uint256 shares) {
-        shares = _unlockShares(receiptIds);
+    function redeemReceiptsToShares(uint256[] calldata receiptIds) public returns (uint256 shares) {
+        shares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
         sharesToken.transfer(msg.sender, shares);
+        emit RedeemReceiptsToShares(msg.sender, shares, receiptIds);
     }
 
     /// @notice Withdraw tokens from strategies while receipts are in strategies.
@@ -377,7 +382,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 unlockedShares = _unlockShares(receiptIds);
+        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
 
         if (unlockedShares > shares) {
             // leftover shares -> send to user
@@ -496,7 +501,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 unlockedShares = _unlockShares(receiptIds);
+        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
         if (unlockedShares > shares) {
             // leftover shares -> send to user
             sharesToken.transfer(msg.sender, unlockedShares - shares);
@@ -572,7 +577,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // shares related code
         if (shares == 0) return;
 
-        uint256 unlockedShares = _unlockShares(receiptIdsStrats);
+        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIdsStrats, currentCycleId, receiptContract, cycles);
         sharesToken.transfer(msg.sender, unlockedShares);
         // if user trying to withdraw more than he have, don't allow
         uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
@@ -929,16 +934,4 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit WithdrawFromStrategies(msg.sender, withdrawToken, tokenAmountToWithdraw);
     }
 
-    /// burn receipts and return amount of freed shares.
-    function _unlockShares(uint256[] calldata receiptIds) private returns (uint256 shares) {
-        ReceiptNFT _receiptContract = receiptContract;
-        uint256 _currentCycleId = currentCycleId;
-        for (uint256 i = 0; i < receiptIds.length; i++) {
-            uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
-            shares += StrategyRouterLib.calculateSharesFromReceipt(_receiptContract, cycles, _currentCycleId, receiptId);
-            receiptContract.burn(receiptId);
-            emit UnlockShares(msg.sender, receiptId, shares);
-        }
-    }
 }

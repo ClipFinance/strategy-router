@@ -281,14 +281,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     newBalance = await usdc.balanceOf(owner.address);
 
     // unlock shares and withdraw tokens by shares
-    await router.unlockShares([12]);
+    await router.redeemReceiptsToShares([12]);
     let sharesUnlocked = await sharesToken.balanceOf(owner.address);
 
     oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(sharesUnlocked, usdc.address);
     newBalance = await usdc.balanceOf(owner.address);
 
-    await router.unlockShares([13]);
+    await router.redeemReceiptsToShares([13]);
     sharesUnlocked = await sharesToken.balanceOf(owner.address);
     oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawShares(sharesUnlocked, usdc.address);

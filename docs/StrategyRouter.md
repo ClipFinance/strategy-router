@@ -153,10 +153,10 @@ Calculate how much usd shares representing using current price per share.
 
 _Returns amount with uniform decimals_
 
-### unlockShares
+### redeemReceiptsToShares
 
 ```solidity
-function unlockShares(uint256 receiptId) public returns (uint256 shares)
+function redeemReceiptsToShares(uint256 receiptId) public returns (uint256 shares)
 ```
 
 Convert receipt NFT into share tokens, withdraw functions do it internally.
