@@ -37,7 +37,14 @@ module.exports = function strategyTest(strategyName) {
       await setupTokens();
 
       // deploy strategy to test
-      strategy = await deploy(strategyName, router.address);
+      // strategy = await deploy(strategyName, router.address);
+      let StrategyFactory = await ethers.getContractFactory(strategyName)
+      strategy = await upgrades.deployProxy(StrategyFactory, [], {
+        kind: 'uups',
+        constructorArgs: [router.address],
+        unsafeAllow: ["constructor", "state-variable-immutable"],
+      });
+      await strategy.deployed();
 
       // get deposit token and parse helper function
       depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());

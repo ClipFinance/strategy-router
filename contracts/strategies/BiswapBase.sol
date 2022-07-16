@@ -14,7 +14,7 @@ import "hardhat/console.sol";
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
 // their code on github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
-contract BiswapBase is Ownable, IStrategy {
+contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     ERC20 internal immutable tokenA;
     ERC20 internal immutable tokenB;
     ERC20 internal immutable lpToken;
@@ -30,6 +30,7 @@ contract BiswapBase is Ownable, IStrategy {
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
+    // NOTICE: construct is intended to initialize immutables on implementation
     constructor(
         StrategyRouter _strategyRouter,
         uint256 _poolId,
@@ -44,7 +45,17 @@ contract BiswapBase is Ownable, IStrategy {
         lpToken = _lpToken;
         LEFTOVER_THRESHOLD_TOKEN_A = 10**_tokenA.decimals();
         LEFTOVER_THRESHOLD_TOKEN_B = 10**_tokenB.decimals();
+        
+        // lock implementation
+        _disableInitializers();
     }
+
+    function initialize() external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function depositToken() external view override returns (address) {
         return address(tokenA);

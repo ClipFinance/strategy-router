@@ -43,10 +43,22 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await usdc.approve(router.address, parseUsdc("1000000"));
 
     // deploy strategies 
-    strategyBiswap2 = await deploy("BiswapBusdUsdt", router.address);
+    let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
+    strategyBiswap2 = await upgrades.deployProxy(StrategyFactory, [], {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      unsafeAllow: ["constructor", "state-variable-immutable"],
+    });
+    await strategyBiswap2.deployed();
     await strategyBiswap2.transferOwnership(router.address);
 
-    strategyBiswap = await deploy("BiswapUsdcUsdt", router.address);
+    StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt");
+    strategyBiswap = await upgrades.deployProxy(StrategyFactory, [], {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      unsafeAllow: ["constructor", "state-variable-immutable"],
+    });
+    await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
 
     await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
@@ -202,8 +214,12 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
 
     // deploy new strategy
-    const Farm = await ethers.getContractFactory("BiswapBusdUsdt");
-    farm2 = strategyBiswap = await Farm.deploy(router.address);
+    let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
+    farm2 = await upgrades.deployProxy(StrategyFactory, [], {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      unsafeAllow: ["constructor", "state-variable-immutable"],
+    });
     await farm2.deployed();
     await farm2.transferOwnership(router.address);
 
