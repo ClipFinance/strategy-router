@@ -19,7 +19,6 @@ import "./Initializable.sol";
  */
 abstract contract ERC1967UpgradeUpgradeable is Initializable {
     error ERC1967_NewImplementationIsNotAContract();
-    error Address__LowLevelCallWithValueFailed();
     error ERC1967Upgrade_UnsupportedProxiableUUID();
     error ERC1967Upgrade_NewImplementationIsNotUUPS();
     error ERC1967_NewAdminIsZeroAddress();

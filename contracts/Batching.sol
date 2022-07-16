@@ -4,7 +4,9 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "./deps/OwnableUpgradeable.sol";
+import "./deps/Initializable.sol";
+import "./deps/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./ReceiptNFT.sol";
@@ -16,12 +18,9 @@ import "./interfaces/IUsdOracle.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
-contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
-
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-    bytes32 public constant STRATEGY_ROUTER_ROLE = keccak256("STRATEGY_ROUTER");
 
     /* ERRORS */
 
@@ -32,6 +31,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     error CycleClosed();
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatching();
+    error CallerIsNotStrategyRouter();
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
@@ -46,6 +46,11 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
     EnumerableSet.AddressSet private supportedTokens;
 
+    modifier onlyStrategyRouter() {
+        if (msg.sender != address(router)) revert CallerIsNotStrategyRouter();
+        _;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
@@ -58,11 +63,8 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         StrategyRouter _router,
         ReceiptNFT _receiptNft
     ) external initializer {
-        __AccessControl_init();
+        __Ownable_init();
         __UUPSUpgradeable_init();
-
-        _grantRole(UPGRADER_ROLE, msg.sender);
-        _grantRole(STRATEGY_ROUTER_ROLE, address(_router));
 
         // TODO: probably remove setters for these, as they already assigned here in initialization function
         receiptContract = _receiptNft;
@@ -71,7 +73,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         router = _router;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // Universal Functions
 
@@ -116,7 +118,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256[] calldata receiptTokenAmounts
-    ) public onlyRole(STRATEGY_ROUTER_ROLE) returns (uint256 withdrawalTokenAmountToTransfer) {
+    ) public onlyStrategyRouter returns (uint256 withdrawalTokenAmountToTransfer) {
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
         uint256 _currentCycleId = router.currentCycleId();
@@ -154,7 +156,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
     function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken)
         public
-        onlyRole(STRATEGY_ROUTER_ROLE)
+        onlyStrategyRouter
         returns (uint256)
     {
         (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
@@ -237,7 +239,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         address depositor,
         address depositToken,
         uint256 _amount
-    ) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    ) external onlyStrategyRouter {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
         uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
@@ -252,7 +254,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
         address token,
         address to,
         uint256 amount
-    ) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    ) external onlyStrategyRouter {
         ERC20(token).transfer(to, amount);
     }
 
@@ -260,32 +262,32 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
     /// @notice Set address of oracle contract.
     /// @dev Admin function.
-    function setOracle(address _oracle) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    function setOracle(address _oracle) external onlyStrategyRouter {
         oracle = IUsdOracle(_oracle);
     }
 
     /// @notice Set address of ReceiptNFT contract.
     /// @dev Admin function.
-    function setReceiptNFT(address _receiptContract) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    function setReceiptNFT(address _receiptContract) external onlyStrategyRouter {
         receiptContract = ReceiptNFT(_receiptContract);
     }
 
     /// @notice Set address of exchange contract.
     /// @dev Admin function.
-    function setExchange(address newExchange) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    function setExchange(address newExchange) external onlyStrategyRouter {
         exchange = Exchange(newExchange);
     }
 
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    function setMinDeposit(uint256 amount) external onlyStrategyRouter {
         minDeposit = amount;
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalance() public onlyRole(STRATEGY_ROUTER_ROLE) returns (uint256[] memory balances) {
+    function rebalance() public onlyStrategyRouter returns (uint256[] memory balances) {
         /*
         1 store supported-tokens (set of unique addresses)
             [a,b,c]
@@ -424,7 +426,7 @@ contract Batching is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyRole(STRATEGY_ROUTER_ROLE) {
+    function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
         if (supported) {
