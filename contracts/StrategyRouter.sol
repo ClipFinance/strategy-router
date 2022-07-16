@@ -101,8 +101,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
-    // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
-    uint256 private constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
     uint256 public cycleDuration;
     uint256 public minUsdPerCycle;
@@ -268,14 +266,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @dev Returns strategy weight as percent of total weight.
     function getStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation) {
-        uint256 totalStrategyWeight;
-        uint256 len = strategies.length;
-        for (uint256 i; i < len; i++) {
-            totalStrategyWeight += strategies[i].weight;
-        }
-        strategyPercentAllocation = (strategies[_strategyId].weight * PRECISION) / totalStrategyWeight;
-
-        return strategyPercentAllocation;
+        return StrategyRouterLib.getStrategyPercentWeight(_strategyId, strategies);
     }
 
     /// @notice Returns count of strategies.
@@ -768,82 +759,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        uint256 totalBalance;
-
-        uint256 len = strategies.length;
-        if (len < 2) revert NothingToRebalance();
-        uint256[] memory _strategiesBalances = new uint256[](len);
-        address[] memory _strategiesTokens = new address[](len);
-        address[] memory _strategies = new address[](len);
-        for (uint256 i; i < len; i++) {
-            _strategiesTokens[i] = strategies[i].depositToken;
-            _strategies[i] = strategies[i].strategyAddress;
-            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += StrategyRouterLib.toUniform(_strategiesBalances[i], _strategiesTokens[i]);
-        }
-
-        uint256[] memory toAdd = new uint256[](len);
-        uint256[] memory toSell = new uint256[](len);
-        for (uint256 i; i < len; i++) {
-            uint256 desiredBalance = (totalBalance * getStrategyPercentWeight(i)) / PRECISION;
-            desiredBalance = StrategyRouterLib.fromUniform(desiredBalance, _strategiesTokens[i]);
-            unchecked {
-                if (desiredBalance > _strategiesBalances[i]) {
-                    toAdd[i] = desiredBalance - _strategiesBalances[i];
-                } else if (desiredBalance < _strategiesBalances[i]) {
-                    toSell[i] = _strategiesBalances[i] - desiredBalance;
-                }
-            }
-        }
-
-        for (uint256 i; i < len; i++) {
-            for (uint256 j; j < len; j++) {
-                if (toSell[i] == 0) break;
-                if (toAdd[j] > 0) {
-                    address sellToken = _strategiesTokens[i];
-                    address buyToken = _strategiesTokens[j];
-                    uint256 sellUniform = StrategyRouterLib.toUniform(toSell[i], sellToken);
-                    uint256 addUniform = StrategyRouterLib.toUniform(toAdd[j], buyToken);
-                    // curSell should have sellToken decimals
-                    uint256 curSell = sellUniform > addUniform
-                        ? StrategyRouterLib.changeDecimals(addUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals())
-                        : toSell[i];
-
-                    if (sellUniform < REBALANCE_SWAP_THRESHOLD) {
-                        unchecked {
-                            toSell[i] = 0;
-                            toAdd[j] -= StrategyRouterLib.changeDecimals(
-                                curSell,
-                                ERC20(sellToken).decimals(),
-                                ERC20(buyToken).decimals()
-                            );
-                        }
-                        break;
-                    }
-
-                    uint256 received = IStrategy(_strategies[i]).withdraw(curSell);
-                    received = StrategyRouterLib.trySwap(exchange, received, sellToken, buyToken);
-                    ERC20(buyToken).transfer(_strategies[j], received);
-                    IStrategy(_strategies[j]).deposit(received);
-
-                    unchecked {
-                        toSell[i] -= curSell;
-                        toAdd[j] -= StrategyRouterLib.changeDecimals(
-                            curSell,
-                            ERC20(sellToken).decimals(),
-                            ERC20(buyToken).decimals()
-                        );
-                    }
-                }
-            }
-        }
-
-        for (uint256 i; i < len; i++) {
-            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
-            totalBalance += StrategyRouterLib.toUniform(_strategiesBalances[i], _strategiesTokens[i]);
-        }
-
-        return _strategiesBalances;
+        return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
     }
 
     // Internals

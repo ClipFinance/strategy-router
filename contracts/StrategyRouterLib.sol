@@ -20,6 +20,8 @@ library StrategyRouterLib {
 
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
+    // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
+    uint256 private constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
     function getStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
         public
@@ -114,7 +116,7 @@ library StrategyRouterLib {
         // address sameOwnerAddress;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
-            uint256 shares = calculateSharesFromReceipt(receiptId, _currentCycleId,_receiptContract, cycles);
+            uint256 shares = calculateSharesFromReceipt(receiptId, _currentCycleId, _receiptContract, cycles);
             address receiptOwner = _receiptContract.ownerOf(receiptId);
             if (i + 1 < receiptIds.length) {
                 uint256 nextReceiptId = receiptIds[i + 1];
@@ -149,13 +151,113 @@ library StrategyRouterLib {
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (_receiptContract.ownerOf(receiptId) != msg.sender) revert StrategyRouter.NotReceiptOwner();
-            shares += calculateSharesFromReceipt(
-                receiptId,
-                _currentCycleId,
-                _receiptContract,
-                cycles
-            );
+            shares += calculateSharesFromReceipt(receiptId, _currentCycleId, _receiptContract, cycles);
             _receiptContract.burn(receiptId);
+        }
+    }
+
+    /// @dev Returns strategy weight as percent of total weight.
+    function getStrategyPercentWeight(uint256 _strategyId, StrategyRouter.StrategyInfo[] storage strategies)
+        internal
+        view
+        returns (uint256 strategyPercentAllocation)
+    {
+        uint256 totalStrategyWeight;
+        uint256 len = strategies.length;
+        for (uint256 i; i < len; i++) {
+            totalStrategyWeight += strategies[i].weight;
+        }
+        strategyPercentAllocation = (strategies[_strategyId].weight * PRECISION) / totalStrategyWeight;
+
+        return strategyPercentAllocation;
+    }
+
+    function rebalanceStrategies(Exchange exchange, StrategyRouter.StrategyInfo[] storage strategies)
+        public
+        returns (uint256[] memory balances)
+    {
+        uint256 totalBalance;
+
+        uint256 len = strategies.length;
+        if (len < 2) revert StrategyRouter.NothingToRebalance();
+        uint256[] memory _strategiesBalances = new uint256[](len);
+        address[] memory _strategiesTokens = new address[](len);
+        address[] memory _strategies = new address[](len);
+        for (uint256 i; i < len; i++) {
+            _strategiesTokens[i] = strategies[i].depositToken;
+            _strategies[i] = strategies[i].strategyAddress;
+            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
+            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
+        }
+
+        uint256[] memory toAdd = new uint256[](len);
+        uint256[] memory toSell = new uint256[](len);
+        for (uint256 i; i < len; i++) {
+            uint256 desiredBalance = (totalBalance * getStrategyPercentWeight(i, strategies)) / PRECISION;
+            desiredBalance = fromUniform(desiredBalance, _strategiesTokens[i]);
+            unchecked {
+                if (desiredBalance > _strategiesBalances[i]) {
+                    toAdd[i] = desiredBalance - _strategiesBalances[i];
+                } else if (desiredBalance < _strategiesBalances[i]) {
+                    toSell[i] = _strategiesBalances[i] - desiredBalance;
+                }
+            }
+        }
+
+        _rebalanceStrategies(len, exchange, toSell, toAdd, _strategiesTokens, _strategies);
+
+        for (uint256 i; i < len; i++) {
+            _strategiesBalances[i] = IStrategy(_strategies[i]).totalTokens();
+            totalBalance += toUniform(_strategiesBalances[i], _strategiesTokens[i]);
+        }
+
+        return _strategiesBalances;
+    }
+
+    function _rebalanceStrategies(
+        uint256 len,
+        Exchange exchange,
+        uint256[] memory toSell,
+        uint256[] memory toAdd,
+        address[] memory _strategiesTokens,
+        address[] memory _strategies
+    ) internal {
+        for (uint256 i; i < len; i++) {
+            for (uint256 j; j < len; j++) {
+                if (toSell[i] == 0) break;
+                if (toAdd[j] > 0) {
+                    address sellToken = _strategiesTokens[i];
+                    address buyToken = _strategiesTokens[j];
+                    uint256 sellUniform = toUniform(toSell[i], sellToken);
+                    uint256 addUniform = toUniform(toAdd[j], buyToken);
+                    // curSell should have sellToken decimals
+                    uint256 curSell = sellUniform > addUniform
+                        ? changeDecimals(addUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals())
+                        : toSell[i];
+
+                    if (sellUniform < REBALANCE_SWAP_THRESHOLD) {
+                        unchecked {
+                            toSell[i] = 0;
+                            toAdd[j] -= changeDecimals(
+                                curSell,
+                                ERC20(sellToken).decimals(),
+                                ERC20(buyToken).decimals()
+                            );
+                        }
+                        break;
+                    }
+
+                    uint256 received = IStrategy(_strategies[i]).withdraw(curSell);
+                    received = trySwap(exchange, received, sellToken, buyToken);
+                    ERC20(buyToken).transfer(_strategies[j], received);
+                    IStrategy(_strategies[j]).deposit(received);
+
+                    unchecked {
+                        toSell[i] -= curSell;
+                        toAdd[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
+                    }
+                }
+            }
         }
     }
 }
