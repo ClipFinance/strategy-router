@@ -156,7 +156,7 @@ describe("Test Batching", function () {
 
     });
 
-    describe("withdraw", function () {
+    describe("withdrawByUsdValue", function () {
 
         // snapshot to revert state changes that are made in this scope
         let _snapshot;
@@ -250,6 +250,104 @@ describe("Test Batching", function () {
             expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
             expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
         });
+    });
+
+    describe("withdrawExactTokens", function () {
+
+        // snapshot to revert state changes that are made in this scope
+        let _snapshot;
+
+        before(async () => {
+            _snapshot = await provider.send("evm_snapshot");
+
+            // setup supported tokens
+            await router.setSupportedToken(usdc.address, true);
+            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(usdt.address, true);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdt });
+
+            // admin initial deposit to set initial shares and pps
+            await router.depositToBatch(busd.address, parseBusd("1"));
+            await router.allocateToStrategies();
+
+        });
+
+        after(async () => {
+            await provider.send("evm_revert", [_snapshot]);
+        });
+
+        it("shouldn't be able to withdraw receipt that doesn't belong to you", async function () {
+            await router.depositToBatch(usdc.address, parseUsdc("100"))
+            await expect(router.connect(nonReceiptOwner).withdrawFromBatchingExactTokens([1], [MaxUint256]))
+                .to.be.revertedWith("NotReceiptOwner()");
+        });
+
+        it("should burn receipts when withdraw whole amount noted in it", async function () {
+            await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+            let receipts = await receiptContract.getTokensOfOwner(owner.address);
+            expect(receipts.toString()).to.be.eq("1,0");
+
+            await router.withdrawFromBatchingExactTokens([1], [MaxUint256]);
+
+            receipts = await receiptContract.getTokensOfOwner(owner.address);
+            expect(receipts.toString()).to.be.eq("0");
+        });
+
+        it("should not burn receipts when withdraw part amount noted in it", async function () {
+            await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+            let receipts = await receiptContract.getTokensOfOwner(owner.address);
+            expect(receipts.toString()).to.be.eq("1,0");
+
+            await router.withdrawFromBatchingExactTokens([1], [parseUniform("50")]);
+
+            receipts = await receiptContract.getTokensOfOwner(owner.address);
+            expect(receipts.toString()).to.be.eq("1,0");
+        });
+
+        it("should withdraw whole amount", async function () {
+            await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+            let oldBalance = await usdc.balanceOf(owner.address);
+            await router.withdrawFromBatchingExactTokens([1], [MaxUint256]);
+            let newBalance = await usdc.balanceOf(owner.address);
+
+            expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
+        });
+
+        it("should withdraw half of receipt", async function () {
+            await router.depositToBatch(usdc.address, parseUsdc("100"))
+
+            // WITHDRAW PART
+            oldBalance = await usdc.balanceOf(owner.address);
+            await router.withdrawFromBatchingExactTokens([1], [parseUniform("50")]);
+            newBalance = await usdc.balanceOf(owner.address);
+
+            let receipt = await receiptContract.getReceipt(1);
+            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
+        });
+
+        it("should withdraw two receipts and receive tokens noted in them", async function () {
+            await router.depositToBatch(busd.address, parseBusd("100"));
+            await router.depositToBatch(usdt.address, parseUsdt("100"));
+
+            // WITHDRAW PART
+            oldBalance = await usdt.balanceOf(owner.address);
+            oldBalance2 = await busd.balanceOf(owner.address);
+            await router.withdrawFromBatchingExactTokens([1, 2], [parseUniform("100"), parseUniform("100")]);
+            newBalance = await usdt.balanceOf(owner.address);
+            newBalance2 = await busd.balanceOf(owner.address);
+
+            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdt("100"), parseUsdt("1"));
+            expect(newBalance2.sub(oldBalance2)).to.be.closeTo(parseBusd("100"), parseBusd("1"));
+        });
+
     });
 
     describe("setSupportedToken", function () {

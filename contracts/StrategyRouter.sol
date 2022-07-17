@@ -490,8 +490,21 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public {
-        uint256 withdrawalTokenAmountToTransfer = batching.withdrawByUsdValue(msg.sender, receiptIds, amounts, currentCycleId);
+        uint256 withdrawalTokenAmountToTransfer = batching.withdrawByUsdValue(msg.sender, receiptIds, withdrawToken, amounts, currentCycleId);
         emit WithdrawFromBatching(msg.sender, withdrawToken, withdrawalTokenAmountToTransfer);
+    }
+
+    /// @notice Withdraw tokens from batching while receipts are in batching.
+    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
+    /// @notice Receipt is burned if withdraw whole amount noted in it.
+    /// @param receiptIds Receipt NFTs ids.
+    /// @param amounts Amounts to withdraw from each passed receipt.
+    /// @dev Only callable by user wallets.
+    function withdrawFromBatchingExactTokens(
+        uint256[] calldata receiptIds,
+        uint256[] calldata amounts
+    ) public {
+        batching.withdrawExactTokens(msg.sender, receiptIds, amounts, currentCycleId);
     }
 
     /// @notice Withdraw tokens from batching while receipts are in strategies.
@@ -615,7 +628,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function depositToBatch(address depositToken, uint256 _amount) external {
-        batching.deposit(msg.sender, depositToken, _amount);
+        batching.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
         emit Deposit(msg.sender, depositToken, _amount);
     }

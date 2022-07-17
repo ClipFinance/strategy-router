@@ -33,6 +33,10 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error NotEnoughBalanceInBatching();
     error CallerIsNotStrategyRouter();
 
+    /// @notice Fires when user withdraw from batching.
+    /// @param token Supported token that user requested to receive after withdraw.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromBatching(address indexed user, address token, uint256 amount);
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -114,6 +118,46 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice On partial withdraw the receipt that partly fulfills requested amount will be updated.
     /// @notice Receipt is burned if withdrawn is whole amount
     /// @param receiptIds Receipt NFTs ids.
+    /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
+    /// @dev Only callable by user wallets.
+    function withdrawExactTokens(
+        address receiptOwner,
+        uint256[] calldata receiptIds,
+        uint256[] calldata receiptTokenAmounts,
+        uint256 _currentCycleId
+    ) public onlyStrategyRouter {
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (receiptContract.ownerOf(receiptId) != receiptOwner) revert NotReceiptOwner();
+
+            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
+
+            // only for receipts in current batching
+            if (receipt.cycleId != _currentCycleId) revert CycleClosed();
+            (uint256 originalDepositedTokenPriceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
+
+            /* higher token amount may be passed than in tokens in receipt as we expect javascript to handle big numbers
+               not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
+            if (receiptTokenAmounts[i] >= receipt.tokenAmountUniform || receiptTokenAmounts[i] == 0) {
+                // withdraw whole receipt and burn receipt
+                uint256 transferAmount = fromUniform(receipt.tokenAmountUniform, receipt.token);
+                ERC20(receipt.token).transfer(receiptOwner, transferAmount);
+                receiptContract.burn(receiptId);
+                emit WithdrawFromBatching(msg.sender, receipt.token, transferAmount);
+            } else {
+                // withdraw only part of receipt and update receipt
+                uint256 transferAmount = fromUniform(receiptTokenAmounts[i], receipt.token);
+                ERC20(receipt.token).transfer(receiptOwner, transferAmount);
+                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - receiptTokenAmounts[i]);
+                emit WithdrawFromBatching(msg.sender, receipt.token, transferAmount);
+            }
+        }
+    }
+
+    /// @notice Withdraw tokens from batching while receipts are in batching.
+    /// @notice On partial withdraw the receipt that partly fulfills requested amount will be updated.
+    /// @notice Receipt is burned if withdrawn is whole amount
+    /// @param receiptIds Receipt NFTs ids.
     /// @param withdrawToken Supported token that user wishes to receive.
     /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
@@ -121,11 +165,11 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address receiptOwner,
         uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256[] calldata receiptTokenAmounts
+        uint256[] calldata receiptTokenAmounts,
+        uint256 _currentCycleId
     ) public onlyStrategyRouter returns (uint256 withdrawalTokenAmountToTransfer) {
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 _currentCycleId = router.currentCycleId();
         uint256 valueToWithdrawUsd;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
@@ -239,7 +283,8 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function deposit(
         address depositor,
         address depositToken,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _currentCycleId
     ) external onlyStrategyRouter {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
@@ -248,7 +293,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
-        receiptContract.mint(router.currentCycleId(), amountUniform, depositToken, depositor);
+        receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
     }
 
     function transfer(
