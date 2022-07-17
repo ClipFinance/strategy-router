@@ -117,7 +117,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param withdrawToken Supported token that user wishes to receive.
     /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
-    function withdraw(
+    function withdrawByUsdValue(
         address receiptOwner,
         uint256[] calldata receiptIds,
         address withdrawToken,
@@ -154,12 +154,12 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        withdrawalTokenAmountToTransfer = _withdraw(valueToWithdrawUsd, withdrawToken);
+        withdrawalTokenAmountToTransfer = _withdrawByUsdValue(valueToWithdrawUsd, withdrawToken);
 
         IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
     }
 
-    function _withdraw(uint256 valueToWithdrawUsd, address withdrawToken) public onlyStrategyRouter returns (uint256) {
+    function _withdrawByUsdValue(uint256 valueToWithdrawUsd, address withdrawToken) public onlyStrategyRouter returns (uint256) {
         (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) = getBatchingValueUsd();
         if (totalBalanceUsd < valueToWithdrawUsd) revert NotEnoughBalanceInBatching();
 

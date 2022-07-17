@@ -490,7 +490,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address withdrawToken,
         uint256[] calldata amounts
     ) public {
-        uint256 withdrawalTokenAmountToTransfer = batching.withdraw(msg.sender, receiptIds, withdrawToken, amounts);
+        uint256 withdrawalTokenAmountToTransfer = batching.withdrawByUsdValue(msg.sender, receiptIds, amounts, currentCycleId);
         emit WithdrawFromBatching(msg.sender, withdrawToken, withdrawalTokenAmountToTransfer);
     }
 
@@ -764,7 +764,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @param valueToWithdraw USD value to withdraw.
     function _withdrawFromBatching(uint256 valueToWithdraw, address withdrawToken) private {
-        uint256 withdrawalTokenAmountToTransfer = batching._withdraw(valueToWithdraw, withdrawToken);
+        uint256 withdrawalTokenAmountToTransfer = batching._withdrawByUsdValue(valueToWithdraw, withdrawToken);
 
         batching.transfer(withdrawToken, msg.sender, withdrawalTokenAmountToTransfer);
     }
