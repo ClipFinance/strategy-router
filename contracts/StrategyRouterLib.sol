@@ -8,7 +8,7 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
-import "./exchange/Exchange.sol";
+import {Exchange} from "./exchange/Exchange.sol";
 import {SharesToken} from "./SharesToken.sol";
 import "./Batching.sol";
 import "./StrategyRouter.sol";

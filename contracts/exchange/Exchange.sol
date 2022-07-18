@@ -1,15 +1,16 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "../interfaces/ICurvePool.sol";
 import "../interfaces/IExchangePlugin.sol";
-import "../StrategyRouter.sol";
+import {StrategyRouter} from "../StrategyRouter.sol";
 
 // import "hardhat/console.sol";
 
-contract Exchange is Ownable {
+contract Exchange is UUPSUpgradeable, OwnableUpgradeable {
     error RoutedSwapFailed();
     error RouteNotFound();
 
@@ -26,7 +27,17 @@ contract Exchange is Ownable {
     // tokenA -> tokenB -> RouteParams
     mapping(address => mapping(address => RouteParams)) public routes;
 
-    constructor() {}
+    constructor() {
+        // lock implementation
+        _disableInitializers();
+    }
+
+    function initialize() external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /// @notice Choose plugin where pair of tokens should be swapped.
     function setRoute(
@@ -90,7 +101,7 @@ contract Exchange is Ownable {
         address to
     ) public returns (uint256 amountReceived) {
         address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
-        ERC20(tokenA).transfer(plugin, amountA);
+        IERC20(tokenA).transfer(plugin, amountA);
         amountReceived = IExchangePlugin(plugin).swap(amountA, tokenA, tokenB, to);
         if (amountReceived == 0) revert RoutedSwapFailed();
     }

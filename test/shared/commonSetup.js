@@ -67,10 +67,18 @@ async function setupTokens() {
 // deploy core contracts
 async function setupCore() {
 
+  // silence warnings about usage of external libs, for tests
+  upgrades.silenceWarnings(); 
+
   // Deploy Oracle 
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
-  let exchange = await deploy("Exchange");
+  let Exchange = await ethers.getContractFactory("Exchange");
+  let exchange = await upgrades.deployProxy(Exchange, [], {
+    kind: 'uups',
+    unsafeAllow: ["constructor"],
+  });
+  await exchange.deployed();
   // Deploy Batching
   let Batching = await ethers.getContractFactory("Batching");
   let batching = await upgrades.deployProxy(Batching, [], {
@@ -80,8 +88,6 @@ async function setupCore() {
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
-  // silence warnings about usage of external libs, for tests
-  upgrades.silenceWarnings(); 
   let StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
       StrategyRouterLib: routerLib.address
