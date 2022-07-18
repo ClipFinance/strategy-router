@@ -1,26 +1,48 @@
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract SharesToken is Ownable, ERC20 {
-    constructor() ERC20("Clip-Finance Shares", "CF") {}
+contract SharesToken is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
+
+    error CallerIsNotStrategyRouter();
+
+    address private strategyRouter;
+
+    modifier onlyStrategyRouter() {
+        if (msg.sender != strategyRouter) revert CallerIsNotStrategyRouter();
+        _;
+    }
+
+    constructor() {
+        // lock implementation
+        _disableInitializers();
+    }
+
+    function initialize(address _strategyRouter) external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ERC20_init("Clip-Finance Shares", "CF");
+        strategyRouter = _strategyRouter;
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /// @dev Helper 'transferFrom' function that don't require user approval
     function routerTransferFrom(
         address from,
         address to,
         uint256 amount
-    ) external onlyOwner {
+    ) external onlyStrategyRouter {
         _transfer(from, to, amount);
     }
 
-    function mint(address to, uint256 amount) external onlyOwner {
+    function mint(address to, uint256 amount) external onlyStrategyRouter {
         _mint(to, amount);
     }
 
-    function burn(address from, uint256 amount) external onlyOwner {
+    function burn(address from, uint256 amount) external onlyStrategyRouter {
         _burn(from, amount);
     }
 }

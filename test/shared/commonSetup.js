@@ -77,8 +77,6 @@ async function setupCore() {
     kind: 'uups',
   });
   await batching.deployed();
-  // Deploy SharesToken
-  let sharesToken = await deploy("SharesToken");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
@@ -94,7 +92,13 @@ async function setupCore() {
     kind: 'uups',
   });
   await router.deployed();
-  await sharesToken.transferOwnership(router.address);
+  // Deploy SharesToken
+  let SharesToken = await ethers.getContractFactory("SharesToken");
+  let sharesToken = await upgrades.deployProxy(SharesToken, [router.address], {
+    kind: 'uups',
+    unsafeAllow: ["constructor"],
+  });
+  await sharesToken.deployed();
   // Deploy  ReceiptNFT
   let ReceiptNFT = await ethers.getContractFactory("ReceiptNFT");
   let receiptContract = await upgrades.deployProxy(ReceiptNFT, [router.address, batching.address], {

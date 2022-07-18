@@ -11,7 +11,7 @@ import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
 import "./exchange/Exchange.sol";
-import "./SharesToken.sol";
+import {SharesToken} from "./SharesToken.sol";
 import "./Batching.sol";
 import "./StrategyRouterLib.sol";
 
