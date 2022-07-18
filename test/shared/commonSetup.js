@@ -71,8 +71,6 @@ async function setupCore() {
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
   let exchange = await deploy("Exchange");
-  // Deploy  ReceiptNFT
-  let receiptContract = await deploy("ReceiptNFT");
   // Deploy Batching
   let Batching = await ethers.getContractFactory("Batching");
   let batching = await upgrades.deployProxy(Batching, [], {
@@ -97,7 +95,15 @@ async function setupCore() {
   });
   await router.deployed();
   await sharesToken.transferOwnership(router.address);
-  // Initialize proxy and non-proxy contracts
+  // Deploy  ReceiptNFT
+  let ReceiptNFT = await ethers.getContractFactory("ReceiptNFT");
+  let receiptContract = await upgrades.deployProxy(ReceiptNFT, [router.address, batching.address], {
+    kind: 'uups',
+    unsafeAllow: ["constructor"],
+  });
+  await receiptContract.deployed();
+
+  // set addresses
   await router.setAddresses(
     exchange.address,
     oracle.address,
@@ -111,8 +117,6 @@ async function setupCore() {
     router.address,
     receiptContract.address
   );
-  // Setup receipt NFT
-  await receiptContract.initialize(router.address, batching.address);
 
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let INITIAL_SHARES = Number(1e12);

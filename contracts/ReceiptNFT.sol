@@ -1,13 +1,14 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./deps/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 // import "hardhat/console.sol";
 
-contract ReceiptNFT is ERC721, Ownable, Initializable {
+contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     error NonExistingToken();
     error ReceiptAmountCanOnlyDecrease();
@@ -31,12 +32,21 @@ contract ReceiptNFT is ERC721, Ownable, Initializable {
         _;
     }
 
-    constructor() ERC721("Receipt NFT", "RECEIPT") {}
+    constructor() {
+        // lock implementation
+        _disableInitializers();
+    }
 
     function initialize(address strategyRouter, address batching) external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ERC721_init("Receipt NFT", "RECEIPT");
+
         managers[strategyRouter] = true;
         managers[batching] = true;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function setAmount(uint256 receiptId, uint256 amount) external onlyManager {
         if (!_exists(receiptId)) revert NonExistingToken();
@@ -57,6 +67,7 @@ contract ReceiptNFT is ERC721, Ownable, Initializable {
     }
 
     function burn(uint256 receiptId) external onlyManager {
+        if(!_exists(receiptId)) revert NonExistingToken();
         _burn(receiptId);
         delete receipts[receiptId];
     }

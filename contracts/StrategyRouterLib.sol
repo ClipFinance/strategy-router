@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
-import "./ReceiptNFT.sol";
+import {ReceiptNFT} from "./ReceiptNFT.sol";
 import "./exchange/Exchange.sol";
 import "./SharesToken.sol";
 import "./Batching.sol";
