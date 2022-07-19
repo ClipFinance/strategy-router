@@ -1,5 +1,5 @@
 const { expect, assert } = require("chai");
-const { parseEther } = require("ethers/lib/utils");
+const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers, artifacts } = require("hardhat");
 const { provider, deploy, MaxUint256 } = require("./utils");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
@@ -95,7 +95,7 @@ describe("Test Exchange", function () {
                 .to.be.revertedWith("Ownable: caller is not the owner");
         });
         it("should store all RouteParams", async function () {
-            let routeParams = { defaultRoute: stubPlugin.address, limit: parseEther("1"), secondRoute: stubPlugin2.address };
+            let routeParams = { defaultRoute: stubPlugin.address, limit: parseUnits("1", 12), secondRoute: stubPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
             let [token0, token1] = BigNumber.from(usdc.address).lt(BigNumber.from(busd.address)) 
                 ? [usdc.address, busd.address] 
@@ -113,14 +113,14 @@ describe("Test Exchange", function () {
         });
         it("should return correct plugin based on input amount", async function () {
             // setup route
-            let routeParams = { defaultRoute: stubPlugin.address, limit: parseEther("1"), secondRoute: stubPlugin2.address };
+            let routeParams = { defaultRoute: stubPlugin.address, limit: parseUnits("1", 12), secondRoute: stubPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
 
             // get plugin
             let plugin = await exchangeNonOwner.getPlugin(0, usdc.address, busd.address);
             expect(plugin).to.be.equal(routeParams.defaultRoute);
-            // reach limit input amount
-            plugin = await exchangeNonOwner.getPlugin(routeParams.limit, usdc.address, busd.address);
+            // exceed limit input amount
+            plugin = await exchangeNonOwner.getPlugin(routeParams.limit, busd.address, usdc.address);
             expect(plugin).to.be.equal(routeParams.secondRoute);
         });
     });
@@ -140,14 +140,14 @@ describe("Test Exchange", function () {
             await mockPlugin2.mock.getFee.returns(fee2);
 
             // setup route
-            let routeParams = { defaultRoute: mockPlugin.address, limit: parseEther("1"), secondRoute: mockPlugin2.address };
+            let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
 
             // get fee
             let feeReturned = await exchangeNonOwner.getFee(0, usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee);
-            // reach limit input amount
-            feeReturned = await exchangeNonOwner.getFee(routeParams.limit, usdc.address, busd.address);
+            // exceed limit input amount
+            feeReturned = await exchangeNonOwner.getFee(parseUsdc("1.1"), usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee2);
         });
     });
@@ -163,7 +163,7 @@ describe("Test Exchange", function () {
             await mockPlugin.mock.swap.returns(swapReturns);
 
             // setup route
-            let routeParams = { defaultRoute: mockPlugin.address, limit: parseEther("1"), secondRoute: stubPlugin.address };
+            let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: stubPlugin.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams]);
 
             // do swap
@@ -181,16 +181,16 @@ describe("Test Exchange", function () {
             await mockPlugin2.mock.swap.returns(swapReturns2);
 
             // setup route
-            let routeParams = { defaultRoute: mockPlugin.address, limit: parseEther("1"), secondRoute: mockPlugin2.address };
+            let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams]);
 
             // do swap
             let received = await exchangeNonOwner.callStatic.swap(0, usdc.address, busd.address, owner.address);
             expect(received).to.be.equal(swapReturns);
             
-            // reach limit input amount
-            await usdc.transfer(exchangeNonOwner.address, routeParams.limit);
-            received = await exchangeNonOwner.callStatic.swap(routeParams.limit, usdc.address, busd.address, owner.address);
+            // exceed limit input amount
+            await usdc.transfer(exchangeNonOwner.address, parseUsdc("1.1"));
+            received = await exchangeNonOwner.callStatic.swap(parseUsdc("1.1"), usdc.address, busd.address, owner.address);
             expect(received).to.be.equal(swapReturns2);
         });
     });
@@ -210,15 +210,15 @@ describe("Test Exchange", function () {
             await mockPlugin2.mock.getAmountOut.returns(amountOut2);
 
             // setup route
-            let routeParams = { defaultRoute: mockPlugin.address, limit: parseEther("1"), secondRoute: mockPlugin2.address };
+            let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams]);
 
             // do swap
             let received = await exchangeNonOwner.getAmountOut(0, usdc.address, busd.address);
             expect(received).to.be.equal(amountOut);
             
-            // reach limit input amount
-            received = await exchangeNonOwner.getAmountOut(routeParams.limit, usdc.address, busd.address);
+            // exceed limit input amount
+            received = await exchangeNonOwner.getAmountOut(parseUsdc("1.1"), usdc.address, busd.address);
             expect(received).to.be.equal(amountOut2);
         });
     });

@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -27,6 +28,9 @@ contract Exchange is UUPSUpgradeable, OwnableUpgradeable {
     // tokenA -> tokenB -> RouteParams
     mapping(address => mapping(address => RouteParams)) public routes;
 
+    uint256 private constant LIMIT_PRECISION = 1e12;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
         _disableInitializers();
@@ -66,11 +70,12 @@ contract Exchange is UUPSUpgradeable, OwnableUpgradeable {
         uint256 amountA,
         address tokenA,
         address tokenB
-    ) public view returns (address) {
+    ) public view returns (address plugin) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         uint256 limit = routes[token0][token1].limit;
-        address plugin;
-        if (amountA < limit || limit == 0) plugin = routes[token0][token1].defaultRoute;
+        // decimals: 12 + tokenA.decimals - 12 = tokenA.decimals
+        uint256 limitWithDecimalsOfTokenA = limit * 10**ERC20(tokenA).decimals() / LIMIT_PRECISION;
+        if (limit == 0 || amountA < limitWithDecimalsOfTokenA) plugin = routes[token0][token1].defaultRoute;
         else plugin = routes[token0][token1].secondRoute;
         if (plugin == address(0)) revert RouteNotFound();
         return plugin;
