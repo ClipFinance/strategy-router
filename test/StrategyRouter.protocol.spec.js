@@ -44,19 +44,17 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     // deploy strategies 
     let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
-    strategyBiswap2 = await upgrades.deployProxy(StrategyFactory, [], {
+    strategyBiswap2 = await upgrades.deployProxy(StrategyFactory, [owner.address], {
       kind: 'uups',
       constructorArgs: [router.address],
-      unsafeAllow: ["constructor", "state-variable-immutable"],
     });
     await strategyBiswap2.deployed();
     await strategyBiswap2.transferOwnership(router.address);
 
     StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt");
-    strategyBiswap = await upgrades.deployProxy(StrategyFactory, [], {
+    strategyBiswap = await upgrades.deployProxy(StrategyFactory, [owner.address], {
       kind: 'uups',
       constructorArgs: [router.address],
-      unsafeAllow: ["constructor", "state-variable-immutable"],
     });
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
@@ -215,10 +213,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     // deploy new strategy
     let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
-    farm2 = await upgrades.deployProxy(StrategyFactory, [], {
+    farm2 = await upgrades.deployProxy(StrategyFactory, [owner.address], {
       kind: 'uups',
       constructorArgs: [router.address],
-      unsafeAllow: ["constructor", "state-variable-immutable"],
     });
     await farm2.deployed();
     await farm2.transferOwnership(router.address);
@@ -261,6 +258,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.rebalanceStrategies();
 
     let { balances, totalBalance } = await router.getStrategiesValue();
+    // console.log(totalBalance, balances);
     // strategies should be balanced as 10% and 90%
     expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
     expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
