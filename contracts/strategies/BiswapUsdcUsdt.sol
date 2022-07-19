@@ -6,6 +6,7 @@ import "./BiswapBase.sol";
 
 // import "hardhat/console.sol";
 
+/// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract BiswapUsdcUsdt is BiswapBase {
     constructor(StrategyRouter _strategyRouter)
         BiswapBase(

@@ -4,6 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../StrategyRouter.sol";
 import "./BiswapBase.sol";
 
+/// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract BiswapBusdUsdt is BiswapBase {
     constructor(StrategyRouter _strategyRouter)
         BiswapBase(

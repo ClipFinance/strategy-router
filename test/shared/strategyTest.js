@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { parseUnits } = require("ethers/lib/utils");
+const { parseUnits, parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
@@ -39,10 +39,10 @@ module.exports = function strategyTest(strategyName) {
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
       let StrategyFactory = await ethers.getContractFactory(strategyName)
-      strategy = await upgrades.deployProxy(StrategyFactory, [], {
+      strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
         kind: 'uups',
         constructorArgs: [router.address],
-        unsafeAllow: ["constructor", "state-variable-immutable"],
+        // unsafeAllow: ["constructor", "state-variable-immutable"]
       });
       await strategy.deployed();
 
