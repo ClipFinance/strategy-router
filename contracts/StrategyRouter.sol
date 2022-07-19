@@ -17,6 +17,7 @@ import "./StrategyRouterLib.sol";
 
 // import "hardhat/console.sol";
 
+/// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /* EVENTS */
 
@@ -127,6 +128,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
         _disableInitializers();

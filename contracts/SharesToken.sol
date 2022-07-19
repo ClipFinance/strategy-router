@@ -15,6 +15,7 @@ contract SharesToken is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
         _disableInitializers();

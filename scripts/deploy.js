@@ -1,7 +1,7 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const { deploy } = require("../test/utils");
+const { deploy, deployProxy, parseUniform } = require("../test/utils");
 const fs = require("fs");
 
 // deploy script for testing on mainnet
@@ -24,9 +24,10 @@ async function main() {
   usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
   const usdcDecimals = await usdc.decimals();
   const parseUsdc = (amount) => parseUnits(amount, usdcDecimals);
+  const parseExchangeLimit = (amount) => parseUnits(amount, 12);
 
   // ~~~~~~~~~~~~~~~ SETTINGS ~~~~~~~~~~~~~~~~ 
-
+``
   CYCLE_DURATION = 1;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
   MIN_DEPOSIT = parseUniform("0.0001");
@@ -35,61 +36,17 @@ async function main() {
   INITIAL_DEPOSIT = parseUsdc("0.1");
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
-  oracle = await deploy("ChainlinkOracle");
+  oracle = await deployProxy("ChainlinkOracle");
   console.log("ChainlinkOracle", oracle.address);
 
   // ~~~~~~~~~~~ DEPLOY Exchange ~~~~~~~~~~~ 
-  exchange = await deploy("Exchange");
+  exchange = await deployProxy("Exchange");
   console.log("Exchange", exchange.address);
 
   let acsPlugin = await deploy("CurvePlugin");
   console.log("acsPlugin", acsPlugin.address);
   let pancakePlugin = await deploy("UniswapPlugin");
   console.log("pancakePlugin", pancakePlugin.address);
-
-  // pancake plugin params
-  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true);
-  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true);
-  await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true);
-
-  await (await acsPlugin.setCurvePool(
-    hre.networkVariables.busd,
-    hre.networkVariables.usdt,
-    hre.networkVariables.acs4usd.address
-  )).wait();
-  await (await acsPlugin.setCurvePool(
-    hre.networkVariables.usdc,
-    hre.networkVariables.usdt,
-    hre.networkVariables.acs4usd.address
-  )).wait();
-  await (await acsPlugin.setCurvePool(
-    hre.networkVariables.busd,
-    hre.networkVariables.usdc,
-    hre.networkVariables.acs4usd.address
-  )).wait();
-  await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await acsPlugin.setCoinIds(
-    hre.networkVariables.acs4usd.address,
-    hre.networkVariables.acs4usd.tokens,
-    hre.networkVariables.acs4usd.coinIds
-  )).wait();
-  await (await exchange.setRoute(
-    [
-      hre.networkVariables.busd,
-      hre.networkVariables.busd,
-      hre.networkVariables.usdc,
-    ],
-    [
-      hre.networkVariables.usdt,
-      hre.networkVariables.usdc,
-      hre.networkVariables.usdt,
-    ],
-    [
-      acsPlugin.address,
-      acsPlugin.address,
-      acsPlugin.address,
-    ]
-  )).wait();
 
   // ~~~~~~~~~~~ DEPLOY StrategyRouterLib ~~~~~~~~~~~ 
   const routerLib = await deploy("StrategyRouterLib");
@@ -99,34 +56,130 @@ async function main() {
       StrategyRouterLib: routerLib.address
     }
   });
-  router = await StrategyRouter.deploy(exchange.address, oracle.address);
-  router = await router.deployed();
+  router = await upgrades.deployProxy(StrategyRouter, [], {
+    kind: 'uups',
+  });
+  await router.deployed();
   console.log("StrategyRouter", router.address);
-  console.log("ReceiptNFT", await router.receiptContract());
-  console.log("SharesToken", await router.sharesToken());
-
-  await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
-  await (await router.setMinDeposit(MIN_DEPOSIT)).wait();
-  await (await router.setCycleDuration(CYCLE_DURATION)).wait();
-  await (await router.setExchange(exchange.address)).wait();
-  await (await router.setFeePercent(FEE_PERCENT)).wait();
-  await (await router.setFeeAddress(FEE_ADDRESS)).wait();
-  await (await router.setOracle(oracle.address)).wait();
+  // Deploy Batching
+  let batching = await deployProxy("Batching");
+  console.log("Batching", batching.address);
+  // Deploy SharesToken
+  let sharesToken = await deployProxy("SharesToken", [router.address]);
+  console.log("SharesToken", sharesToken.address);
+  // Deploy  ReceiptNFT
+  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batching.address]);
+  console.log("ReceiptNFT", receiptContract.address);
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
-  strategyBusd = await deploy("BiswapBusdUsdt", router.address);
+  let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt")
+  strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+  });
   console.log("strategyBusd", strategyBusd.address);
   await (await strategyBusd.transferOwnership(router.address)).wait();
 
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-  strategyUsdc = await deploy("BiswapUsdcUsdt", router.address);
+  StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt")
+  strategyUsdc = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+  });
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
-
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
+  console.log("oracle setup...");
+  let oracleTokens = [busd.address, usdc.address];
+  let priceFeeds = [hre.networkVariables.BusdUsdPriceFeed, hre.networkVariables.UsdcUsdPriceFeed];
+  await (await oracle.setPriceFeeds(oracleTokens, priceFeeds)).wait();
+
+  // pancake plugin params
+  console.log("pancake plugin setup...");
+  await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true)).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true)).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true)).wait();
+
+  // acryptos plugin params
+  console.log("acryptos plugin setup...");
+  await (await acsPlugin.setCurvePool(
+    hre.networkVariables.busd,
+    hre.networkVariables.usdt,
+    hre.networkVariables.acs4usd.address
+  )).wait();
+  await (await acsPlugin.setCurvePool(
+    hre.networkVariables.usdc,
+    hre.networkVariables.usdt,
+    hre.networkVariables.acs4usd.address
+  )).wait();
+  await (await acsPlugin.setCurvePool(
+    hre.networkVariables.busd,
+    hre.networkVariables.usdc,
+    hre.networkVariables.acs4usd.address
+  )).wait();
+  await (await acsPlugin.setCoinIds(
+    hre.networkVariables.acs4usd.address,
+    hre.networkVariables.acs4usd.tokens,
+    hre.networkVariables.acs4usd.coinIds
+  )).wait();
+
+  // setup Exchange routes
+  console.log("exchange routes setup...");
+  await (await exchange.setRouteEx(
+    [
+      hre.networkVariables.busd,
+      hre.networkVariables.busd,
+      hre.networkVariables.usdc,
+      hre.networkVariables.bsw,
+      hre.networkVariables.bsw,
+      hre.networkVariables.bsw,
+    ],
+    [
+      hre.networkVariables.usdt,
+      hre.networkVariables.usdc,
+      hre.networkVariables.usdt,
+      hre.networkVariables.busd,
+      hre.networkVariables.usdt,
+      hre.networkVariables.usdc,
+    ],
+    [
+      { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
+      { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
+      { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
+    ]
+  )).wait();
+
+  // setup Batching addresses
+  console.log("Batching settings setup...");
+  await (await batching.setAddresses(
+    exchange.address,
+    oracle.address,
+    router.address,
+    receiptContract.address
+  )).wait();
+
+  // setup StrategyRouter 
+  console.log("StrategyRouter settings setup...");
+  await (await router.setAddresses(
+    exchange.address,
+    oracle.address,
+    sharesToken.address,
+    batching.address,
+    receiptContract.address
+  )).wait();
+  await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
+  await (await router.setMinDeposit(MIN_DEPOSIT)).wait();
+  await (await router.setCycleDuration(CYCLE_DURATION)).wait();
+  await (await router.setFeePercent(FEE_PERCENT)).wait();
+  await (await router.setFeeAddress(FEE_ADDRESS)).wait();
+
   console.log("Setting supported token...");
   await (await router.setSupportedToken(busd.address, true)).wait();
   await (await router.setSupportedToken(usdc.address, true)).wait();
@@ -141,53 +194,42 @@ async function main() {
     await (await usdc.approve(router.address, INITIAL_DEPOSIT)).wait();
     console.log("usdc approved...");
   }
-  console.log("Initial deposit to batch...");
-  await (await router.depositToBatch(usdc.address, INITIAL_DEPOSIT)).wait();
-  console.log("Initial deposit to strategies...");
-  await (await router.allocateToStrategies()).wait();
 
+  try {
+    console.log("Initial deposit to batch...");
+    await (await router.depositToBatch(usdc.address, INITIAL_DEPOSIT)).wait();
+  } catch (error) {
+    console.error(error);
+  }
+  try {
+    console.log("Initial deposit to strategies...");
+    await (await router.allocateToStrategies()).wait();
+  } catch (error) {
+    console.error(error);
+  }
 
   // vvvvvvvvvvvvvvvvvvvvvvvvv VERIFICATION vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
   console.log("  - Verification will start in a minute...\n");
   await delay(46000);
 
-  let batchingAddress = await router.batching();
-  let receiptNftAddress = await router.receiptContract();
-  let sharesTokenAddress = await router.sharesToken();
-
   // verify router
   await safeVerify({
     address: router.address,
-    constructorArguments: router.constructorArgs,
     libraries: {
       StrategyRouterLib: routerLib.address
     }
   });
 
-  // verify receiptNFT
-  await safeVerify({
-    address: receiptNftAddress,
-    constructorArguments: [router.address, batchingAddress],
-  });
-
-  // verify batching contract
-  await safeVerify({
-    address: batchingAddress,
-    constructorArguments: [router.address],
-  });
-
-  // verify ShareToken contract
-  await safeVerify({
-    address: sharesTokenAddress,
-    constructorArguments: [],
-  });
-
-
-  await verifyMultiple([
+  await safeVerifyMultiple([
+    oracle,
     exchange,
+    acsPlugin,
+    pancakePlugin,
+    receiptContract,
+    batching,
+    sharesToken,
     strategyBusd,
     strategyUsdc,
-    oracle
   ]);
 }
 
@@ -196,22 +238,11 @@ async function safeVerify(verifyArgs) {
   try {
     await hre.run("verify:verify", verifyArgs);
   } catch (error) {
-    await handleVerificationError(error);
+      console.error(error);
   }
 }
 
-async function handleVerificationError(error) {
-  // make common errors less verbose, and remove stacktrace
-  if (error.message.startsWith("The selected network is")) {
-    console.log("hardhat-etherscan warning: unsupported network.", hre.network.name, "\n");
-  } else if (error.message.startsWith("Already verified")) {
-    console.log(error.message, "\n");
-  } else {
-    console.log(error, "\n");
-  }
-}
-
-async function verifyMultiple(deployedContracts) {
+async function safeVerifyMultiple(deployedContracts) {
   for (let i = 0; i < deployedContracts.length; i++) {
     try {
       const contract = deployedContracts[i];
@@ -227,12 +258,12 @@ async function verifyMultiple(deployedContracts) {
         });
       }
     } catch (error) {
-      await handleVerificationError(error);
+      console.error(error);
     }
   }
 }
 
-// Function caches deploy arguments, so that we don't duplicate them manually
+// Function caches deploy arguments at runtime of this script
 async function setupVerificationHelper() {
   let oldDeploy = hre.ethers.ContractFactory.prototype.deploy;
   hre.ethers.ContractFactory.prototype.deploy = async function (...args) {

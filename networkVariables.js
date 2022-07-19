@@ -25,6 +25,9 @@ function bnbChain() {
 
   bnb.uniswapRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
+  bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
+  bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
+
   return bnb;
 }
 

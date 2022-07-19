@@ -2,7 +2,7 @@ const { expect, assert } = require("chai");
 const { deployMockContract } = require("ethereum-waffle");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { provider, deploy, MaxUint256, parseUniform } = require("./utils");
+const { provider, deploy, MaxUint256, parseUniform, deployProxy } = require("./utils");
 
 
 describe("Test ChainlinkOracle", function () {
@@ -19,15 +19,7 @@ describe("Test ChainlinkOracle", function () {
             fakePriceFeed, fakeToken1, fakeToken2,
             fakePriceFeed2, fakeToken3, fakeToken4] = await ethers.getSigners();
 
-        // silence warnings about proxy's unsafeAllow, for tests
-        upgrades.silenceWarnings();
-        // get instance that is controlled by fakeStrategyRouter (one of managers)
-        let ChainlinkOracle = await ethers.getContractFactory("ChainlinkOracle");
-        oracle = await upgrades.deployProxy(ChainlinkOracle, [], {
-            kind: 'uups',
-            unsafeAllow: ["constructor"],
-        });
-        await oracle.deployed();
+        oracle = await deployProxy("ChainlinkOracle");
     });
 
     afterEach(async function () {

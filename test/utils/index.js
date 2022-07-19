@@ -13,13 +13,21 @@ module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
-  deploy
+  deploy, deployProxy
 }
 
 // helper to reduce code duplication, transforms 3 lines of deployemnt into 1
 async function deploy(contractName, ...constructorArgs) {
   let factory = await ethers.getContractFactory(contractName);
   let contract = await factory.deploy(...constructorArgs);
+  return await contract.deployed();
+}
+
+async function deployProxy(contractName, initializeArgs = []) {
+  let factory = await ethers.getContractFactory(contractName);
+  let contract = await upgrades.deployProxy(factory, initializeArgs, {
+    kind: 'uups',
+  });
   return await contract.deployed();
 }
 
@@ -57,10 +65,10 @@ async function getTokens(tokenAddress, holderAddress) {
   ]);
   await tokenContract.connect(holder).transfer(
     to,
-   tokenAmount 
+    tokenAmount
   );
 
-  return {tokenContract, parse};
+  return { tokenContract, parse };
 }
 
 // skip hardhat network blocks

@@ -42,7 +42,6 @@ module.exports = function strategyTest(strategyName) {
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
         kind: 'uups',
         constructorArgs: [router.address],
-        // unsafeAllow: ["constructor", "state-variable-immutable"]
       });
       await strategy.deployed();
 

@@ -1,6 +1,6 @@
 const { parseUnits } = require("ethers/lib/utils");
 const { ethers, upgrades } = require("hardhat");
-const { getUSDC, getBUSD, getUSDT, deploy, parseUniform } = require("../utils");
+const { getUSDC, getBUSD, getUSDT, deploy, parseUniform, deployProxy } = require("../utils");
 
 module.exports = {
   setupTokens, setupCore, deployFakeStrategy,
@@ -67,25 +67,12 @@ async function setupTokens() {
 // deploy core contracts
 async function setupCore() {
 
-  // silence warnings about usage of external libs, for tests
-  upgrades.silenceWarnings(); 
-
   // Deploy Oracle 
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
-  let Exchange = await ethers.getContractFactory("Exchange");
-  let exchange = await upgrades.deployProxy(Exchange, [], {
-    kind: 'uups',
-    unsafeAllow: ["constructor"],
-  });
-  await exchange.deployed();
+  let exchange = await deployProxy("Exchange");
   // Deploy Batching
-  let Batching = await ethers.getContractFactory("Batching");
-  let batching = await upgrades.deployProxy(Batching, [], {
-    kind: 'uups',
-    unsafeAllow: ["constructor"],
-  });
-  await batching.deployed();
+  let batching = await deployProxy("Batching");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
@@ -95,24 +82,13 @@ async function setupCore() {
     }
   });
   let router = await upgrades.deployProxy(StrategyRouter, [], {
-    unsafeAllow: ["external-library-linking", "constructor"],
     kind: 'uups',
   });
   await router.deployed();
   // Deploy SharesToken
-  let SharesToken = await ethers.getContractFactory("SharesToken");
-  let sharesToken = await upgrades.deployProxy(SharesToken, [router.address], {
-    kind: 'uups',
-    unsafeAllow: ["constructor"],
-  });
-  await sharesToken.deployed();
+  let sharesToken = await deployProxy("SharesToken", [router.address]);
   // Deploy  ReceiptNFT
-  let ReceiptNFT = await ethers.getContractFactory("ReceiptNFT");
-  let receiptContract = await upgrades.deployProxy(ReceiptNFT, [router.address, batching.address], {
-    kind: 'uups',
-    unsafeAllow: ["constructor"],
-  });
-  await receiptContract.deployed();
+  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batching.address]);
 
   // set addresses
   await router.setAddresses(

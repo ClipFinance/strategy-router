@@ -15,7 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 /// @notice This contract contains batching related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -58,6 +58,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _;
     }
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
         _disableInitializers();
@@ -286,6 +287,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _amount,
         uint256 _currentCycleId
     ) external onlyStrategyRouter {
+        console.log("baba");
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
         uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
