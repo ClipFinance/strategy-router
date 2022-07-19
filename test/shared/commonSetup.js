@@ -83,6 +83,7 @@ async function setupCore() {
   let Batching = await ethers.getContractFactory("Batching");
   let batching = await upgrades.deployProxy(Batching, [], {
     kind: 'uups',
+    unsafeAllow: ["constructor"],
   });
   await batching.deployed();
   // Deploy StrategyRouterLib 

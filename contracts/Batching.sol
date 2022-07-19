@@ -58,7 +58,6 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         // lock implementation
         _disableInitializers();
