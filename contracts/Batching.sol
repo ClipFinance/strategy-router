@@ -213,13 +213,13 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // try withdraw requested token directly where is more than enough of same token in batching
         if (supportedTokenBalancesUsd[withdrawTokenIndex] >= valueToWithdrawUsd) {
-            tokenAmountToTransfer = convertUsdAmountToTokenAmount(valueToWithdrawUsd, withdrawToken);
+            tokenAmountToTransfer = calculateTokenAmountFromUsdAmount(valueToWithdrawUsd, withdrawToken);
             return tokenAmountToTransfer;
         } else {
             // not enough withdraw token in batching
             // deduct usd amount of withdraw token
             valueToWithdrawUsd -= supportedTokenBalancesUsd[withdrawTokenIndex];
-            tokenAmountToTransfer = convertUsdAmountToTokenAmount(
+            tokenAmountToTransfer = calculateTokenAmountFromUsdAmount(
                 supportedTokenBalancesUsd[withdrawTokenIndex],
                 withdrawToken
             );
@@ -232,7 +232,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             if (i == withdrawTokenIndex) continue; // skip withdraw token in order to avoid unnecessary swap
             if (supportedTokenBalancesUsd[i] >= valueToWithdrawUsd) {
                 address supportedToken = supportedTokens.at(i);
-                tokenAmountToSwap = convertUsdAmountToTokenAmount(valueToWithdrawUsd, supportedToken);
+                tokenAmountToSwap = calculateTokenAmountFromUsdAmount(valueToWithdrawUsd, supportedToken);
                 tokenAmountToTransfer += _trySwap(tokenAmountToSwap, supportedToken, withdrawToken);
                 return tokenAmountToTransfer;
             }
@@ -265,7 +265,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
-    function convertUsdAmountToTokenAmount(uint256 valueUsd, address token)
+    function calculateTokenAmountFromUsdAmount(uint256 valueUsd, address token)
         internal
         view
         returns (uint256 tokenAmountToTransfer)
