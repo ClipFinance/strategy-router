@@ -483,29 +483,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported token that user wish to receive.
-    /// @param amounts Amounts to withdraw from each passed receipt.
-    /// @dev Only callable by user wallets.
-    function withdrawFromBatching(
-        uint256[] calldata receiptIds,
-        address withdrawToken,
-        uint256[] calldata amounts
-    ) public {
-        uint256 withdrawalTokenAmountToTransfer = batching.withdrawByUsdValue(msg.sender, receiptIds, withdrawToken, amounts, currentCycleId);
-        emit WithdrawFromBatching(msg.sender, withdrawToken, withdrawalTokenAmountToTransfer);
-    }
-
-    /// @notice Withdraw tokens from batching while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
-    /// @notice Receipt is burned if withdraw whole amount noted in it.
-    /// @param receiptIds Receipt NFTs ids.
-    /// @param amounts Amounts to withdraw from each passed receipt.
     /// @dev Only callable by user wallets.
     function withdrawFromBatchingExactTokens(
-        uint256[] calldata receiptIds,
-        uint256[] calldata amounts
+        uint256[] calldata receiptIds
     ) public {
-        batching.withdrawExactTokens(msg.sender, receiptIds, amounts, currentCycleId);
+        batching.withdrawExactTokens(msg.sender, receiptIds,currentCycleId);
     }
 
     /// @notice Withdraw tokens from batching while receipts are in strategies.

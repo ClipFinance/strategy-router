@@ -156,102 +156,6 @@ describe("Test Batching", function () {
 
     });
 
-    describe("withdrawByUsdValue", function () {
-
-        // snapshot to revert state changes that are made in this scope
-        let _snapshot;
-
-        before(async () => {
-            _snapshot = await provider.send("evm_snapshot");
-
-            // setup supported tokens
-            await router.setSupportedToken(usdc.address, true);
-            await router.setSupportedToken(busd.address, true);
-            await router.setSupportedToken(usdt.address, true);
-
-            // add fake strategies
-            await deployFakeStrategy({ router, token: busd });
-            await deployFakeStrategy({ router, token: usdc });
-            await deployFakeStrategy({ router, token: usdt });
-
-            // admin initial deposit to set initial shares and pps
-            await router.depositToBatch(busd.address, parseBusd("1"));
-            await router.allocateToStrategies();
-
-        });
-
-        after(async () => {
-            await provider.send("evm_revert", [_snapshot]);
-        });
-
-        it("shouldn't be able to withdrawFromBatching receipt that doesn't belong to you", async function () {
-            await router.depositToBatch(usdc.address, parseUsdc("100"))
-            await expect(router.connect(nonReceiptOwner).withdrawFromBatching([1], usdc.address, [MaxUint256]))
-                .to.be.revertedWith("NotReceiptOwner()");
-        });
-
-        it("should withdrawFromBatching whole amount", async function () {
-            await router.depositToBatch(usdc.address, parseUsdc("100"));
-
-            let oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
-            let newBalance = await usdc.balanceOf(owner.address);
-
-            expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
-        });
-
-        it("should withdrawFromBatching token y when deposited token x", async function () {
-            await router.depositToBatch(busd.address, parseBusd("100"))
-
-            let oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
-            let newBalance = await usdc.balanceOf(owner.address);
-            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
-        });
-
-        it("should withdrawFromBatching half of receipt value", async function () {
-            await router.depositToBatch(busd.address, parseBusd("100"))
-
-            // WITHDRAW PART
-            oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
-            newBalance = await usdc.balanceOf(owner.address);
-
-            let receipt = await receiptContract.getReceipt(1);
-            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
-            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
-        });
-
-        it("should withdrawFromBatching (and swap tokens x,y into z)", async function () {
-            await router.depositToBatch(busd.address, parseBusd("100"));
-            await router.depositToBatch(usdc.address, parseUsdc("100"));
-
-            // WITHDRAW PART
-            oldBalance = await usdt.balanceOf(owner.address);
-            await router.withdrawFromBatching([1, 2], usdt.address, [parseUniform("100"), parseUniform("100")]);
-            newBalance = await usdt.balanceOf(owner.address);
-
-            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdt("200"), parseUsdt("1"));
-        });
-
-        it("should withdrawFromBatching correct amount when price changes", async function () {
-            await router.depositToBatch(busd.address, parseBusd("100"))
-
-            // set price x10
-            await oracle.setPrice(busd.address, parseBusd("10"));
-
-            // current balance is 100 BUSD = 1000$
-            // but dex's rates aren't changed! so we'll receive only 50usdc instead of 500.
-            oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatching([1], usdc.address, [parseUniform("50")]);
-            newBalance = await usdc.balanceOf(owner.address);
-
-            let receipt = await receiptContract.getReceipt(1);
-            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
-            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
-        });
-    });
-
     describe("withdrawExactTokens", function () {
 
         // snapshot to revert state changes that are made in this scope
@@ -282,7 +186,7 @@ describe("Test Batching", function () {
 
         it("shouldn't be able to withdraw receipt that doesn't belong to you", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"))
-            await expect(router.connect(nonReceiptOwner).withdrawFromBatchingExactTokens([1], [MaxUint256]))
+            await expect(router.connect(nonReceiptOwner).withdrawFromBatchingExactTokens([1]))
                 .to.be.revertedWith("NotReceiptOwner()");
         });
 
@@ -292,45 +196,20 @@ describe("Test Batching", function () {
             let receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("1,0");
 
-            await router.withdrawFromBatchingExactTokens([1], [MaxUint256]);
+            await router.withdrawFromBatchingExactTokens([1]);
 
             receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("0");
-        });
-
-        it("should not burn receipts when withdraw part amount noted in it", async function () {
-            await router.depositToBatch(usdc.address, parseUsdc("100"));
-
-            let receipts = await receiptContract.getTokensOfOwner(owner.address);
-            expect(receipts.toString()).to.be.eq("1,0");
-
-            await router.withdrawFromBatchingExactTokens([1], [parseUniform("50")]);
-
-            receipts = await receiptContract.getTokensOfOwner(owner.address);
-            expect(receipts.toString()).to.be.eq("1,0");
         });
 
         it("should withdraw whole amount", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"));
 
             let oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatchingExactTokens([1], [MaxUint256]);
+            await router.withdrawFromBatchingExactTokens([1]);
             let newBalance = await usdc.balanceOf(owner.address);
 
             expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
-        });
-
-        it("should withdraw half of receipt", async function () {
-            await router.depositToBatch(usdc.address, parseUsdc("100"))
-
-            // WITHDRAW PART
-            oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatchingExactTokens([1], [parseUniform("50")]);
-            newBalance = await usdc.balanceOf(owner.address);
-
-            let receipt = await receiptContract.getReceipt(1);
-            expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
-            expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("1"));
         });
 
         it("should withdraw two receipts and receive tokens noted in them", async function () {
@@ -340,7 +219,7 @@ describe("Test Batching", function () {
             // WITHDRAW PART
             oldBalance = await usdt.balanceOf(owner.address);
             oldBalance2 = await busd.balanceOf(owner.address);
-            await router.withdrawFromBatchingExactTokens([1, 2], [parseUniform("100"), parseUniform("100")]);
+            await router.withdrawFromBatchingExactTokens([1, 2]);
             newBalance = await usdt.balanceOf(owner.address);
             newBalance2 = await busd.balanceOf(owner.address);
 
