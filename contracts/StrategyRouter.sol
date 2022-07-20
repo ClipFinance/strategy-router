@@ -186,7 +186,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
         uint256 strategiesDebtInUsd;
 
-        if (strategiesDebtInShares > 0) strategiesDebtInUsd = sharesToUsd(strategiesDebtInShares);
+        if (strategiesDebtInShares > 0) strategiesDebtInUsd = calculateSharesUsdValue(strategiesDebtInShares);
 
         // step 2
         if (
@@ -342,7 +342,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Returns usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function sharesToUsd(uint256 amountShares) public view returns (uint256 amountUsd) {
+    function calculateSharesUsdValue(uint256 amountShares) public view returns (uint256 amountUsd) {
         uint256 totalShares = sharesToken.totalSupply();
         if (amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
@@ -351,9 +351,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (amountShares * currentPricePerShare) / PRECISION;
     }
 
-    /// @notice Returns shares equivalent of the usd vulue.
+    /// @notice Returns shares equivalent of the usd value.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
-    function usdToShares(uint256 amount) public view returns (uint256 shares) {
+    function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / sharesToken.totalSupply();
         shares = (amount * PRECISION) / currentPricePerShare;
@@ -402,7 +402,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         // shares into usd using current PPS
-        uint256 usdToWithdraw = sharesToUsd(shares);
+        uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
@@ -445,7 +445,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        uint256 sharesToRepay = usdToShares(toWithdraw);
+        uint256 sharesToRepay = calculateSharesAmountFromUsdAmount(toWithdraw);
         if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay) revert CantCrossWithdrawFromStrategiesNow();
         _withdrawFromStrategies(toWithdraw, withdrawToken);
         cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
@@ -460,7 +460,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (sharesToken.balanceOf(msg.sender) < shares) revert InsufficientShares();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 withdrawAmountUsd = sharesToUsd(shares);
+        uint256 withdrawAmountUsd = calculateSharesUsdValue(shares);
         sharesToken.burn(msg.sender, shares);
         _withdrawFromStrategies(withdrawAmountUsd, withdrawToken);
     }
@@ -472,7 +472,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (sharesToken.balanceOf(msg.sender) < shares) revert InsufficientShares();
         if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
 
-        uint256 amount = sharesToUsd(shares);
+        uint256 amount = calculateSharesUsdValue(shares);
         // these shares will be owned by depositors of the current batching
         sharesToken.routerTransferFrom(msg.sender, address(this), shares);
         _withdrawFromBatching(amount, withdrawToken);
@@ -514,7 +514,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             sharesToken.routerTransferFrom(msg.sender, address(this), shares - unlockedShares);
         }
 
-        uint256 valueToWithdraw = sharesToUsd(shares);
+        uint256 valueToWithdraw = calculateSharesUsdValue(shares);
 
         _withdrawFromBatching(valueToWithdraw, withdrawToken);
         cycles[currentCycleId].strategiesDebtInShares += shares;
@@ -570,7 +570,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     _withdrawFromBatching(fromBatchAmount, withdrawToken);
                     fromBatchAmount -= totalBalance;
                 }
-                uint256 sharesToRepay = usdToShares(fromBatchAmount);
+                uint256 sharesToRepay = calculateSharesAmountFromUsdAmount(fromBatchAmount);
                 if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay)
                     revert CantCrossWithdrawFromStrategiesNow();
                 _withdrawFromStrategies(fromBatchAmount, withdrawToken);
@@ -592,7 +592,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
         if (sharesBalance < shares) shares = sharesBalance;
 
-        uint256 fromStratsAmount = sharesToUsd(shares);
+        uint256 fromStratsAmount = calculateSharesUsdValue(shares);
 
         (uint256 totalBalance, ) = getBatchingValueUsd();
 
