@@ -82,25 +82,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     );
   });
 
-  it("User withdraw half from current cycle", async function () {
+  it("User withdraw from current cycle", async function () {
     let receipt = await receiptContract.getReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1], usdc.address, [receipt.tokenAmountUniform.div(2)]);
+    await router.withdrawFromBatchingExactTokens([1]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("50"),
-      parseUsdc("0.2")
-    );
-  });
-
-  it("User withdraw other half from current cycle", async function () {
-    let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1], usdc.address, [MaxUint256]);
-    let newBalance = await usdc.balanceOf(owner.address);
-
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("50"),
+      parseUsdc("100"),
       parseUsdc("0.2")
     );
   });
