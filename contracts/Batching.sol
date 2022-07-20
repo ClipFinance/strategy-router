@@ -141,55 +141,6 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    /// @notice Withdraw tokens from batching while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fulfills requested amount will be updated.
-    /// @notice Receipt is burned if withdrawn is whole amount
-    /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported token that user wishes to receive.
-    /// @param receiptTokenAmounts Amounts to withdraw from each passed receipt.
-    /// @dev Only callable by user wallets.
-    function withdrawByUsdValue(
-        address receiptOwner,
-        uint256[] calldata receiptIds,
-        address withdrawToken,
-        uint256[] calldata receiptTokenAmounts,
-        uint256 _currentCycleId
-    ) public onlyStrategyRouter returns (uint256 withdrawalTokenAmountToTransfer) {
-        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
-
-        uint256 valueToWithdrawUsd;
-        for (uint256 i = 0; i < receiptIds.length; i++) {
-            uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != receiptOwner) revert NotReceiptOwner();
-
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
-
-            // only for receipts in current batching
-            if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-            (uint256 originalDepositedTokenPriceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
-
-            /* higher token amount may be passed than in tokens in receipt as we expect javascript to handle big numbers
-               not super precisely or face a floating bug. in that case we just withdraw full receipt amount. */
-            if (receiptTokenAmounts[i] >= receipt.tokenAmountUniform || receiptTokenAmounts[i] == 0) {
-                // withdraw whole receipt and burn receipt
-                uint256 receiptValueUsd = ((receipt.tokenAmountUniform * originalDepositedTokenPriceUsd) /
-                    10**priceDecimals);
-                valueToWithdrawUsd += receiptValueUsd;
-                receiptContract.burn(receiptId);
-            } else {
-                // withdraw only part of receipt and update receipt
-                uint256 tokenAmountValueUsd = ((receiptTokenAmounts[i] * originalDepositedTokenPriceUsd) /
-                    10**priceDecimals);
-                valueToWithdrawUsd += tokenAmountValueUsd;
-                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - receiptTokenAmounts[i]);
-            }
-        }
-
-        withdrawalTokenAmountToTransfer = _withdrawByUsdValue(valueToWithdrawUsd, withdrawToken);
-
-        IERC20(withdrawToken).transfer(receiptOwner, withdrawalTokenAmountToTransfer);
-    }
-
     function _withdrawByUsdValue(uint256 valueToWithdrawUsd, address withdrawToken)
         public
         onlyStrategyRouter
