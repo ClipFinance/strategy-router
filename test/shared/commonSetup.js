@@ -117,8 +117,8 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
   const [owner,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setFeePercent(2000);
-  await router.setFeeAddress(feeAddress.address);
+  await router.setFeesPercent(2000);
+  await router.setFeesCollectionAddress(feeAddress.address);
   await router.setCycleDuration(1);
 
   // Setup fake prices
@@ -156,8 +156,8 @@ async function setupRouterParams(router, oracle, exchange) {
   const [owner, feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setFeePercent(2000);
-  await router.setFeeAddress(feeAddress.address);
+  await router.setFeesPercent(2000);
+  await router.setFeesCollectionAddress(feeAddress.address);
   await router.setCycleDuration(1);
 }
 
@@ -198,8 +198,8 @@ async function setupParamsOnBNB(router, oracle, exchange) {
   const [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
   await router.setMinUsdPerCycle(parseUniform("0.9"));
-  await router.setFeePercent(2000);
-  await router.setFeeAddress(feeAddress.address);
+  await router.setFeesPercent(2000);
+  await router.setFeesCollectionAddress(feeAddress.address);
   await router.setCycleDuration(1);
 
   await setupPluginsOnBNB(exchange);

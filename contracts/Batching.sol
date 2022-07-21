@@ -251,7 +251,7 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyStrategyRouter {
+    function setMinDepositUsd(uint256 amount) external onlyStrategyRouter {
         minDeposit = amount;
     }
 

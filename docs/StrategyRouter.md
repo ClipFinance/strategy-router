@@ -256,10 +256,10 @@ _Admin function._
 | ---- | ---- | ----------- |
 | amount | uint256 | Amount of usd, must be &#x60;UNIFORM_DECIMALS&#x60; decimals. |
 
-### setMinDeposit
+### setMinDepositUsd
 
 ```solidity
-function setMinDeposit(uint256 amount) external
+function setMinDepositUsd(uint256 amount) external
 ```
 
 Minimum to be deposited in the batching.
