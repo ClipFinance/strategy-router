@@ -384,7 +384,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             sharesToken.transfer(msg.sender, unlockedShares - shares);
         } else if (unlockedShares < shares) {
             // lack of shares -> get from user
-            sharesToken.routerTransferFrom(msg.sender, address(this), shares - unlockedShares);
+            sharesToken.transferFromAutoApproved(msg.sender, address(this), shares - unlockedShares);
         }
 
         // shares into usd using current PPS

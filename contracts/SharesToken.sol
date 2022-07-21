@@ -31,7 +31,8 @@ contract SharesToken is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /// @dev Helper 'transferFrom' function that don't require user approval
-    function routerTransferFrom(
+    /// @dev Only callable by strategy router.
+    function transferFromAutoApproved(
         address from,
         address to,
         uint256 amount
