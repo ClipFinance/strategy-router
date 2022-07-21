@@ -276,8 +276,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
-    /// @return totalBalance Total batching usd value.
-    /// @return balances Array of usd value of token balances in the batching.
+    /// @return totalBalance Total usd value.
+    /// @return balances Array of usd value of token balances.
     function getStrategiesValue() public view returns (uint256 totalBalance, uint256[] memory balances) {
         (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies);
     }
@@ -290,11 +290,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return batching.getBatchValueUsd();
     }
 
+    /// @notice Returns stored address of the `Exchange` contract.
     function getExchange() public view returns (Exchange) {
         return exchange;
     }
 
-    /// @notice Returns amount of shares locked by multiple receipts.
+    /// @notice Calculates amount of redeemable shares by burning receipts.
     /// @notice Cycle noted in receipts should be closed.
     function calculateSharesFromReceipts(uint256[] calldata receiptIds) public view returns (uint256 shares) {
         ReceiptNFT _receiptContract = receiptContract;
@@ -310,8 +311,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    /// @notice Burns receipts and transfers unlocked shares to the owners of these receipts.
+    /// @notice Reedem shares for receipts on behalf of their owners.
     /// @notice Cycle noted in receipts should be closed.
+    /// @notice Only callable by moderators.
     function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
         StrategyRouterLib.redeemReceiptsToSharesByModerators(
             receiptIds,
@@ -323,7 +325,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit RedeemReceiptsToSharesByModerators(msg.sender, receiptIds);
     }
 
-    /// @notice Returns usd value of shares.
+    /// @notice Calculate current usd value of shares.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesUsdValue(uint256 amountShares) public view returns (uint256 amountUsd) {
         uint256 totalShares = sharesToken.totalSupply();
@@ -334,7 +336,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (amountShares * currentPricePerShare) / PRECISION;
     }
 
-    /// @notice Returns shares equivalent of the usd value.
+    /// @notice Calculate shares amount from usd value.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
@@ -343,26 +345,28 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice Returns whether this token is supported.
-    /// @param tokenAddress Address to lookup.
+    /// @param tokenAddress Token address to lookup.
     function supportsToken(address tokenAddress) public view returns (bool isSupported) {
         return batching.supportsToken(tokenAddress);
     }
 
     // User Functions
 
-    /// @notice Convert receipts into share tokens. Withdraw functions doing it internally.
+    /// @notice Convert receipts into share tokens.
     /// @notice Cycle noted in receipt should be closed.
+    /// @return shares Amount of shares redeemed by burning receipts.
     function redeemReceiptsToShares(uint256[] calldata receiptIds) public returns (uint256 shares) {
         shares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
         sharesToken.transfer(msg.sender, shares);
         emit RedeemReceiptsToShares(msg.sender, shares, receiptIds);
     }
 
-    /// @notice Withdraw tokens from strategies while receipts are in strategies.
+    /// @notice Withdraw tokens from strategies.
     /// @notice On partial withdraw leftover shares transferred to user.
-    /// @notice If not enough shares unlocked from receipt, more will be taken from user.
+    /// @notice If not enough shares unlocked from receipt, or no receipts are passed, then shares will be taken from user.
     /// @notice Receipts are burned.
-    /// @param receiptIds ReceiptNFTs ids.
+    /// @notice Cycle noted in receipts should be closed.
+    /// @param receiptIds Array of ReceiptNFT ids.
     /// @param withdrawToken Supported token that user wish to receive.
     /// @param shares Amount of shares to withdraw.
     function withdrawFromStrategies(
@@ -404,9 +408,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
 
-    /// @notice Withdraw tokens from batching while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
-    /// @notice Receipt is burned if withdraw whole amount noted in it.
+    /// @notice Withdraw tokens from batching.
+    /// @notice Receipts are burned and user receives amount of tokens that was noted.
+    /// @notice Cycle noted in receipts should be current cycle.
     /// @param receiptIds Receipt NFTs ids.
     function withdrawFromBatch(
         uint256[] calldata receiptIds
@@ -414,11 +418,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         batching.withdraw(msg.sender, receiptIds,currentCycleId);
     }
 
-
-
-    /// @notice Deposit token into batching. dApp already asked user to approve spending of the token
-    /// and we have allowance to transfer these funds to Batch smartcontract
-    /// @notice Tokens not deposited into strategies immediately.
+    /// @notice Deposit token into batching. 
     /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
@@ -436,12 +436,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         batching.setSupportedToken(tokenAddress, supported);
     }
 
+    /// @notice Set wallets that will be moderators.
     /// @dev Admin function.
     function setModerator(address moderator, bool isWhitelisted) external onlyOwner {
         moderators[moderator] = isWhitelisted;
     }
 
-    /// @notice Set address for collecting fees from rewards.
+    /// @notice Set address for fees collected by protocol.
     /// @dev Admin function.
     function setFeesCollectionAddress(address _feeAddress) external onlyOwner {
         if (_feeAddress == address(0)) revert();
@@ -449,7 +450,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit SetFeeAddress(_feeAddress);
     }
 
-    /// @notice Set percent to take of rewards for owners.
+    /// @notice Set percent to take from harvested rewards as protocol fee.
     /// @dev Admin function.
     function setFeesPercent(uint256 percent) external onlyOwner {
         feePercent = percent;
@@ -508,13 +509,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Update strategy weight.
     /// @param _strategyId Id of the strategy.
-    /// @param _weight Weight of the strategy.
+    /// @param _weight New weight of the strategy.
     /// @dev Admin function.
     function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
         strategies[_strategyId].weight = _weight;
     }
 
-    /// @notice Remove strategy, deposit its balance in other strategies.
+    /// @notice Remove strategy and deposit its balance in other strategies.
+    /// @notice Will revert when there is only 1 strategy left.
     /// @param _strategyId Id of the strategy.
     /// @dev Admin function.
     function removeStrategy(uint256 _strategyId) external onlyOwner {
@@ -556,7 +558,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
-    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
+    /// @return balances Batch token balances after rebalancing.
+    /// @dev Admin function.
     function rebalanceBatch() external onlyOwner returns (uint256[] memory balances) {
         return batching.rebalance();
     }
@@ -571,6 +574,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Internals
 
     /// @param valueToWithdraw USD value to withdraw.
+    /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromBatchByUsdValue(uint256 valueToWithdraw, address withdrawToken) private {
         uint256 withdrawalTokenAmountToTransfer = batching._withdrawByUsdValue(valueToWithdraw, withdrawToken);
 
@@ -578,6 +582,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
+    /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
         (uint256 strategiesLockedUsd, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
