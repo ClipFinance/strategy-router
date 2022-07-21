@@ -69,7 +69,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DuplicateStrategy();
     error CycleNotClosableYet();
     error AmountNotSpecified();
-    error CantCrossWithdrawFromStrategiesNow();
     error CantRemoveLastStrategy();
     error NothingToRebalance();
     error NotModerator();
@@ -89,16 +88,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 pricePerShare;
         // USD value received by strategies
         uint256 receivedByStrategiesInUsd;
-        /*
-            Amount of shares cross withdrawn from batching
-            Whenever user withdraws and protocol does have enough funds in batching, we increase this value
-            by the amount of shares that user passed to withdraw
-            If there is not enough funds in batching at this moment, we withdraw from strategies and decrease this value
-            We record this amount to do internal accounting between batching and strategies to be break even
-            on user deposits and withdrawals and we take this information into consideration when we move funds
-            from batching to strategies
-        */
-        uint256 strategiesDebtInShares;
         // tokens price at time of the deposit to strategies
         mapping(address => uint256) prices;
     }
@@ -183,15 +172,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchingValueInUsd, ) = getBatchingValueUsd();
 
-        uint256 strategiesDebtInShares = cycles[_currentCycleId].strategiesDebtInShares;
-        uint256 strategiesDebtInUsd;
-
-        if (strategiesDebtInShares > 0) strategiesDebtInUsd = calculateSharesUsdValue(strategiesDebtInShares);
-
         // step 2
         if (
             cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
-            batchingValueInUsd + strategiesDebtInUsd < minUsdPerCycle
+            batchingValueInUsd < minUsdPerCycle
         ) revert CycleNotClosableYet();
 
         // step 3
@@ -246,8 +230,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         // step 8
-        cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd + strategiesDebtInUsd;
-        cycles[_currentCycleId].totalDepositedInUsd = batchingValueInUsd + strategiesDebtInUsd;
+        cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd;
+        cycles[_currentCycleId].totalDepositedInUsd = batchingValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
         // start new cycle
@@ -407,50 +391,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
 
-    /// @notice Withdraw tokens from strategies while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
-    /// @notice Receipt is burned if withdraw whole amount noted in it.
-    /// @notice Only allowed to withdraw less or equal to strategiesDebtInShares.
-    /// @param receiptIds ReceiptNFT ids.
-    /// @param withdrawToken Supported token that user wish to receive.
-    /// @param amounts Amounts to withdraw from each passed receipt.
-    /// @dev Only callable by user wallets.
-    function crossWithdrawFromStrategies(
-        uint256[] calldata receiptIds,
-        address withdrawToken,
-        uint256[] calldata amounts
-    ) public {
-        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
-
-        uint256 _currentCycleId = currentCycleId;
-        uint256 toWithdraw;
-        for (uint256 i = 0; i < receiptIds.length; i++) {
-            uint256 receiptId = receiptIds[i];
-            if (receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
-
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
-            // only for receipts in batching
-            if (receipt.cycleId != _currentCycleId) revert CycleClosed();
-
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
-
-            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
-                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
-                toWithdraw += receiptValue;
-                receiptContract.burn(receiptId);
-            } else {
-                uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
-                toWithdraw += amountValue;
-                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
-            }
-        }
-
-        uint256 sharesToRepay = calculateSharesAmountFromUsdAmount(toWithdraw);
-        if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay) revert CantCrossWithdrawFromStrategiesNow();
-        _withdrawFromStrategies(toWithdraw, withdrawToken);
-        cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
-    }
-
     /// @notice Withdraw tokens from strategies by shares. This scenario takes place when user has withdrawn from strategy
     /// where he has before taken out from receiptIds partially receipt amount so we created him shares
     /// instead of new receipt
@@ -465,19 +405,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _withdrawFromStrategies(withdrawAmountUsd, withdrawToken);
     }
 
-    /// @notice Withdraw tokens from batching by shares.
-    /// @param shares Amount of shares to withdraw.
-    /// @param withdrawToken Supported token that user wish to receive.
-    function crossWithdrawShares(uint256 shares, address withdrawToken) public {
-        if (sharesToken.balanceOf(msg.sender) < shares) revert InsufficientShares();
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
-
-        uint256 amount = calculateSharesUsdValue(shares);
-        // these shares will be owned by depositors of the current batching
-        sharesToken.routerTransferFrom(msg.sender, address(this), shares);
-        _withdrawFromBatchingByUsdValue(amount, withdrawToken);
-        cycles[currentCycleId].strategiesDebtInShares += shares;
-    }
 
     /// @notice Withdraw tokens from batching while receipts are in batching.
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
@@ -490,118 +417,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         batching.withdraw(msg.sender, receiptIds,currentCycleId);
     }
 
-    /// @notice Withdraw tokens from batching while receipts are in strategies.
-    /// @notice On partial withdraw leftover shares transferred to user.
-    /// @notice Receipts are burned.
-    /// @param receiptIds Receipt NFTs ids.
-    /// @param withdrawToken Supported token that user wish to receive.
-    /// @param shares Amount of shares from receipts to withdraw.
-    /// @dev Only callable by user wallets.
-    function crossWithdrawFromBatching(
-        uint256[] calldata receiptIds,
-        address withdrawToken,
-        uint256 shares
-    ) external {
-        if (shares == 0) revert AmountNotSpecified();
-        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
-        if (unlockedShares > shares) {
-            // leftover shares -> send to user
-            sharesToken.transfer(msg.sender, unlockedShares - shares);
-        } else if (unlockedShares < shares) {
-            // lack of shares -> get from user
-            sharesToken.routerTransferFrom(msg.sender, address(this), shares - unlockedShares);
-        }
-
-        uint256 valueToWithdraw = calculateSharesUsdValue(shares);
-
-        _withdrawFromBatchingByUsdValue(valueToWithdraw, withdrawToken);
-        cycles[currentCycleId].strategiesDebtInShares += shares;
-    }
-
-    /// @notice Allows to withdraw tokens from batching and from strategies at the same time.
-    /// @notice It also can cross withdraw if possible.
-    /// @notice This function internally rely on the other withdraw functions, thus inherit some bussines logic.
-    /// @param receiptIdsBatch ReceiptNFTs ids from batching.
-    /// @param receiptIdsStrats ReceiptNFTs ids from strategies.
-    /// @param withdrawToken Supported token that user wish to receive.
-    /// @param amounts Amounts to withdraw from each passed receipt.
-    /// @param shares Amount of shares to withdraw.
-    /// @dev Only callable by user wallets.
-    function withdrawUniversal(
-        uint256[] calldata receiptIdsBatch,
-        uint256[] calldata receiptIdsStrats,
-        address withdrawToken,
-        uint256[] calldata amounts,
-        uint256 shares
-    ) external {
-        if (supportsToken(withdrawToken) == false) revert UnsupportedToken();
-
-        uint256 fromBatchAmount;
-        uint256 _currentCycleId = currentCycleId;
-        for (uint256 i = 0; i < receiptIdsBatch.length; i++) {
-            uint256 receiptId = receiptIdsBatch[i];
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(receipt.token);
-
-            if (amounts[i] >= receipt.tokenAmountUniform || amounts[i] == 0) {
-                // withdraw whole receipt and burn receipt
-                uint256 receiptValue = ((receipt.tokenAmountUniform * price) / 10**priceDecimals);
-                fromBatchAmount += receiptValue;
-                receiptContract.burn(receiptId);
-            } else {
-                // withdraw only part of receipt and update receipt
-                uint256 amountValue = ((amounts[i] * price) / 10**priceDecimals);
-                fromBatchAmount += amountValue;
-                receiptContract.setAmount(receiptId, receipt.tokenAmountUniform - amounts[i]);
-            }
-        }
-
-        if (fromBatchAmount > 0) {
-            (uint256 totalBalance, ) = getBatchingValueUsd();
-
-            if (fromBatchAmount <= totalBalance) {
-                // withdraw 100% from batching
-                _withdrawFromBatchingByUsdValue(fromBatchAmount, withdrawToken);
-            } else {
-                // withdraw as much as can from batching, then cross withdraw from strategies whatever left
-                if (totalBalance > 0) {
-                    _withdrawFromBatchingByUsdValue(fromBatchAmount, withdrawToken);
-                    fromBatchAmount -= totalBalance;
-                }
-                uint256 sharesToRepay = calculateSharesAmountFromUsdAmount(fromBatchAmount);
-                if (cycles[_currentCycleId].strategiesDebtInShares < sharesToRepay)
-                    revert CantCrossWithdrawFromStrategiesNow();
-                _withdrawFromStrategies(fromBatchAmount, withdrawToken);
-                cycles[_currentCycleId].strategiesDebtInShares -= sharesToRepay;
-            }
-        }
-
-        // shares related code
-        if (shares == 0) return;
-
-        uint256 unlockedShares = StrategyRouterLib.burnReceipts(
-            receiptIdsStrats,
-            currentCycleId,
-            receiptContract,
-            cycles
-        );
-        sharesToken.transfer(msg.sender, unlockedShares);
-        // if user trying to withdraw more than he have, don't allow
-        uint256 sharesBalance = sharesToken.balanceOf(msg.sender);
-        if (sharesBalance < shares) shares = sharesBalance;
-
-        uint256 fromStratsAmount = calculateSharesUsdValue(shares);
-
-        (uint256 totalBalance, ) = getBatchingValueUsd();
-
-        if (fromStratsAmount <= totalBalance) {
-            crossWithdrawShares(shares, withdrawToken);
-        } else {
-            withdrawShares(shares, withdrawToken);
-        }
-    }
 
     /// @notice Deposit token into batching. dApp already asked user to approve spending of the token
     /// and we have allowance to transfer these funds to Batching smartcontract
