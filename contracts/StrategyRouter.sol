@@ -573,14 +573,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Internals
 
-    /// @param valueToWithdraw USD value to withdraw.
-    /// @param withdrawToken Supported token to receive after withdraw.
-    function _withdrawFromBatchByUsdValue(uint256 valueToWithdraw, address withdrawToken) private {
-        uint256 withdrawalTokenAmountToTransfer = batching._withdrawByUsdValue(valueToWithdraw, withdrawToken);
-
-        batching.transfer(withdrawToken, msg.sender, withdrawalTokenAmountToTransfer);
-    }
-
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
