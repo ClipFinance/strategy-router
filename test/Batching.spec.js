@@ -106,7 +106,7 @@ describe("Test Batching", function () {
             expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
         });
         it("should revert when user deposits depegged token that numerically match minimum amount", async function () {
-            await router.setMinDeposit(parseUniform("1.0"));
+            await router.setMinDepositUsd(parseUniform("1.0"));
             await oracle.setPrice(busd.address, parseBusd("0.1"));
             await expect(router.depositToBatch(busd.address, parseBusd("2.0")))
                 .to.be.revertedWith("DepositUnderMinimum");

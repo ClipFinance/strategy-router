@@ -175,10 +175,10 @@ async function main() {
     receiptContract.address
   )).wait();
   await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
-  await (await router.setMinDeposit(MIN_DEPOSIT)).wait();
+  await (await router.setMinDepositUsd(MIN_DEPOSIT)).wait();
   await (await router.setCycleDuration(CYCLE_DURATION)).wait();
-  await (await router.setFeePercent(FEE_PERCENT)).wait();
-  await (await router.setFeeAddress(FEE_ADDRESS)).wait();
+  await (await router.setFeesPercent(FEE_PERCENT)).wait();
+  await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 
   console.log("Setting supported token...");
   await (await router.setSupportedToken(busd.address, true)).wait();

@@ -631,7 +631,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Set address for collecting fees from rewards.
     /// @dev Admin function.
-    function setFeeAddress(address _feeAddress) external onlyOwner {
+    function setFeesCollectionAddress(address _feeAddress) external onlyOwner {
         if (_feeAddress == address(0)) revert();
         feeAddress = _feeAddress;
         emit SetFeeAddress(_feeAddress);
@@ -639,7 +639,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Set percent to take of rewards for owners.
     /// @dev Admin function.
-    function setFeePercent(uint256 percent) external onlyOwner {
+    function setFeesPercent(uint256 percent) external onlyOwner {
         feePercent = percent;
         emit SetFeePercent(percent);
     }
@@ -655,8 +655,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Minimum to be deposited in the batching.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
-    function setMinDeposit(uint256 amount) external onlyOwner {
-        batching.setMinDeposit(amount);
+    function setMinDepositUsd(uint256 amount) external onlyOwner {
+        batching.setMinDepositUsd(amount);
         emit SetMinDeposit(amount);
     }
 
