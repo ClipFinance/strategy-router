@@ -156,7 +156,7 @@ describe("Test Batching", function () {
 
     });
 
-    describe("withdrawExactTokens", function () {
+    describe("withdraw", function () {
 
         // snapshot to revert state changes that are made in this scope
         let _snapshot;
@@ -186,7 +186,7 @@ describe("Test Batching", function () {
 
         it("shouldn't be able to withdraw receipt that doesn't belong to you", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"))
-            await expect(router.connect(nonReceiptOwner).withdrawFromBatchingExactTokens([1]))
+            await expect(router.connect(nonReceiptOwner).withdrawFromBatching([1]))
                 .to.be.revertedWith("NotReceiptOwner()");
         });
 
@@ -196,7 +196,7 @@ describe("Test Batching", function () {
             let receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("1,0");
 
-            await router.withdrawFromBatchingExactTokens([1]);
+            await router.withdrawFromBatching([1]);
 
             receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("0");
@@ -206,7 +206,7 @@ describe("Test Batching", function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"));
 
             let oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatchingExactTokens([1]);
+            await router.withdrawFromBatching([1]);
             let newBalance = await usdc.balanceOf(owner.address);
 
             expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
@@ -219,7 +219,7 @@ describe("Test Batching", function () {
             // WITHDRAW PART
             oldBalance = await usdt.balanceOf(owner.address);
             oldBalance2 = await busd.balanceOf(owner.address);
-            await router.withdrawFromBatchingExactTokens([1, 2]);
+            await router.withdrawFromBatching([1, 2]);
             newBalance = await usdt.balanceOf(owner.address);
             newBalance2 = await busd.balanceOf(owner.address);
 

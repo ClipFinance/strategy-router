@@ -116,11 +116,10 @@ contract Batching is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // User Functions
 
     /// @notice Withdraw tokens from batching while receipts are in batching.
-    /// @notice On partial withdraw the receipt that partly fulfills requested amount will be updated.
-    /// @notice Receipt is burned if withdrawn is whole amount
+    /// @notice Receipts are burned.
     /// @param receiptIds Receipt NFTs ids.
     /// @dev Only callable by user wallets.
-    function withdrawExactTokens(
+    function withdraw(
         address receiptOwner,
         uint256[] calldata receiptIds,
         uint256 _currentCycleId

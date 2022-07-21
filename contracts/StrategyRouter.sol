@@ -475,7 +475,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 amount = calculateSharesUsdValue(shares);
         // these shares will be owned by depositors of the current batching
         sharesToken.routerTransferFrom(msg.sender, address(this), shares);
-        _withdrawFromBatching(amount, withdrawToken);
+        _withdrawFromBatchingByUsdValue(amount, withdrawToken);
         cycles[currentCycleId].strategiesDebtInShares += shares;
     }
 
@@ -484,10 +484,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
     /// @dev Only callable by user wallets.
-    function withdrawFromBatchingExactTokens(
+    function withdrawFromBatching(
         uint256[] calldata receiptIds
     ) public {
-        batching.withdrawExactTokens(msg.sender, receiptIds,currentCycleId);
+        batching.withdraw(msg.sender, receiptIds,currentCycleId);
     }
 
     /// @notice Withdraw tokens from batching while receipts are in strategies.
@@ -516,7 +516,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 valueToWithdraw = calculateSharesUsdValue(shares);
 
-        _withdrawFromBatching(valueToWithdraw, withdrawToken);
+        _withdrawFromBatchingByUsdValue(valueToWithdraw, withdrawToken);
         cycles[currentCycleId].strategiesDebtInShares += shares;
     }
 
@@ -563,11 +563,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             if (fromBatchAmount <= totalBalance) {
                 // withdraw 100% from batching
-                _withdrawFromBatching(fromBatchAmount, withdrawToken);
+                _withdrawFromBatchingByUsdValue(fromBatchAmount, withdrawToken);
             } else {
                 // withdraw as much as can from batching, then cross withdraw from strategies whatever left
                 if (totalBalance > 0) {
-                    _withdrawFromBatching(fromBatchAmount, withdrawToken);
+                    _withdrawFromBatchingByUsdValue(fromBatchAmount, withdrawToken);
                     fromBatchAmount -= totalBalance;
                 }
                 uint256 sharesToRepay = calculateSharesAmountFromUsdAmount(fromBatchAmount);
@@ -759,7 +759,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Internals
 
     /// @param valueToWithdraw USD value to withdraw.
-    function _withdrawFromBatching(uint256 valueToWithdraw, address withdrawToken) private {
+    function _withdrawFromBatchingByUsdValue(uint256 valueToWithdraw, address withdrawToken) private {
         uint256 withdrawalTokenAmountToTransfer = batching._withdrawByUsdValue(valueToWithdraw, withdrawToken);
 
         batching.transfer(withdrawToken, msg.sender, withdrawalTokenAmountToTransfer);
