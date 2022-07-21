@@ -79,7 +79,7 @@ describe("Test StrategyRouter", function () {
     expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
   });
 
-  it("should withdrawFromStrategies whole amount", async function () {
+  it("should withdrawFromStrategies only receipts", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
     await router.allocateToStrategies()
 
@@ -87,6 +87,19 @@ describe("Test StrategyRouter", function () {
 
     let oldBalance = await usdc.balanceOf(owner.address);
     await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+  });
+
+  it("should withdrawFromStrategies only shares", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    await router.redeemReceiptsToShares([1]);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies([], usdc.address, receiptsShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
