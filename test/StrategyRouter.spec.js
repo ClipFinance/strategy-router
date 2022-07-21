@@ -121,19 +121,6 @@ describe("Test StrategyRouter", function () {
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
   });
 
-  it("withdrawShares", async function () {
-    await router.depositToBatch(busd.address, parseBusd("100000"));
-    await router.allocateToStrategies();
-
-    let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    await router.redeemReceiptsToShares([1]);
-
-    let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawShares(receiptsShares, usdc.address);
-    let newBalance = await usdc.balanceOf(owner.address);
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100000"), parseUsdc("10000"));
-  });
-
   it("Remove strategy", async function () {
 
     // deposit to strategies

@@ -124,26 +124,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     );
   });
 
-  it("Withdraw half from strategies", async function () {
+  it("Withdraw from strategies", async function () {
     let oldBalance = await usdc.balanceOf(owner.address);
     let shares = await router.calculateSharesFromReceipts([2]);
-    await router.withdrawFromStrategies([2], usdc.address, shares.div(2));
+    await router.withdrawFromStrategies([2], usdc.address, shares);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("50"),
-      parseUniform("2.0")
-    );
-  });
-
-  it("Withdraw other half from strategies", async function () {
-    let shares = await sharesToken.balanceOf(owner.address);
-    let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawShares(shares, usdc.address);
-    let newBalance = await usdc.balanceOf(owner.address);
-
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("50"),
+      parseUsdc("100"),
       parseUniform("2.0")
     );
   });
@@ -254,60 +242,6 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
   });
 
-  it("Scenario", async function () {
-
-    ////////
-    // user deposit
-    await router.depositToBatch(usdc.address, parseUsdc("100000"));
-    await router.depositToBatch(usdc.address, parseUsdc("100000"));
-    // deposit to strategies
-    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-    await router.allocateToStrategies();
-
-    // user deposit
-    await router.depositToBatch(usdc.address, parseUsdc("100"));
-    await router.depositToBatch(usdc.address, parseUsdc("100"));
-    // // deposit to strategies
-    await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
-    await router.allocateToStrategies();
-
-    let receipts = await receiptContract.getTokensOfOwner(owner.address);
-    // withdraw by receipt
-    let oldBalance = await usdc.balanceOf(owner.address);
-    let shares = await router.calculateSharesFromReceipts([10]);
-    await router.withdrawFromStrategies([10], usdc.address, shares);
-    let newBalance = await usdc.balanceOf(owner.address);
-
-    oldBalance = await usdc.balanceOf(owner.address);
-    shares = await router.calculateSharesFromReceipts([11]);
-    await router.withdrawFromStrategies([11], usdc.address, shares);
-    newBalance = await usdc.balanceOf(owner.address);
-
-    // unlock shares and withdraw tokens by shares
-    await router.redeemReceiptsToShares([12]);
-    let sharesUnlocked = await sharesToken.balanceOf(owner.address);
-
-    oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawShares(sharesUnlocked, usdc.address);
-    newBalance = await usdc.balanceOf(owner.address);
-
-    await router.redeemReceiptsToShares([13]);
-    sharesUnlocked = await sharesToken.balanceOf(owner.address);
-    oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawShares(sharesUnlocked, usdc.address);
-    newBalance = await usdc.balanceOf(owner.address);
-
-    receipts = await receiptContract.getTokensOfOwner(owner.address);
-
-
-    // await router.withdrawShares(1, usdc.address);
-    expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
-    expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
-    expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
-
-    expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-    expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
-  });
 
 });
 

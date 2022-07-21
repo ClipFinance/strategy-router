@@ -393,20 +393,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
 
-    /// @notice Withdraw tokens from strategies by shares. This scenario takes place when user has withdrawn from strategy
-    /// where he has before taken out from receiptIds partially receipt amount so we created him shares
-    /// instead of new receipt
-    /// @param shares Amount of shares to withdraw.
-    /// @param withdrawToken Supported token that user wish to receive.
-    function withdrawShares(uint256 shares, address withdrawToken) public {
-        if (sharesToken.balanceOf(msg.sender) < shares) revert InsufficientShares();
-        if (!supportsToken(withdrawToken)) revert UnsupportedToken();
-
-        uint256 withdrawAmountUsd = calculateSharesUsdValue(shares);
-        sharesToken.burn(msg.sender, shares);
-        _withdrawFromStrategies(withdrawAmountUsd, withdrawToken);
-    }
-
 
     /// @notice Withdraw tokens from batching.
     /// @notice Receipts are burned and user receives amount of tokens that was noted.
