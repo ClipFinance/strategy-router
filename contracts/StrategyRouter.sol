@@ -12,7 +12,7 @@ import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
 import {Exchange} from "./exchange/Exchange.sol";
 import {SharesToken} from "./SharesToken.sol";
-import "./Batching.sol";
+import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
 // import "hardhat/console.sol";
@@ -32,7 +32,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Fires when user withdraw from batching.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatching(address indexed user, address token, uint256 amount);
+    event WithdrawFromBatch(address indexed user, address token, uint256 amount);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -55,7 +55,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Exchange _exchange,
         IUsdOracle _oracle,
         SharesToken _sharesToken,
-        Batching _batching,
+        Batch _batching,
         ReceiptNFT _receiptNft
     );
 
@@ -105,7 +105,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     Exchange public exchange;
     IUsdOracle private oracle;
     SharesToken private sharesToken;
-    Batching private batching;
+    Batch private batching;
     address public feeAddress;
 
     StrategyInfo[] public strategies;
@@ -136,7 +136,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Exchange _exchange,
         IUsdOracle _oracle,
         SharesToken _sharesToken,
-        Batching _batching,
+        Batch _batching,
         ReceiptNFT _receiptNft
     ) external onlyOwner {
         exchange = _exchange;
@@ -154,7 +154,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Send pending money collected in the batch into the strategies.
     /// @notice Can be called when `cycleDuration` seconds has been passed or
     ///         batch usd value has reached `minUsdPerCycle`.
-    /// @dev Only callable by user wallets.
     function allocateToStrategies() external {
         /*
         step 1 - preparing data and assigning local variables for later reference
@@ -170,7 +169,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         */
         // step 1
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchingValueInUsd, ) = getBatchingValueUsd();
+        (uint256 batchingValueInUsd, ) = getBatchValueUsd();
 
         // step 2
         if (
@@ -239,8 +238,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         cycles[_currentCycleId].startAt = block.timestamp;
     }
 
-    /// @notice Compound all strategies.
-    /// @dev Only callable by user wallets.
+    /// @notice Harvest yield from farms, and reinvest these rewards into strategies.
+    /// @notice Part of the harvested rewards is taken as protocol comission.
     function compoundAll() external {
         if (sharesToken.totalSupply() == 0) revert();
 
@@ -287,8 +286,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batching usd value.
     /// @return balances Array of usd value of token balances in the batching.
-    function getBatchingValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batching.getBatchingValueUsd();
+    function getBatchValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
+        return batching.getBatchValueUsd();
     }
 
     function getExchange() public view returns (Exchange) {
@@ -366,7 +365,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param receiptIds ReceiptNFTs ids.
     /// @param withdrawToken Supported token that user wish to receive.
     /// @param shares Amount of shares to withdraw.
-    /// @dev Only callable by user wallets.
     function withdrawFromStrategies(
         uint256[] calldata receiptIds,
         address withdrawToken,
@@ -410,8 +408,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice On partial withdraw the receipt that partly fullfills requested amount will be updated.
     /// @notice Receipt is burned if withdraw whole amount noted in it.
     /// @param receiptIds Receipt NFTs ids.
-    /// @dev Only callable by user wallets.
-    function withdrawFromBatching(
+    function withdrawFromBatch(
         uint256[] calldata receiptIds
     ) public {
         batching.withdraw(msg.sender, receiptIds,currentCycleId);
@@ -420,12 +417,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
 
     /// @notice Deposit token into batching. dApp already asked user to approve spending of the token
-    /// and we have allowance to transfer these funds to Batching smartcontract
+    /// and we have allowance to transfer these funds to Batch smartcontract
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
-    /// @dev Only callable by user wallets.
     function depositToBatch(address depositToken, uint256 _amount) external {
         batching.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
@@ -561,7 +557,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Rebalance batching, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalanceBatching() external onlyOwner returns (uint256[] memory balances) {
+    function rebalanceBatch() external onlyOwner returns (uint256[] memory balances) {
         return batching.rebalance();
     }
 
@@ -575,7 +571,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Internals
 
     /// @param valueToWithdraw USD value to withdraw.
-    function _withdrawFromBatchingByUsdValue(uint256 valueToWithdraw, address withdrawToken) private {
+    function _withdrawFromBatchByUsdValue(uint256 valueToWithdraw, address withdrawToken) private {
         uint256 withdrawalTokenAmountToTransfer = batching._withdrawByUsdValue(valueToWithdraw, withdrawToken);
 
         batching.transfer(withdrawToken, msg.sender, withdrawalTokenAmountToTransfer);

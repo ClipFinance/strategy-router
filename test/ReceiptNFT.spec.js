@@ -6,8 +6,8 @@ const { provider, deploy, MaxUint256 } = require("./utils");
 
 describe("Test ReceiptNFT", function () {
 
-    let fakeStrategyRouter, fakeBatching, nonManager, nftRecipient;
-    let receiptContractStrategyRouter, receiptContractBatching, receiptContractNonManager;
+    let fakeStrategyRouter, fakeBatch, nonManager, nftRecipient;
+    let receiptContractStrategyRouter, receiptContractBatch, receiptContractNonManager;
     let snapshotId;
     const fakeTokenAddress = hre.networkVariables.usdc; // BSC USDC live chain
     let cycleId = 0;
@@ -15,20 +15,20 @@ describe("Test ReceiptNFT", function () {
 
     beforeEach(async function () {
         snapshotId = await provider.send("evm_snapshot");
-        [fakeStrategyRouter, fakeBatching, nonManager, nftRecipient] = await ethers.getSigners();
+        [fakeStrategyRouter, fakeBatch, nonManager, nftRecipient] = await ethers.getSigners();
 
         // silence warnings about proxy's unsafeAllow, for tests
         upgrades.silenceWarnings(); 
         // get instance that is controlled by fakeStrategyRouter (one of managers)
         let ReceiptNFT = await ethers.getContractFactory("ReceiptNFT");
-        receiptContractStrategyRouter = await upgrades.deployProxy(ReceiptNFT, [fakeStrategyRouter.address, fakeBatching.address], {
+        receiptContractStrategyRouter = await upgrades.deployProxy(ReceiptNFT, [fakeStrategyRouter.address, fakeBatch.address], {
             kind: 'uups',
             unsafeAllow: ["constructor"],
         });
         await receiptContractStrategyRouter.deployed();
 
-        // get instance that is controlled by fakeBatching (one of managers)
-        receiptContractBatching = receiptContractStrategyRouter.connect(fakeBatching);
+        // get instance that is controlled by fakeBatch (one of managers)
+        receiptContractBatch = receiptContractStrategyRouter.connect(fakeBatch);
 
         // get instance that is controlled by non-manager 
         receiptContractNonManager = receiptContractStrategyRouter.connect(nonManager);
@@ -61,8 +61,8 @@ describe("Test ReceiptNFT", function () {
             expect(nonManagerTokenAmount).to.be.eq(1);
         });
 
-        it("Batching can mint receipt NFT", async function () {
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+        it("Batch can mint receipt NFT", async function () {
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
 
             const receipt0 = await receiptContractStrategyRouter.getReceipt(0);
 
@@ -97,10 +97,10 @@ describe("Test ReceiptNFT", function () {
 
         it("Managers issue multiple receipts to different users", async function () {
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             await verifyReceiptData(0, cycleId, amount, fakeTokenAddress, nonManager);
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nftRecipient.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nftRecipient.address);
             await verifyReceiptData(1, cycleId, amount, fakeTokenAddress, nftRecipient);
 
             await receiptContractStrategyRouter.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
@@ -109,9 +109,9 @@ describe("Test ReceiptNFT", function () {
             await receiptContractStrategyRouter.mint(cycleId, amount, fakeTokenAddress, nftRecipient.address);
             await verifyReceiptData(3, cycleId, amount, fakeTokenAddress, nftRecipient);
 
-            let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
+            let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(2);
-            let balanceOfNftRecipient = await receiptContractBatching.balanceOf(nftRecipient.address);
+            let balanceOfNftRecipient = await receiptContractBatch.balanceOf(nftRecipient.address);
             expect(balanceOfNftRecipient).to.be.eq(2);
         });
     });
@@ -119,53 +119,53 @@ describe("Test ReceiptNFT", function () {
     describe("Burning", function () {
         it("Non manager user can't burn receipt", async function () {
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
-            let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(1);
 
             await expect(receiptContractNonManager.burn(1)).to.be.revertedWith("NotManager");
         });
 
         it("Non-existing receipt can not be burned", async function () {
-            await expect(receiptContractBatching.burn(0))
+            await expect(receiptContractBatch.burn(0))
                 .to.be.revertedWith("NonExistingToken()");
         });
 
         it("Manager can burn receipt created by himself", async function () {
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
-            await receiptContractBatching.burn(0);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.burn(0);
             await expect(receiptContractStrategyRouter.ownerOf(0))
                 .to.be.revertedWith("ERC721: invalid token ID");
             await expect(receiptContractStrategyRouter.getReceipt(0))
                 .to.be.revertedWith("NonExistingToken()");
 
-            let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
+            let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(0);
         });
 
         it("Manager can burn receipt created by other manager", async function () {
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             await receiptContractStrategyRouter.burn(0);
             await expect(receiptContractStrategyRouter.ownerOf(0))
                 .to.be.revertedWith("ERC721: invalid token ID");
             await expect(receiptContractStrategyRouter.getReceipt(0))
                 .to.be.revertedWith("NonExistingToken()");
 
-            let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
+            let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(0);
         });
 
         it("After last receipt was burned when manager issues a new receipt and receipt ID counter is incremented", async function () {
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             await receiptContractStrategyRouter.burn(0);
 
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             await verifyReceiptData(1, cycleId, amount, fakeTokenAddress, nonManager);
 
-            let balanceOfNonManager = await receiptContractBatching.balanceOf(nonManager.address);
+            let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(1);
         });
     });
@@ -173,9 +173,9 @@ describe("Test ReceiptNFT", function () {
     describe("Changing amount", function () {
         it("Manager can change amount of existing receipt", async function () {
             let amount = parseEther("3");
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("2");
-            await receiptContractBatching.setAmount(0, amount);
+            await receiptContractBatch.setAmount(0, amount);
 
             const receipt = await receiptContractStrategyRouter.getReceipt(0);
             expect(receipt.tokenAmountUniform).to.be.eq(amount);
@@ -183,7 +183,7 @@ describe("Test ReceiptNFT", function () {
 
         it("Manager can change amount of receipt created by other manager", async function () {
             let amount = parseEther("3");
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("2");
             await receiptContractStrategyRouter.setAmount(0, amount);
 
@@ -193,7 +193,7 @@ describe("Test ReceiptNFT", function () {
 
         it("Non manager can't change amount", async function () {
             let amount = parseEther("3");
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("1");
             await expect(receiptContractNonManager.setAmount(0, amount))
                 .to.be.revertedWith("NotManager()");
@@ -201,19 +201,19 @@ describe("Test ReceiptNFT", function () {
 
         it("Can't change amount non-existing receipt", async function () {
             let amount = parseEther("1");
-            await expect(receiptContractBatching.setAmount(0, amount))
+            await expect(receiptContractBatch.setAmount(0, amount))
                 .to.be.revertedWith("NonExistingToken()");
         });
 
         it("Can't change amount non-existing receipt", async function () {
             let amount = parseEther("1");
-            await expect(receiptContractBatching.setAmount(0, amount))
+            await expect(receiptContractBatch.setAmount(0, amount))
                 .to.be.revertedWith("NonExistingToken()");
         });
 
-        it("We can't increase amount and can only decrease (logic in StrategyRouter.sol and Batching.sol)", async function () {
+        it("We can't increase amount and can only decrease (logic in StrategyRouter.sol and Batch.sol)", async function () {
             let amount = parseEther("1");
-            await receiptContractBatching.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
+            await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("3");
             await expect(receiptContractStrategyRouter.setAmount(0, amount))
                 .to.be.revertedWith("ReceiptAmountCanOnlyDecrease()");
@@ -328,7 +328,7 @@ describe("Test ReceiptNFT", function () {
         expect(receipt.cycleId).to.be.eq(cycleId);
         expect(receipt.tokenAmountUniform).to.be.eq(amount);
         expect(receipt.token).to.be.eq(token);
-        expect(await receiptContractBatching.ownerOf(receiptId)).to.be.eq(owner.address);
+        expect(await receiptContractBatch.ownerOf(receiptId)).to.be.eq(owner.address);
     }
 });
 

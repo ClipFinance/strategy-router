@@ -71,8 +71,8 @@ async function setupCore() {
   let oracle = await deploy("FakeOracle");
   // Deploy Exchange 
   let exchange = await deployProxy("Exchange");
-  // Deploy Batching
-  let batching = await deployProxy("Batching");
+  // Deploy Batch
+  let batching = await deployProxy("Batch");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 

@@ -118,10 +118,10 @@ All returned numbers have &#x60;UNIFORM_DECIMALS&#x60; decimals.
 | totalBalance | uint256 | Total amount of tokens in strategies. |
 | balances | uint256[] | Array of token amount in each strategy. |
 
-### getBatchingBalance
+### getBatchBalance
 
 ```solidity
-function getBatchingBalance() public view returns (uint256 totalBalance, uint256[] balances)
+function getBatchBalance() public view returns (uint256 totalBalance, uint256[] balances)
 ```
 
 Returns token balances and their sum in the batching.
@@ -196,10 +196,10 @@ User withdraw tokens from strategies via shares. Receipts should be converted to
 | withdrawToken | address | Supported token that user wish to receive. |
 
 
-### withdrawFromBatching
+### withdrawFromBatch
 
 ```solidity
-function withdrawFromBatching(uint256 receiptId, address withdrawToken, uint256 shares, uint256 amount) external
+function withdrawFromBatch(uint256 receiptId, address withdrawToken, uint256 shares, uint256 amount) external
 ```
 
 User withdraw tokens from batching.

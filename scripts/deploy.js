@@ -61,9 +61,9 @@ async function main() {
   });
   await router.deployed();
   console.log("StrategyRouter", router.address);
-  // Deploy Batching
-  let batching = await deployProxy("Batching");
-  console.log("Batching", batching.address);
+  // Deploy Batch
+  let batching = await deployProxy("Batch");
+  console.log("Batch", batching.address);
   // Deploy SharesToken
   let sharesToken = await deployProxy("SharesToken", [router.address]);
   console.log("SharesToken", sharesToken.address);
@@ -156,8 +156,8 @@ async function main() {
     ]
   )).wait();
 
-  // setup Batching addresses
-  console.log("Batching settings setup...");
+  // setup Batch addresses
+  console.log("Batch settings setup...");
   await (await batching.setAddresses(
     exchange.address,
     oracle.address,

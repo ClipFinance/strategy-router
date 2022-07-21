@@ -10,7 +10,7 @@ import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
 import {Exchange} from "./exchange/Exchange.sol";
 import {SharesToken} from "./SharesToken.sol";
-import "./Batching.sol";
+import "./Batch.sol";
 import "./StrategyRouter.sol";
 
 // import "hardhat/console.sol";

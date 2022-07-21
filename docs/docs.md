@@ -6,7 +6,7 @@ https://miro.com/app/board/uXjVOXGtYEw=/
 
 *Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
 
-*Batching balance* - This is where user funds appear after his deposit. Coins hold here before depositing them into strategies, thus money in batching doesn't generate any profits. This is managed by Strategy Router.  
+*Batch balance* - This is where user funds appear after his deposit. Coins hold here before depositing them into strategies, thus money in batching doesn't generate any profits. This is managed by Strategy Router.  
 
 *Strategy balance* - Simply saying how much token you can withdraw from that strategy, not accounting for fee or slippage. Money in strategies are generating profits.  
 

@@ -4,7 +4,7 @@ const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestPara
 const { provider, parseUniform } = require("./utils");
 
 
-describe("Test Batching", function () {
+describe("Test Batch", function () {
 
     let owner, nonReceiptOwner;
     // mock tokens with different decimals
@@ -113,7 +113,7 @@ describe("Test Batching", function () {
         });
     });
 
-    describe("getBatchingTotalUsdValue", function () {
+    describe("getBatchTotalUsdValue", function () {
 
         it("happy paths: 1 supported token", async function () {
             await oracle.setPrice(busd.address, parseBusd("0.5"));
@@ -124,7 +124,7 @@ describe("Test Batching", function () {
             await deployFakeStrategy({ router, token: busd });
 
             await router.depositToBatch(busd.address, parseBusd("100.0"))
-            let { totalBalance, balances } = await router.getBatchingValueUsd();
+            let { totalBalance, balances } = await router.getBatchValueUsd();
             expect(totalBalance).to.be.equal(parseUniform("50"));
             expect(balances.toString()).to.be.equal(`${parseUniform("50")}`);
         });
@@ -148,7 +148,7 @@ describe("Test Batching", function () {
             await router.depositToBatch(usdc.address, parseUsdc("100.0"))
             await router.depositToBatch(usdt.address, parseUsdt("100.0"))
 
-            let { totalBalance, balances } = await router.getBatchingValueUsd();
+            let { totalBalance, balances } = await router.getBatchValueUsd();
             // 0.9 + 0.9 + 1.1 = 2.9
             expect(totalBalance).to.be.equal(parseUniform("290"));
             expect(balances.toString()).to.be.equal(`${parseUniform("90")},${parseUniform("90")},${parseUniform("110")}`);
@@ -186,7 +186,7 @@ describe("Test Batching", function () {
 
         it("shouldn't be able to withdraw receipt that doesn't belong to you", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"))
-            await expect(router.connect(nonReceiptOwner).withdrawFromBatching([1]))
+            await expect(router.connect(nonReceiptOwner).withdrawFromBatch([1]))
                 .to.be.revertedWith("NotReceiptOwner()");
         });
 
@@ -196,7 +196,7 @@ describe("Test Batching", function () {
             let receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("1,0");
 
-            await router.withdrawFromBatching([1]);
+            await router.withdrawFromBatch([1]);
 
             receipts = await receiptContract.getTokensOfOwner(owner.address);
             expect(receipts.toString()).to.be.eq("0");
@@ -206,7 +206,7 @@ describe("Test Batching", function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"));
 
             let oldBalance = await usdc.balanceOf(owner.address);
-            await router.withdrawFromBatching([1]);
+            await router.withdrawFromBatch([1]);
             let newBalance = await usdc.balanceOf(owner.address);
 
             expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
@@ -219,7 +219,7 @@ describe("Test Batching", function () {
             // WITHDRAW PART
             oldBalance = await usdt.balanceOf(owner.address);
             oldBalance2 = await busd.balanceOf(owner.address);
-            await router.withdrawFromBatching([1, 2]);
+            await router.withdrawFromBatch([1, 2]);
             newBalance = await usdt.balanceOf(owner.address);
             newBalance2 = await busd.balanceOf(owner.address);
 

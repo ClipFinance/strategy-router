@@ -57,7 +57,7 @@ describe("Test rebalance functions", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-  describe("Test rebalanceBatching function", function () {
+  describe("Test rebalanceBatch function", function () {
 
     it("usdt strategy, router supports only usdt, should revert", async function () {
 
@@ -66,7 +66,7 @@ describe("Test rebalance functions", function () {
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
-      // await expect(router.rebalanceBatching()).to.be.revertedWith("NothingToRebalance()");
+      // await expect(router.rebalanceBatch()).to.be.revertedWith("NothingToRebalance()");
     });
 
     it("usdt strategy, router supports multiple arbitrary tokens", async function () {
@@ -84,8 +84,8 @@ describe("Test rebalance functions", function () {
 
       await verifyTokensRatio([1, 1, 1]);
 
-      let ret = await router.callStatic.rebalanceBatching();
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let ret = await router.callStatic.rebalanceBatch();
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
       // console.log("gasUsed", gas);
       // console.log("ret", ret);
       // console.log("getTokenBalances", await getTokenBalances());
@@ -105,10 +105,10 @@ describe("Test rebalance functions", function () {
 
       await router.depositToBatch(usdt.address, parseUsdt("1"));
 
-      let ret = await router.callStatic.rebalanceBatching();
+      let ret = await router.callStatic.rebalanceBatch();
       await verifyRatioOfReturnedData([1, 1], ret);
 
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
       // console.log("gasUsed", gas);
       // console.log("ret", ret);
       // console.log("getTokenBalances", await getTokenBalances());
@@ -130,14 +130,14 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(usdt.address, parseUsdt("1"));
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.depositToBatch(usdc.address, parseUsdc("1"));
-      // console.log(await router.getBatchingValueUsd());
+      // console.log(await router.getBatchValueUsd());
 
       await verifyTokensRatio([1, 1, 1]);
 
-      let ret = await router.callStatic.rebalanceBatching();
+      let ret = await router.callStatic.rebalanceBatch();
       await verifyRatioOfReturnedData([1, 1], ret);
 
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
       // console.log("gasUsed", gas);
 
       await verifyTokensRatio([1, 0, 0]);
@@ -159,11 +159,11 @@ describe("Test rebalance functions", function () {
 
       await verifyTokensRatio([2, 1]);
 
-      let ret = await router.callStatic.rebalanceBatching();
+      let ret = await router.callStatic.rebalanceBatch();
       // console.log(ret);
       await verifyRatioOfReturnedData([1, 1], ret);
 
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
       // console.log("gasUsed", gas);
 
       await verifyTokensRatio([1, 1]);
@@ -188,11 +188,11 @@ describe("Test rebalance functions", function () {
 
       await verifyTokensRatio([13, 56, 31]);
 
-      let ret = await router.callStatic.rebalanceBatching();
+      let ret = await router.callStatic.rebalanceBatch();
       // console.log(ret);
       await verifyRatioOfReturnedData([7, 3], ret);
 
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
       // console.log("gasUsed", gas);
 
       await verifyTokensRatio([70, 0, 30]);
@@ -212,13 +212,13 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(busd.address, 2);
       await router.depositToBatch(usdc.address, parseUsdc("1"));
 
-      let ret = await router.callStatic.rebalanceBatching();
+      let ret = await router.callStatic.rebalanceBatch();
       await expect(ret[0]).to.be.closeTo(
         parseUsdt("1"),
         parseUsdt("0.01")
       );
 
-      let gas = (await (await router.rebalanceBatching()).wait()).gasUsed;
+      let gas = (await (await router.rebalanceBatch()).wait()).gasUsed;
 
       await verifyTokensRatio([0, 0, 1]);
 
@@ -416,7 +416,7 @@ describe("Test rebalance functions", function () {
   }
 
   async function getTokenBalances() {
-    let [total, balances] = await router.getBatchingValueUsd();
+    let [total, balances] = await router.getBatchValueUsd();
     return { total, balances };
   }
 

@@ -85,7 +85,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("User withdraw from current cycle", async function () {
     let receipt = await receiptContract.getReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatching([1]);
+    await router.withdrawFromBatch([1]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
