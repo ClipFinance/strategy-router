@@ -6,13 +6,13 @@ https://miro.com/app/board/uXjVOXGtYEw=/
 
 *Strategy router* - is a smart contract that manages user funds and strategies, serves as intermediary between user and multiple strategies.   
 
-*Batch balance* - This is where user funds appear after his deposit. Coins hold here before depositing them into strategies, thus money in batching doesn't generate any profits. This is managed by Strategy Router.  
+*Batch balance* - This is where user funds appear after his deposit. Coins hold here before depositing them into strategies, thus money in batch doesn't generate any profits. This is managed by Strategy Router.  
 
 *Strategy balance* - Simply saying how much token you can withdraw from that strategy, not accounting for fee or slippage. Money in strategies are generating profits.  
 
 *Cycle* - Every cycle has its own price per share (PPS).  
 
-*To close the cycle* - is when batching balance is deposited into strategies. Cycle duration and minimum batching balance conditions should met to close the cycle.  
+*To close the cycle* - is when batch balance is deposited into strategies. Cycle duration and minimum batch balance conditions should met to close the cycle.  
 
 *Share Tokens or shares* - Utility ERC20 token to denote user share in the pool.  
 
@@ -22,9 +22,9 @@ https://miro.com/app/board/uXjVOXGtYEw=/
 Users depositing their tokens together into strategy router, collected funds are periodically deposited into strategies. User can withdraw his share of the pool including his profits at anytime. Strategy router can add, remove or rebalance strategies.
 
 ### User workflow
-User choose one of the supported tokens to deposit in the batching and receive "Receipt NFT" that notes how much user just deposited and assigned unique ID for the cycle. Unique cycle ID is incrementing integer number.  
+User choose one of the supported tokens to deposit in the batch and receive "Receipt NFT" that notes how much user just deposited and assigned unique ID for the cycle. Unique cycle ID is incrementing integer number.  
 
-Then after cycle duration has been passed or batching has reached minimum amount of required coins, a Chainlink Keeper triggers current batch deposits into strategies. Now the coins in the strategies are generating profits. This whole process can be repeated for infinite number of cycles.  
+Then after cycle duration has been passed or batch has reached minimum amount of required coins, a Chainlink Keeper triggers current batch deposits into strategies. Now the coins in the strategies are generating profits. This whole process can be repeated for infinite number of cycles.  
 
 Strategy contract is collecting rewards until auto-compounding is called. Currently auto-compounding is called with Keeper when batch is sent to strategy.  
 
@@ -34,7 +34,7 @@ Maximum withdrawable amount's formula is user's total shares times current PPS.
 
 With partial withdraw all NFTs are burned and issuing share tokens for remaining amount. User's share tokens formula is remaining amount of coins divided by current PPS.  
 
-User can withdraw part or whole amount noted in his Receipt NFT directly from the batching if cycle noted in the receipt is not closed yet. If closed then he can convert his NFTs into Share Tokens, these shares can be used to withdraw tokens from strategies inlcuding profits. User can choose one of the supported tokens to receive after withdraw.  
+User can withdraw part or whole amount noted in his Receipt NFT directly from the batch if cycle noted in the receipt is not closed yet. If closed then he can convert his NFTs into Share Tokens, these shares can be used to withdraw tokens from strategies inlcuding profits. User can choose one of the supported tokens to receive after withdraw.  
 
 There is also function to compound all the strategies which can be called anytime by anyone, and it is also called when depositing batch into strategies.
 

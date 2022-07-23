@@ -13,7 +13,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd;
   // core contracts
-  let router, oracle, exchange, batching, receiptContract, sharesToken;
+  let router, oracle, exchange, batch, receiptContract, sharesToken;
   let cycleDuration;
   let strategyBiswap, strategyBiswap2;
 
@@ -25,7 +25,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     snapshotId = await provider.send("evm_snapshot");
 
     // deploy core contracts
-    ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+    ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
 
     // setup params for testing
     await setupParamsOnBNB(router, oracle, exchange);
@@ -76,7 +76,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     await router.depositToBatch(usdc.address, parseUsdc("100"))
 
-    expect(await usdc.balanceOf(batching.address)).to.be.closeTo(
+    expect(await usdc.balanceOf(batch.address)).to.be.closeTo(
       parseUsdc("100"),
       parseUsdc("0.1")
     );

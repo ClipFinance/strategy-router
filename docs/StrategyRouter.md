@@ -24,7 +24,7 @@ We adjust tokens amounts to have uniform number of decimals where needed for cal
 uint256 cycleDuration
 ```
 
-Minimum time needed before depositing batching balance into strategies.
+Minimum time needed before depositing batch balance into strategies.
 
 ### minUsdPerCycle
 
@@ -32,7 +32,7 @@ Minimum time needed before depositing batching balance into strategies.
 uint256 minUsdPerCycle
 ```
 
-Minimum batching balance to be deposited into strategies.
+Minimum batch balance to be deposited into strategies.
 
 ### minDeposit
 
@@ -40,7 +40,7 @@ Minimum batching balance to be deposited into strategies.
 uint256 minDeposit
 ```
 
-Minimum amount to be deposited into batching by the user.
+Minimum amount to be deposited into batch by the user.
 
 ### cycles
 
@@ -56,7 +56,7 @@ Contains info such as how much were deposited into strategies or price per share
 function allocateToStrategies() external
 ```
 
-Deposit money collected in the batching into strategies.
+Deposit money collected in the batch into strategies.
 Can be called when &#x60;cycleDuration&#x60; seconds has been passed or
         batch has reached &#x60;minUsdPerCycle&#x60; amount of coins.
 
@@ -124,15 +124,15 @@ All returned numbers have &#x60;UNIFORM_DECIMALS&#x60; decimals.
 function getBatchBalance() public view returns (uint256 totalBalance, uint256[] balances)
 ```
 
-Returns token balances and their sum in the batching.
-Shows total batching balance, possibly not total to be deposited into strategies.
+Returns token balances and their sum in the batch.
+Shows total batch balance, possibly not total to be deposited into strategies.
         because strategies might not take all token supported by router.
 All returned amounts have &#x60;UNIFORM_DECIMALS&#x60; decimals.
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| totalBalance | uint256 | Total tokens in the batching. |
-| balances | uint256[] | Array of token balances in the batching. |
+| totalBalance | uint256 | Total tokens in the batch. |
+| balances | uint256[] | Array of token balances in the batch. |
 
 ### receiptToShares
 
@@ -202,7 +202,7 @@ User withdraw tokens from strategies via shares. Receipts should be converted to
 function withdrawFromBatch(uint256 receiptId, address withdrawToken, uint256 shares, uint256 amount) external
 ```
 
-User withdraw tokens from batching.
+User withdraw tokens from batch.
 On partial withdraw amount noted in receipt is updated.
 Receipt is burned when withdrawing whole amount.
 
@@ -221,7 +221,7 @@ _Only callable by user wallets._
 function depositToBatch(address depositToken, uint256 _amount) external
 ```
 
-Deposit token into batching.
+Deposit token into batch.
 Tokens not deposited into strategies immediately.
 
 _User should approve &#x60;_amount&#x60; of &#x60;depositToken&#x60; to this contract.
@@ -262,7 +262,7 @@ _Admin function._
 function setMinDepositUsd(uint256 amount) external
 ```
 
-Minimum to be deposited in the batching.
+Minimum to be deposited in the batch.
 
 _Admin function._
 

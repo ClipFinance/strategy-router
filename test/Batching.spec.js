@@ -12,7 +12,7 @@ describe("Test Batch", function () {
     // helper functions to parse amounts of mock tokens
     let parseUsdc, parseBusd, parseUsdt;
     // core contracts
-    let router, oracle, exchange, batching, receiptContract, sharesToken;
+    let router, oracle, exchange, batch, receiptContract, sharesToken;
     // revert to test-ready state
     let snapshotId;
     // revert to fresh fork state
@@ -24,7 +24,7 @@ describe("Test Batch", function () {
         initialSnapshot = await provider.send("evm_snapshot");
 
         // deploy core contracts
-        ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+        ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
 
         // deploy mock tokens 
         ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
@@ -103,7 +103,7 @@ describe("Test Batch", function () {
             expect(newReceipt.token).to.be.equal(busd.address);
             expect(newReceipt.tokenAmountUniform).to.be.equal(parseUniform("100"));
             expect(newReceipt.cycleId).to.be.equal(1);
-            expect(await busd.balanceOf(batching.address)).to.be.equal(depositAmount);
+            expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
         });
         it("should revert when user deposits depegged token that numerically match minimum amount", async function () {
             await router.setMinDepositUsd(parseUniform("1.0"));

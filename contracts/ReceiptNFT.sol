@@ -38,13 +38,13 @@ contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(address strategyRouter, address batching) external initializer {
+    function initialize(address strategyRouter, address batch) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ERC721_init("Receipt NFT", "RECEIPT");
 
         managers[strategyRouter] = true;
-        managers[batching] = true;
+        managers[batch] = true;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

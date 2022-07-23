@@ -72,7 +72,7 @@ async function setupCore() {
   // Deploy Exchange 
   let exchange = await deployProxy("Exchange");
   // Deploy Batch
-  let batching = await deployProxy("Batch");
+  let batch = await deployProxy("Batch");
   // Deploy StrategyRouterLib 
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter 
@@ -88,17 +88,17 @@ async function setupCore() {
   // Deploy SharesToken
   let sharesToken = await deployProxy("SharesToken", [router.address]);
   // Deploy  ReceiptNFT
-  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batching.address]);
+  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batch.address]);
 
   // set addresses
   await router.setAddresses(
     exchange.address,
     oracle.address,
     sharesToken.address,
-    batching.address,
+    batch.address,
     receiptContract.address
   );
-  await batching.setAddresses(
+  await batch.setAddresses(
     exchange.address,
     oracle.address,
     router.address,
@@ -108,7 +108,7 @@ async function setupCore() {
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let INITIAL_SHARES = Number(1e12);
 
-  return { oracle, exchange, router, receiptContract, batching, sharesToken, INITIAL_SHARES };
+  return { oracle, exchange, router, receiptContract, batch, sharesToken, INITIAL_SHARES };
 }
 
 // Setup core params for testing with MockToken

@@ -21,15 +21,15 @@ import "./StrategyRouterLib.sol";
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /* EVENTS */
 
-    /// @notice Fires when user deposits in batching.
+    /// @notice Fires when user deposits in batch.
     /// @param token Supported token that user want to deposit.
     /// @param amount Amount of `token` transferred from user.
     event Deposit(address indexed user, address token, uint256 amount);
-    /// @notice Fires when batching is deposited into strategies.
+    /// @notice Fires when batch is deposited into strategies.
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
-    /// @notice Fires when user withdraw from batching.
+    /// @notice Fires when user withdraw from batch.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
     event WithdrawFromBatch(address indexed user, address token, uint256 amount);
@@ -55,7 +55,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Exchange _exchange,
         IUsdOracle _oracle,
         SharesToken _sharesToken,
-        Batch _batching,
+        Batch _batch,
         ReceiptNFT _receiptNft
     );
 
@@ -82,7 +82,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     struct Cycle {
         // block.timestamp at which cycle started
         uint256 startAt;
-        // batching USD value before deposited into strategies
+        // batch USD value before deposited into strategies
         uint256 totalDepositedInUsd;
         // price per share in USD
         uint256 pricePerShare;
@@ -105,7 +105,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     Exchange public exchange;
     IUsdOracle private oracle;
     SharesToken private sharesToken;
-    Batch private batching;
+    Batch private batch;
     address public feeAddress;
 
     StrategyInfo[] public strategies;
@@ -136,15 +136,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Exchange _exchange,
         IUsdOracle _oracle,
         SharesToken _sharesToken,
-        Batch _batching,
+        Batch _batch,
         ReceiptNFT _receiptNft
     ) external onlyOwner {
         exchange = _exchange;
         oracle = _oracle;
         sharesToken = _sharesToken;
-        batching = _batching;
+        batch = _batch;
         receiptContract = _receiptNft;
-        emit SetAddresses(_exchange, _oracle, _sharesToken, _batching, _receiptNft);
+        emit SetAddresses(_exchange, _oracle, _sharesToken, _batch, _receiptNft);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -162,26 +162,24 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             condition #2: deposit in the current cycle are more than minimum threshold
         step 3 - store USD price of supported tokens as cycle information
         step 4 - collect yield and re-deposit/re-stake depending on strategy
-        step 5 - rebalance token in batching to match our desired strategies ratio
-        step 6 - batching transfers funds to strategies and strategies deposit tokens to their respective farms
+        step 5 - rebalance token in batch to match our desired strategies ratio
+        step 6 - batch transfers funds to strategies and strategies deposit tokens to their respective farms
         step 7 - we calculate share price for the current cycle and calculate a new amount of shares to issue
         step 8 - store remaining information for the current cycle
         */
         // step 1
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchingValueInUsd, ) = getBatchValueUsd();
+        (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
-        if (
-            cycles[_currentCycleId].startAt + cycleDuration > block.timestamp &&
-            batchingValueInUsd < minUsdPerCycle
-        ) revert CycleNotClosableYet();
+        if (cycles[_currentCycleId].startAt + cycleDuration > block.timestamp && batchValueInUsd < minUsdPerCycle)
+            revert CycleNotClosableYet();
 
         // step 3
         {
             address[] memory tokens = getSupportedTokens();
             for (uint256 i = 0; i < tokens.length; i++) {
-                if (ERC20(tokens[i]).balanceOf(address(batching)) > 0) {
+                if (ERC20(tokens[i]).balanceOf(address(batch)) > 0) {
                     (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
                     cycles[_currentCycleId].prices[tokens[i]] = StrategyRouterLib.changeDecimals(
                         priceUsd,
@@ -200,14 +198,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // step 5
         (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
-        uint256[] memory depositAmountsInTokens = batching.rebalance();
+        uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
         for (uint256 i; i < strategiesLength; i++) {
             address strategyDepositToken = strategies[i].depositToken;
 
             if (depositAmountsInTokens[i] > 0) {
-                batching.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsInTokens[i]);
+                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsInTokens[i]);
 
                 IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
             }
@@ -230,7 +228,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // step 8
         cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd;
-        cycles[_currentCycleId].totalDepositedInUsd = batchingValueInUsd;
+        cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
         // start new cycle
@@ -251,7 +249,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @dev Returns list of supported tokens.
     function getSupportedTokens() public view returns (address[] memory) {
-        return batching.getSupportedTokens();
+        return batch.getSupportedTokens();
     }
 
     /// @dev Returns strategy weight as percent of total weight.
@@ -282,12 +280,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies);
     }
 
-    /// @notice Returns usd values of the tokens balances and their sum in the batching.
+    /// @notice Returns usd values of the tokens balances and their sum in the batch.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
-    /// @return totalBalance Total batching usd value.
-    /// @return balances Array of usd value of token balances in the batching.
+    /// @return totalBalance Total batch usd value.
+    /// @return balances Array of usd value of token balances in the batch.
     function getBatchValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batching.getBatchValueUsd();
+        return batch.getBatchValueUsd();
     }
 
     /// @notice Returns stored address of the `Exchange` contract.
@@ -347,7 +345,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Returns whether this token is supported.
     /// @param tokenAddress Token address to lookup.
     function supportsToken(address tokenAddress) public view returns (bool isSupported) {
-        return batching.supportsToken(tokenAddress);
+        return batch.supportsToken(tokenAddress);
     }
 
     // User Functions
@@ -377,12 +375,40 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
-        uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
+        // uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
+        ReceiptNFT _receiptContract = receiptContract;
+        uint256 _currentCycleId = currentCycleId;
+        uint256 unlockedShares;
 
-        if (unlockedShares > shares) {
-            // leftover shares -> send to user
-            sharesToken.transfer(msg.sender, unlockedShares - shares);
-        } else if (unlockedShares < shares) {
+        // first try to get all shares from receipts
+        for (uint256 i = 0; i < receiptIds.length; i++) {
+            uint256 receiptId = receiptIds[i];
+            if (_receiptContract.ownerOf(receiptId) != msg.sender) revert NotReceiptOwner();
+            uint256 receiptShares = StrategyRouterLib.calculateSharesFromReceipt(
+                receiptId,
+                _currentCycleId,
+                _receiptContract,
+                cycles
+            );
+            unlockedShares += receiptShares;
+            if(unlockedShares > shares) {
+                // receipts fulfilled requested shares and more,  
+                // so get rid of extra shares and update receipt amount
+                uint256 leftoverShares = unlockedShares - shares;
+                unlockedShares -= leftoverShares;
+
+                ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
+                uint256 newReceiptAmount = receipt.tokenAmountUniform * leftoverShares / receiptShares;
+                _receiptContract.setAmount(receiptId, newReceiptAmount);
+            } else {
+                // unlocked shares less or equal to requested, so can take whole receipt amount
+                _receiptContract.burn(receiptId);
+            }
+            if(unlockedShares == shares) break;
+        }
+
+        // if receipts didn't fulfilled requested shares amount, then try to take more from caller 
+        if (unlockedShares < shares) {
             // lack of shares -> get from user
             sharesToken.transferFromAutoApproved(msg.sender, address(this), shares - unlockedShares);
         }
@@ -393,24 +419,21 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
 
-
-    /// @notice Withdraw tokens from batching.
+    /// @notice Withdraw tokens from batch.
     /// @notice Receipts are burned and user receives amount of tokens that was noted.
     /// @notice Cycle noted in receipts should be current cycle.
     /// @param receiptIds Receipt NFTs ids.
-    function withdrawFromBatch(
-        uint256[] calldata receiptIds
-    ) public {
-        batching.withdraw(msg.sender, receiptIds,currentCycleId);
+    function withdrawFromBatch(uint256[] calldata receiptIds) public {
+        batch.withdraw(msg.sender, receiptIds, currentCycleId);
     }
 
-    /// @notice Deposit token into batching. 
+    /// @notice Deposit token into batch.
     /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     function depositToBatch(address depositToken, uint256 _amount) external {
-        batching.deposit(msg.sender, depositToken, _amount, currentCycleId);
-        IERC20(depositToken).transferFrom(msg.sender, address(batching), _amount);
+        batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
+        IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
         emit Deposit(msg.sender, depositToken, _amount);
     }
 
@@ -419,7 +442,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
-        batching.setSupportedToken(tokenAddress, supported);
+        batch.setSupportedToken(tokenAddress, supported);
     }
 
     /// @notice Set wallets that will be moderators.
@@ -451,11 +474,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit SetMinUsdPerCycle(amount);
     }
 
-    /// @notice Minimum to be deposited in the batching.
+    /// @notice Minimum to be deposited in the batch.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
     function setMinDepositUsd(uint256 amount) external onlyOwner {
-        batching.setMinDepositUsd(amount);
+        batch.setMinDepositUsd(amount);
         emit SetMinDeposit(amount);
     }
 
@@ -543,11 +566,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         Ownable(address(removedStrategy)).transferOwnership(msg.sender);
     }
 
-    /// @notice Rebalance batching, so that token balances will match strategies weight.
+    /// @notice Rebalance batch, so that token balances will match strategies weight.
     /// @return balances Batch token balances after rebalancing.
     /// @dev Admin function.
     function rebalanceBatch() external onlyOwner returns (uint256[] memory balances) {
-        return batching.rebalance();
+        return batch.rebalance();
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.

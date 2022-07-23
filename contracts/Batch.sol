@@ -17,7 +17,7 @@ import "./interfaces/IUsdOracle.sol";
 
 // import "hardhat/console.sol";
 
-/// @notice This contract contains batching related code, serves as part of StrategyRouter.
+/// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
 contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -34,7 +34,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
 
-    /// @notice Fires when user withdraw from batching.
+    /// @notice Fires when user withdraw from batch.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
     event WithdrawFromBatch(address indexed user, address token, uint256 amount);
@@ -115,7 +115,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // User Functions
 
-    /// @notice Withdraw tokens from batching while receipts are in batching.
+    /// @notice Withdraw tokens from batch while receipts are in batch.
     /// @notice Receipts are burned.
     /// @param receiptIds Receipt NFTs ids.
     /// @dev Only callable by user wallets.
@@ -130,7 +130,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
             ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
 
-            // only for receipts in current batching
+            // only for receipts in current batch
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
 
             uint256 transferAmount = fromUniform(receipt.tokenAmountUniform, receipt.token);
@@ -151,7 +151,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         tokenAmountToTransfer = fromUniform(tokenAmountToTransfer, token);
     }
 
-    /// @notice Deposit token into batching.
+    /// @notice Deposit token into batch.
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
@@ -183,14 +183,14 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Admin functions
 
-    /// @notice Minimum to be deposited in the batching.
+    /// @notice Minimum to be deposited in the batch.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
     function setMinDepositUsd(uint256 amount) external onlyStrategyRouter {
         minDeposit = amount;
     }
 
-    /// @notice Rebalance batching, so that token balances will match strategies weight.
+    /// @notice Rebalance batch, so that token balances will match strategies weight.
     /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
     function rebalance() public onlyStrategyRouter returns (uint256[] memory balances) {
         /*

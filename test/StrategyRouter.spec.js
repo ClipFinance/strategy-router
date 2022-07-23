@@ -12,7 +12,7 @@ describe("Test StrategyRouter", function () {
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
-  let router, oracle, exchange, batching, receiptContract, sharesToken;
+  let router, oracle, exchange, batch, receiptContract, sharesToken;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -24,7 +24,7 @@ describe("Test StrategyRouter", function () {
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
-    ({ router, oracle, exchange, batching, receiptContract, sharesToken } = await setupCore());
+    ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
 
     // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
@@ -119,6 +119,41 @@ describe("Test StrategyRouter", function () {
     await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
+  });
+
+  it("should withdrawFromStrategies not burn extra receipts", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let withdrawShares = sharesBalance.add(receiptsShares);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
+    // if this call not revert, that means receipt still exists and not burned
+    await expect(receiptContract.getReceipt(1)).to.be.not.reverted;
+  });
+
+  it("should withdrawFromStrategies update receipt that is withdrawn partly", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let withdrawShares = sharesBalance.add(receiptsShares);
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
+    // if this not revert, means receipt still exists and not burned
+    let receipt = await receiptContract.getReceipt(1);
+    expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
   });
 
   it("Remove strategy", async function () {

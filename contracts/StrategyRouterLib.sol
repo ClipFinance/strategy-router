@@ -236,14 +236,8 @@ library StrategyRouterLib {
                         : toSell[i];
 
                     if (sellUniform < REBALANCE_SWAP_THRESHOLD) {
-                        unchecked {
-                            toSell[i] = 0;
-                            toAdd[j] -= changeDecimals(
-                                curSell,
-                                ERC20(sellToken).decimals(),
-                                ERC20(buyToken).decimals()
-                            );
-                        }
+                        toSell[i] = 0;
+                        toAdd[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                         break;
                     }
 
@@ -252,10 +246,8 @@ library StrategyRouterLib {
                     ERC20(buyToken).transfer(_strategies[j], received);
                     IStrategy(_strategies[j]).deposit(received);
 
-                    unchecked {
-                        toSell[i] -= curSell;
-                        toAdd[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
-                    }
+                    toSell[i] -= curSell;
+                    toAdd[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                 }
             }
         }

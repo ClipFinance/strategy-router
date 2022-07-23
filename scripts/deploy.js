@@ -62,13 +62,13 @@ async function main() {
   await router.deployed();
   console.log("StrategyRouter", router.address);
   // Deploy Batch
-  let batching = await deployProxy("Batch");
-  console.log("Batch", batching.address);
+  let batch = await deployProxy("Batch");
+  console.log("Batch", batch.address);
   // Deploy SharesToken
   let sharesToken = await deployProxy("SharesToken", [router.address]);
   console.log("SharesToken", sharesToken.address);
   // Deploy  ReceiptNFT
-  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batching.address]);
+  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batch.address]);
   console.log("ReceiptNFT", receiptContract.address);
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
@@ -158,7 +158,7 @@ async function main() {
 
   // setup Batch addresses
   console.log("Batch settings setup...");
-  await (await batching.setAddresses(
+  await (await batch.setAddresses(
     exchange.address,
     oracle.address,
     router.address,
@@ -171,7 +171,7 @@ async function main() {
     exchange.address,
     oracle.address,
     sharesToken.address,
-    batching.address,
+    batch.address,
     receiptContract.address
   )).wait();
   await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
@@ -226,7 +226,7 @@ async function main() {
     acsPlugin,
     pancakePlugin,
     receiptContract,
-    batching,
+    batch,
     sharesToken,
     strategyBusd,
     strategyUsdc,
