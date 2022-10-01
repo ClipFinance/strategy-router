@@ -29,10 +29,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
-    /// @notice Fires when user withdraw from batch.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, address token, uint256 amount);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -44,6 +40,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Fires when moderator converts foreign receipts into shares token.
     /// @param receiptIds Indexes of the receipts burned.
     event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
+
+    /// @notice Fires when user withdraw from batch.
+    /// @param token that is being withdrawn. can be one token multiple times.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromBatch(address indexed user, address[] token, uint256[] amount);
 
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
@@ -424,7 +425,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Cycle noted in receipts should be current cycle.
     /// @param receiptIds Receipt NFTs ids.
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
-        batch.withdraw(msg.sender, receiptIds, currentCycleId);
+        (address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
+            batch.withdraw(msg.sender, receiptIds, currentCycleId);
+        emit WithdrawFromBatch(msg.sender, tokens, withdrawnTokenAmounts);
     }
 
     /// @notice Deposit token into batch.

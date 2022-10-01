@@ -34,10 +34,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
 
-    /// @notice Fires when user withdraw from batch.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, address token, uint256 amount);
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -123,7 +119,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address receiptOwner,
         uint256[] calldata receiptIds,
         uint256 _currentCycleId
-    ) public onlyStrategyRouter {
+    ) public onlyStrategyRouter returns (address[] memory tokens, uint256[] memory withdrawnTokenAmounts) {
+
+        // withdrawn tokens/amounts will be sent in event. due to solidity design can't do token=>amount array
+        address[] memory tokens;
+        uint256[] memory withdrawTokenAmounts;
+
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != receiptOwner) revert NotReceiptOwner();
@@ -136,8 +137,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 transferAmount = fromUniform(receipt.tokenAmountUniform, receipt.token);
             ERC20(receipt.token).transfer(receiptOwner, transferAmount);
             receiptContract.burn(receiptId);
-            emit WithdrawFromBatch(msg.sender, receipt.token, transferAmount);
+
+            tokens[i] = receipt.token;
+            withdrawnTokenAmounts[i] = transferAmount;
         }
+        return (tokens, withdrawnTokenAmounts);
     }
 
     /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
