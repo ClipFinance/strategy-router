@@ -81,13 +81,13 @@ contract Exchange is UUPSUpgradeable, OwnableUpgradeable {
         return plugin;
     }
 
-    function getFee(
+    function getExchangeProtocolFee(
         uint256 amountA,
         address tokenA,
         address tokenB
     ) public view returns (uint256 feePercent) {
         address plugin = getPlugin(amountA, address(tokenA), address(tokenB));
-        return IExchangePlugin(plugin).getFee(tokenA, tokenB);
+        return IExchangePlugin(plugin).getExchangeProtocolFee(tokenA, tokenB);
     }
 
     function getAmountOut(
