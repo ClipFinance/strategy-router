@@ -90,6 +90,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 receivedByStrategiesInUsd;
         // tokens price at time of the deposit to strategies
         mapping(address => uint256) prices;
+        // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
+        uint256 tvlBeforeRebalanceInUsd;
     }
 
     uint8 private constant UNIFORM_DECIMALS = 18;
@@ -197,7 +199,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         // step 5
-        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
+        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue(); // value $1010 ($10 compounded)
+
+        // TODO get previous TVL from previous cycle. if current cycle = 0, then TVL = 0
+        // calculate compounded profit: current TVL minus previous TVL
+        // take Clip's commission from overall profit
+        // subtract from current TVL Clip's commission and set correct current TVL.
+        //   result could be negative as we paid more in all kinds of fees
+        // save corrected current TVL in Cycle[tvlBeforeRebalanceInUsd]
+        // calculate price per share
+        // mint CLT for Clip's treasure address. CLT amount = fee / price per share
+
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
