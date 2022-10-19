@@ -245,7 +245,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     }
 
     // swap bsw for tokenA & tokenB in proportions 50/50
-    function sellReward(uint256 bswAmount) private returns (uint256 receivedA, uint256 receivedB) {
+    function sellReward(uint256 bswAmount) private returns (uint256 receivedB) {
         // sell for lp ratio
         uint256 amountA = bswAmount / 2;
         uint256 amountB = bswAmount - amountA;
@@ -256,10 +256,9 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
 
         bsw.transfer(address(exchange), amountB);
         receivedB = exchange.swap(amountB, address(bsw), address(tokenB), address(this));
-
-        (receivedA, receivedB) = collectProtocolCommission(receivedA, receivedB);
     }
 
+    // @deprecated not used anymore, protocol commission happens inside StrategyRouter#allocateToStrategies
     function collectProtocolCommission(uint256 amountA, uint256 amountB)
         private
         returns (uint256 amountAfterFeeA, uint256 amountAfterFeeB)
