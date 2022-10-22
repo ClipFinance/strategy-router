@@ -299,7 +299,6 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return (amountA - comissionA, amountB - comissionB);
     }
 
-    // TODO is one large magic method. need to dig in how it works
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
         uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
