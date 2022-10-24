@@ -6,9 +6,8 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "../interfaces/ICurvePool.sol";
 import "../interfaces/IExchangePlugin.sol";
 import "../StrategyRouter.sol";
-import "../interfaces/IUsdOracle.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract UniswapPlugin is IExchangePlugin, Ownable {
     error RoutedSwapFailed();
@@ -19,21 +18,11 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
 
     IUniswapV2Router02 public uniswapRouter;
 
-    // 10000 -> 100%, 30 -> 0.3%
-    uint256 private constant PERCENT_DENOMINATOR = 10000;
-    uint256 slippageTolerance = 30;
-
     constructor() {}
-
-    IUsdOracle public oracle;
 
     /// @notice Set uniswap02-like router.
     function setUniswapRouter(address _uniswapRouter) external onlyOwner {
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
-    }
-
-    function setOracleAddress(IUsdOracle _oracle) external onlyOwner {
-        oracle = _oracle;
     }
 
     function setUseWeth(
@@ -48,13 +37,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     function canUseWeth(address tokenA, address tokenB) public view returns (bool) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         return useWeth[token0][token1];
-    }
-
-    // TODO this method is not callable from anywhere. If it's admin method, implementation to call it should be given
-    // also it's not part if IExchangePlugin interface
-    function setSlippageTolerance(uint256 slippagePercent) public onlyOwner {
-        require(slippagePercent <= 50, "Max 50");
-        slippageTolerance = slippagePercent;
     }
 
     function swap(
@@ -102,36 +84,19 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getMinAmountOut(uint256 amountA, address tokenB) public view returns (uint256 minAmountOut) {
-        // get amount for slippage
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenB);
-        // convert usd to token amount
-        minAmountOut = ((amountA * 10**oraclePriceDecimals) / tokenUsdPrice);
-        // amount with slippage
-        return minAmountOut - ((minAmountOut * slippageTolerance) / PERCENT_DENOMINATOR);
-    }
-
     function _swap(
         uint256 amountA,
         address[] memory path,
         address to
     ) private returns (uint256 amountReceivedTokenB) {
         IERC20(path[0]).approve(address(uniswapRouter), amountA);
-        uint256 received;
-        if (address(oracle) != address(0)) {
-            received = uniswapRouter.swapExactTokensForTokens(
-                amountA,
-                getMinAmountOut(amountA, path[path.length - 1]),
-                path,
-                address(this),
-                block.timestamp
-            )[path.length - 1];
-        } else {
-            received = uniswapRouter.swapExactTokensForTokens(amountA, 0, path, address(this), block.timestamp)[
-                path.length - 1
-            ];
-        }
+
+        uint256 received = uniswapRouter.swapExactTokensForTokens(amountA, 0, path, address(this), block.timestamp)[
+            path.length - 1
+        ];
+
         IERC20(path[path.length - 1]).transfer(to, received);
+
         return received;
     }
 
