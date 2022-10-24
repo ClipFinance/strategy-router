@@ -42,7 +42,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await busd.approve(router.address, parseBusd("1000000"));
     await usdc.approve(router.address, parseUsdc("1000000"));
 
-    // deploy strategies 
+    // deploy strategies
     let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
     strategyBiswap2 = await upgrades.deployProxy(StrategyFactory, [owner.address], {
       kind: 'uups',
@@ -72,7 +72,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   });
 
 
-  it("User deposit", async function () {
+  it("User deposit #1", async function () {
 
     await router.depositToBatch(usdc.address, parseUsdc("100"))
 
@@ -85,7 +85,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   it("User withdraw from current cycle", async function () {
     let receipt = await receiptContract.getReceipt(1);
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromBatch([1]);
+    await expect(router.withdrawFromBatch([1])).to.emit(router, 'WithdrawFromBatch')
+        .withArgs(owner.address, [1], [usdc.address], [parseUsdc("100")]);
     let newBalance = await usdc.balanceOf(owner.address);
 
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
@@ -94,7 +95,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     );
   });
 
-  it("User deposit", async function () {
+  it("User deposit #2", async function () {
     await router.depositToBatch(usdc.address, parseUsdc("100"));
   });
 
@@ -102,14 +103,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
 
     await router.allocateToStrategies();
-    
+
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
       parseUniform("100"),
       parseUniform("1.5")
     );
   });
 
-  it("User deposit", async function () {
+  it("User deposit #3", async function () {
     await router.depositToBatch(usdc.address, parseUsdc("100"));
   });
 

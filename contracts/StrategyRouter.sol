@@ -15,7 +15,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
@@ -42,9 +42,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
 
     /// @notice Fires when user withdraw from batch.
+    /// @param user who initiated withdrawal.
+    /// @param receiptIds original IDs of the corresponding deposited receipts (NFTs).
     /// @param token that is being withdrawn. can be one token multiple times.
     /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, address[] token, uint256[] amount);
+    event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
 
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
@@ -427,7 +429,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
         (address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
             batch.withdraw(msg.sender, receiptIds, currentCycleId);
-        emit WithdrawFromBatch(msg.sender, tokens, withdrawnTokenAmounts);
+        emit WithdrawFromBatch(msg.sender, receiptIds, tokens, withdrawnTokenAmounts);
     }
 
     /// @notice Deposit token into batch.
@@ -588,7 +590,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
-        (uint256 strategiesLockedUsd, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
+        (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
         uint256 tokenAmountToWithdraw;

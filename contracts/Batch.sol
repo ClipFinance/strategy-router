@@ -15,7 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -119,11 +119,14 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address receiptOwner,
         uint256[] calldata receiptIds,
         uint256 _currentCycleId
-    ) public onlyStrategyRouter returns (address[] memory tokens, uint256[] memory withdrawnTokenAmounts) {
+    ) public onlyStrategyRouter returns (
+        address[] memory _tokens,
+        uint256[] memory _withdrawnTokenAmounts)
+    {
 
         // withdrawn tokens/amounts will be sent in event. due to solidity design can't do token=>amount array
-        address[] memory tokens;
-        uint256[] memory withdrawTokenAmounts;
+        address[] memory tokens = new address[](receiptIds.length);
+        uint256[] memory withdrawnTokenAmounts = new uint256[](receiptIds.length);
 
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
