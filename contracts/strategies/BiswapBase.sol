@@ -245,7 +245,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     }
 
     // swap bsw for tokenA & tokenB in proportions 50/50
-    function sellReward(uint256 bswAmount) private returns (uint256 receivedB) {
+    function sellReward(uint256 bswAmount) private returns (uint256 receivedA, uint256 receivedB) {
         // sell for lp ratio
         uint256 amountA = bswAmount / 2;
         uint256 amountB = bswAmount - amountA;
