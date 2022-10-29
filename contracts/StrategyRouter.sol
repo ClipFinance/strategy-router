@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
 import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
@@ -18,7 +19,7 @@ import "./StrategyRouterLib.sol";
 // import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
-contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
     /* EVENTS */
 
     /// @notice Fires when user deposits in batch.
@@ -95,6 +96,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
 
+    uint256 public cycleStartedAtTimestamp;
     uint256 public cycleDuration;
     uint256 public minUsdPerCycle;
     uint256 public minDeposit;
@@ -172,8 +174,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
-        if (cycles[_currentCycleId].startAt + cycleDuration > block.timestamp && batchValueInUsd < minUsdPerCycle)
+        if (cycleStartedAtTimestamp + cycleDuration > block.timestamp && batchValueInUsd < minUsdPerCycle) {
             revert CycleNotClosableYet();
+
+        cycleStartedAtTimestamp = 0;
 
         // step 3
         {
@@ -425,6 +429,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param receiptIds Receipt NFTs ids.
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
         batch.withdraw(msg.sender, receiptIds, currentCycleId);
+
+        (uint256 batchValueInUsd, ) = getBatchValueUsd();
+        if (batchValueInUsd < minUsdPerCycle) cycleStartedAtTimestamp = 0;
     }
 
     /// @notice Deposit token into batch.
@@ -434,6 +441,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function depositToBatch(address depositToken, uint256 _amount) external {
         batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
+
+        (uint256 batchValueInUsd, ) = getBatchValueUsd();
+        if (cycleStartedAtTimestamp == 0 && batchValueInUsd >= minUsdPerCycle) {
+            cycleStartedAtTimestamp = block.timestamp;
+        }
+
         emit Deposit(msg.sender, depositToken, _amount);
     }
 
@@ -579,6 +592,22 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
         return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
     }
+
+    /// @notice Checkes weither upkeep method is ready to be called. 
+    /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
+    /// @return upkeepNeeded Returns weither upkeep method needs to be executed
+    /// @dev Automation function
+    function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
+        upkeepNeeded = cycleStartedAtTimestamp + cycleDuration < block.timestamp;
+    }
+
+    /// @notice Execute upkeep routine that proxies to allocateToStrategies
+    /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
+    /// @dev Automation function
+    function performUpkeep(bytes calldata) external override {
+        this.allocateToStrategies();
+    }
+
 
     // Internals
 
