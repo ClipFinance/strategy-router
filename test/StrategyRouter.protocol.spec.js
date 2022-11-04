@@ -100,12 +100,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // was withdrawn in last previous test
     await expect(receiptContract.getReceipt(1)).revertedWith("NonExistingToken");
 
-    // console.log(`BEFORE transfer USDC to user2: ${parseUsdc("60")}`);
     await usdc.transfer(user2.address, parseUsdc("60"));
-    // console.log("BEFORE user2 deposit to batch");
     await usdc.connect(user2).approve(router.address, parseUsdc("60"));
     await router.connect(user2).depositToBatch(usdc.address, parseUsdc("60"))
-    // console.log("AFTER user2 deposit to batch");
 
     let oldUsdcBal = await usdc.balanceOf(owner.address);
     let oldBusdBal = await busd.balanceOf(owner.address);
@@ -121,13 +118,13 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // 125 usdc and 120 busd in batch
     let batchUsdcBalance = await usdc.balanceOf(batch.address);
     let batchBusdBalance = await busd.balanceOf(batch.address);
-    expect(batchUsdcBalance).to.be.equal(parseUsdc("125"));
+    expect(batchUsdcBalance).to.be.equal(parseUsdc("185")); // 50+75=125 usdc of owner & 60 usdc of user2
     expect(batchBusdBalance).to.be.equal(parseBusd("120"));
 
-    await expect(router.withdrawFromBatch([2, 3, 4])).to.emit(router, 'WithdrawFromBatch')
+    await expect(router.withdrawFromBatch([3, 4, 5])).to.emit(router, 'WithdrawFromBatch')
         .withArgs(
             owner.address,
-            [2, 3, 4],
+            [3, 4, 5],
             [usdc.address, busd.address, usdc.address],
             [parseUsdc("50"), parseBusd("120"), parseUsdc("75")]
         );
@@ -139,6 +136,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     expect(await receiptContract.balanceOf(owner.address)).to.equal(1);
     // on position 0
     expect((await receiptContract.getTokensOfOwner(owner.address)).toString()).to.equal("0");
+
+    // 1 receipt in batch belonging to user2
+    expect(await receiptContract.balanceOf(user2.address)).to.equal(1);
 
     // old balance of user before deposit to batch andas  we withdraw everything from batch, we get initial balance
     expect(newUsdcBal).to.be.equal(oldUsdcBal);
@@ -155,7 +155,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
 
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
-      parseUniform("100"),
+      parseUniform("160"), // 161.063235184928086817
       parseUniform("1.5")
     );
   });
@@ -170,7 +170,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
 
     expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
-      parseUniform("200"),
+      parseUniform("260"), // 261.102493729346097917
       parseUniform("2.0")
     );
   });
@@ -187,7 +187,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     );
   });
 
-  it("Withdraw from strategies", async function () {
+  it("Withdraw from strategies again", async function () {
 
     let oldBalance = await usdc.balanceOf(owner.address);
     let shares = await router.calculateSharesFromReceipts([3]);
