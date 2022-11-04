@@ -124,30 +124,30 @@ describe("Test Exchange", function () {
             expect(plugin).to.be.equal(routeParams.secondRoute);
         });
     });
-    describe("getFee", function () {
+    describe("getExchangeProtocolFee", function () {
         it("should revert when plugin not set", async function () {
-            await expect(exchangeNonOwner.getFee(0, usdc.address, usdc.address))
+            await expect(exchangeNonOwner.getExchangeProtocolFee(0, usdc.address, usdc.address))
                 .to.be.revertedWith("RouteNotFound()");
         });
         it("should query correct plugin for fee based on input amount", async function () {
             // setup mocks
             let mockPlugin = await getMockPlugin();
             let fee = 100;
-            await mockPlugin.mock.getFee.returns(fee);
+            await mockPlugin.mock.getExchangeProtocolFee.returns(fee);
 
             let mockPlugin2 = await getMockPlugin();
             let fee2 = 333;
-            await mockPlugin2.mock.getFee.returns(fee2);
+            await mockPlugin2.mock.getExchangeProtocolFee.returns(fee2);
 
             // setup route
             let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
 
             // get fee
-            let feeReturned = await exchangeNonOwner.getFee(0, usdc.address, busd.address);
+            let feeReturned = await exchangeNonOwner.getExchangeProtocolFee(0, usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee);
             // exceed limit input amount
-            feeReturned = await exchangeNonOwner.getFee(parseUsdc("1.1"), usdc.address, busd.address);
+            feeReturned = await exchangeNonOwner.getExchangeProtocolFee(parseUsdc("1.1"), usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee2);
         });
     });

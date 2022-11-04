@@ -97,6 +97,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
+    uint256 private constant MAX_FEE_PERCENT = 2000;
 
     uint256 public cycleDuration;
     uint256 public minUsdPerCycle;
@@ -394,23 +395,23 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 cycles
             );
             unlockedShares += receiptShares;
-            if(unlockedShares > shares) {
-                // receipts fulfilled requested shares and more,  
+            if (unlockedShares > shares) {
+                // receipts fulfilled requested shares and more,
                 // so get rid of extra shares and update receipt amount
                 uint256 leftoverShares = unlockedShares - shares;
                 unlockedShares -= leftoverShares;
 
                 ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
-                uint256 newReceiptAmount = receipt.tokenAmountUniform * leftoverShares / receiptShares;
+                uint256 newReceiptAmount = (receipt.tokenAmountUniform * leftoverShares) / receiptShares;
                 _receiptContract.setAmount(receiptId, newReceiptAmount);
             } else {
                 // unlocked shares less or equal to requested, so can take whole receipt amount
                 _receiptContract.burn(receiptId);
             }
-            if(unlockedShares == shares) break;
+            if (unlockedShares == shares) break;
         }
 
-        // if receipts didn't fulfilled requested shares amount, then try to take more from caller 
+        // if receipts didn't fulfilled requested shares amount, then try to take more from caller
         if (unlockedShares < shares) {
             // lack of shares -> get from user
             sharesToken.transferFromAutoApproved(msg.sender, address(this), shares - unlockedShares);
@@ -467,6 +468,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Set percent to take from harvested rewards as protocol fee.
     /// @dev Admin function.
     function setFeesPercent(uint256 percent) external onlyOwner {
+        require(percent <= MAX_FEE_PERCENT, "20% Max!");
         feePercent = percent;
         emit SetFeePercent(percent);
     }
