@@ -48,8 +48,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
-    event SetCycleDuration(uint256 newDuration);
-    event SetMinUsdPerCycle(uint256 newAmount);
+    event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
     event SetAddresses(
@@ -97,10 +96,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
 
-    uint256 public cycleStartedAtTimestamp;
-    uint256 public cycleDuration;
-    uint256 public minUsdPerCycle;
-    uint256 public minDeposit;
+    uint256 public firstDepositAtTimestamp;
+    uint256 public allocationWindowTime;
     uint256 public feePercent;
     uint256 public currentCycleId;
 
@@ -131,7 +128,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         __UUPSUpgradeable_init();
 
         cycles[0].startAt = block.timestamp;
-        cycleDuration = 1 days;
+        allocationWindowTime = 1 hours;
         moderators[owner()] = true;
     }
 
@@ -155,14 +152,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     // Universal Functions
 
     /// @notice Send pending money collected in the batch into the strategies.
-    /// @notice Can be called when `cycleDuration` seconds has been passed or
-    ///         batch usd value has reached `minUsdPerCycle`.
+    /// @notice Can be called when `allocationWindowTime` seconds has been passed or
+    ///         batch usd value is more than zero.
     function allocateToStrategies() external {
         /*
         step 1 - preparing data and assigning local variables for later reference
         step 2 - check requirements to launch a cycle
-            condition #1: at least `cycleDuration` time must be passed
-            condition #2: deposit in the current cycle are more than minimum threshold
+            condition #1: deposit in the current cycle is greater than zero
         step 3 - store USD price of supported tokens as cycle information
         step 4 - collect yield and re-deposit/re-stake depending on strategy
         step 5 - rebalance token in batch to match our desired strategies ratio
@@ -175,10 +171,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
-        if (cycleStartedAtTimestamp + cycleDuration > block.timestamp && batchValueInUsd < minUsdPerCycle) {
-            revert CycleNotClosableYet();
+        if (batchValueInUsd == 0) revert CycleNotClosableYet();
 
-        cycleStartedAtTimestamp = 0;
+        firstDepositAtTimestamp = 0;
 
         // step 3
         {
@@ -432,7 +427,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         batch.withdraw(msg.sender, receiptIds, currentCycleId);
 
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
-        if (batchValueInUsd < minUsdPerCycle) cycleStartedAtTimestamp = 0;
+        if (batchValueInUsd == 0) firstDepositAtTimestamp = 0;
     }
 
     /// @notice Deposit token into batch.
@@ -444,8 +439,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
 
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
-        if (cycleStartedAtTimestamp == 0 && batchValueInUsd >= minUsdPerCycle) {
-            cycleStartedAtTimestamp = block.timestamp;
+        if (firstDepositAtTimestamp == 0 && batchValueInUsd > 0) {
+            firstDepositAtTimestamp = block.timestamp;
         }
 
         emit Deposit(msg.sender, depositToken, _amount);
@@ -481,14 +476,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         emit SetFeePercent(percent);
     }
 
-    /// @notice Minimum usd needed to be able to close the cycle.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Admin function.
-    function setMinUsdPerCycle(uint256 amount) external onlyOwner {
-        minUsdPerCycle = amount;
-        emit SetMinUsdPerCycle(amount);
-    }
-
     /// @notice Minimum to be deposited in the batch.
     /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
     /// @dev Admin function.
@@ -498,11 +485,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
-    /// @param duration Duration of cycle in seconds.
+    /// @param timeInSeconds Duration of cycle in seconds.
     /// @dev Admin function.
-    function setCycleDuration(uint256 duration) external onlyOwner {
-        cycleDuration = duration;
-        emit SetCycleDuration(duration);
+    function setAllocationWindowTime(uint256 timeInSeconds) external onlyOwner {
+        allocationWindowTime = timeInSeconds;
+        emit SetAllocationWindowTime(timeInSeconds);
     }
 
     /// @notice Add strategy.
@@ -599,8 +586,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
-    function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory) {
-        upkeepNeeded = cycleStartedAtTimestamp + cycleDuration < block.timestamp;
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
+        upkeepNeeded = firstDepositAtTimestamp + allocationWindowTime < block.timestamp;
     }
 
     /// @notice Execute upkeep routine that proxies to allocateToStrategies
