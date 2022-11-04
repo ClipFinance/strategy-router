@@ -7,7 +7,7 @@ const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = requir
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
 
-  let owner;
+  let owner, user2;
   // mock tokens with different decimals
   let usdc, busd;
   // helper functions to parse amounts of mock tokens
@@ -21,7 +21,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
   before(async function () {
 
-    [owner] = await ethers.getSigners();
+    [owner, user2] = await ethers.getSigners();
     snapshotId = await provider.send("evm_snapshot");
 
     // deploy core contracts
@@ -76,10 +76,13 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     await router.depositToBatch(usdc.address, parseUsdc("100"))
 
+    // historically have this test with some delta
     expect(await usdc.balanceOf(batch.address)).to.be.closeTo(
       parseUsdc("100"),
       parseUsdc("0.1")
     );
+    // returns exactly back, because we have simplified withdraw from batch
+    expect(await usdc.balanceOf(batch.address)).to.be.equal(parseUsdc("100"));
   });
 
   it("User withdraw from current cycle", async function () {
@@ -89,10 +92,57 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         .withArgs(owner.address, [1], [usdc.address], [parseUsdc("100")]);
     let newBalance = await usdc.balanceOf(owner.address);
 
-    expect(newBalance.sub(oldBalance)).to.be.closeTo(
-      parseUsdc("100"),
-      parseUsdc("0.2")
-    );
+    expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
+  });
+
+  it("2 users did multiple deposits and 1 user withdraws everything from current cycle", async function () {
+
+    // was withdrawn in last previous test
+    await expect(receiptContract.getReceipt(1)).revertedWith("NonExistingToken");
+
+    // console.log(`BEFORE transfer USDC to user2: ${parseUsdc("60")}`);
+    await usdc.transfer(user2.address, parseUsdc("60"));
+    // console.log("BEFORE user2 deposit to batch");
+    await usdc.connect(user2).approve(router.address, parseUsdc("60"));
+    await router.connect(user2).depositToBatch(usdc.address, parseUsdc("60"))
+    // console.log("AFTER user2 deposit to batch");
+
+    let oldUsdcBal = await usdc.balanceOf(owner.address);
+    let oldBusdBal = await busd.balanceOf(owner.address);
+
+    await router.depositToBatch(usdc.address, parseUsdc("50"))
+    await router.depositToBatch(busd.address, parseBusd("120"))
+    await router.depositToBatch(usdc.address, parseUsdc("75"))
+
+    // 3 receipts were just created, but the 4th one was initial admin deposit of 1 busd that is already allocated
+    // to strategies, but since it was not removed, receipt is still there.
+    expect(await receiptContract.balanceOf(owner.address)).to.equal(4);
+
+    // 125 usdc and 120 busd in batch
+    let batchUsdcBalance = await usdc.balanceOf(batch.address);
+    let batchBusdBalance = await busd.balanceOf(batch.address);
+    expect(batchUsdcBalance).to.be.equal(parseUsdc("125"));
+    expect(batchBusdBalance).to.be.equal(parseBusd("120"));
+
+    await expect(router.withdrawFromBatch([2, 3, 4])).to.emit(router, 'WithdrawFromBatch')
+        .withArgs(
+            owner.address,
+            [2, 3, 4],
+            [usdc.address, busd.address, usdc.address],
+            [parseUsdc("50"), parseBusd("120"), parseUsdc("75")]
+        );
+
+    let newUsdcBal = await usdc.balanceOf(owner.address);
+    let newBusdBal = await busd.balanceOf(owner.address);
+
+    // 3 receipts from batch were burned during withdraw, so only 1 receipt is left allocated to strategy
+    expect(await receiptContract.balanceOf(owner.address)).to.equal(1);
+    // on position 0
+    expect((await receiptContract.getTokensOfOwner(owner.address)).toString()).to.equal("0");
+
+    // old balance of user before deposit to batch andas  we withdraw everything from batch, we get initial balance
+    expect(newUsdcBal).to.be.equal(oldUsdcBal);
+    expect(newBusdBal).to.be.equal(oldBusdBal);
   });
 
   it("User deposit #2", async function () {

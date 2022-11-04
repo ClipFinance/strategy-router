@@ -120,6 +120,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256[] calldata receiptIds,
         uint256 _currentCycleId
     ) public onlyStrategyRouter returns (
+        uint256[] memory _receiptIds,
         address[] memory _tokens,
         uint256[] memory _withdrawnTokenAmounts)
     {
@@ -144,7 +145,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             tokens[i] = receipt.token;
             withdrawnTokenAmounts[i] = transferAmount;
         }
-        return (tokens, withdrawnTokenAmounts);
+        return (receiptIds, tokens, withdrawnTokenAmounts);
     }
 
     /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens

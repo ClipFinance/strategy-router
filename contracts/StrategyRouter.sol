@@ -428,7 +428,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Cycle noted in receipts should be current cycle.
     /// @param receiptIds Receipt NFTs ids.
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
-        (address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
+        (uint256[] memory receiptIds, address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
             batch.withdraw(msg.sender, receiptIds, currentCycleId);
         emit WithdrawFromBatch(msg.sender, receiptIds, tokens, withdrawnTokenAmounts);
     }
