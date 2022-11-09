@@ -13,7 +13,7 @@ module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
-  deploy, deployProxy
+  deploy, deployProxy, resetToLatestBlock
 }
 
 // helper to reduce code duplication, transforms 3 lines of deployemnt into 1
@@ -83,6 +83,22 @@ async function skipTimeAndBlocks(timeToSkip, blocksToSkip) {
   await provider.send("evm_increaseTime", [Number(timeToSkip)]);
   await provider.send("evm_mine");
   skipBlocks(Number(blocksToSkip));
+}
+
+// reset to latest block on BSC to fix exception: bsc network ProviderError: missing trie node
+// https://github.com/NomicFoundation/hardhat/issues/1236#issuecomment-905668238
+async function resetToLatestBlock() {
+  const bscProvider = new ethers.providers.JsonRpcProvider(process.env.BNB_URL);
+  console.log("BSC provider: " + bscProvider);
+  const latestBlock = await bscProvider.getBlockNumber();
+  console.log("Inside latest block: " + latestBlock);
+  await hre.network.provider.send("hardhat_reset", [{
+    forking: {
+      jsonRpcUrl: bscProvider.connection.url,
+      blockNumber: latestBlock
+    }
+  }])
+  return latestBlock;
 }
 
 // Usually tuples returned by ethers.js contain duplicated data,
