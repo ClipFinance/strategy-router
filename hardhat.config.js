@@ -17,11 +17,9 @@ extendEnvironment((hre) => {
     if(hre.network.config.forking.enabled) {
       switch (hre.network.config.forking.url) {
         case process.env.BNB_URL:
-          // console.log(networkVariables);
           hre.networkVariables = networkVariables['bnb'];
           break;
         case process.env.BNB_TEST_URL:
-          // console.log(networkVariables);
           hre.networkVariables = networkVariables['bnbTest'];
           break;
       }
@@ -41,11 +39,11 @@ module.exports = {
     hardhat: {
       forking: {
         url: process.env.BNB_URL,
-        // blockNumber: 19232650, // use this only with archival node
+        // blockNumber: 22455358, // use this only with archival node
         enabled: true
       },
       // allowUnlimitedContractSize: true,
-      // loggingEnabled: false
+      // loggingEnabled: false,
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
     },
     bnb: {
