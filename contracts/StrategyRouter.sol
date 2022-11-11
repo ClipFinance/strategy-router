@@ -100,6 +100,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint256 public allocationWindowTime;
     uint256 public feePercent;
     uint256 public currentCycleId;
+    uint256 public currentCycleDepositsCount;
 
     ReceiptNFT private receiptContract;
     Exchange public exchange;
@@ -231,8 +232,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
-        // start new cycle
+        // Cycle cleaning up routine
         ++currentCycleId;
+        currentCycleDepositsCount = 0;
         cycles[_currentCycleId].startAt = block.timestamp;
     }
 
@@ -426,8 +428,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
         batch.withdraw(msg.sender, receiptIds, currentCycleId);
 
-        (uint256 batchValueInUsd, ) = getBatchValueUsd();
-        if (batchValueInUsd == 0) firstDepositAtTimestamp = 0;
+        currentCycleDepositsCount--;
+        if (currentCycleDepositsCount == 0) firstDepositAtTimestamp = 0;
     }
 
     /// @notice Deposit token into batch.
@@ -438,6 +440,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
 
+        currentCycleDepositsCount++;
         if (firstDepositAtTimestamp == 0) firstDepositAtTimestamp = block.timestamp;
 
         emit Deposit(msg.sender, depositToken, _amount);
