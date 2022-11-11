@@ -96,11 +96,16 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
 
-    uint256 public firstDepositAtTimestamp;
+    /// @notice The time of the first deposit that triggered a current cycle
+    uint256 public currentCycleFirstDepositAt;
+    /// @notice Current cycle duration in seconds, until funds are allocated from batch to strategies
     uint256 public allocationWindowTime;
-    uint256 public feePercent;
+    /// @notice Current cycle counter. Incremented at the end of the cycle
     uint256 public currentCycleId;
+    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.  
     uint256 public currentCycleDepositsCount;
+    /// @notice Protocol comission in percents taken from yield. One percent is 100.
+    uint256 public feePercent;
 
     ReceiptNFT private receiptContract;
     Exchange public exchange;
@@ -174,7 +179,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // step 2
         if (batchValueInUsd == 0) revert CycleNotClosableYet();
 
-        firstDepositAtTimestamp = 0;
+        currentCycleFirstDepositAt = 0;
 
         // step 3
         {
@@ -428,8 +433,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function withdrawFromBatch(uint256[] calldata receiptIds) public {
         batch.withdraw(msg.sender, receiptIds, currentCycleId);
 
-        currentCycleDepositsCount--;
-        if (currentCycleDepositsCount == 0) firstDepositAtTimestamp = 0;
+        currentCycleDepositsCount -= receiptIds.length;
+        if (currentCycleDepositsCount == 0) currentCycleFirstDepositAt = 0;
     }
 
     /// @notice Deposit token into batch.
@@ -441,7 +446,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
 
         currentCycleDepositsCount++;
-        if (firstDepositAtTimestamp == 0) firstDepositAtTimestamp = block.timestamp;
+        if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
 
         emit Deposit(msg.sender, depositToken, _amount);
     }
@@ -587,7 +592,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
-        upkeepNeeded = firstDepositAtTimestamp > 0 && firstDepositAtTimestamp + allocationWindowTime < block.timestamp;
+        upkeepNeeded = currentCycleFirstDepositAt > 0 && currentCycleFirstDepositAt + allocationWindowTime < block.timestamp;
     }
 
     /// @notice Execute upkeep routine that proxies to allocateToStrategies
