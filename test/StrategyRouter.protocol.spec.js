@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
-const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform, resetToLatestBlock } = require("./utils");
+const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
@@ -99,7 +99,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       it("User withdraw 100 usdc from batch current cycle", async function () {
         let receipt = await receiptContract.getReceipt(USER_1_RECEIPT_2); // by array position
         expect(receipt.cycleId).to.be.equal(1);
-        expect(receipt.tokenAmountUniform).to.be.equal(parseUsdc("100"));
+        expect(receipt.tokenAmountUniform).to.be.equal(parseUniform("100"));
         expect(receipt.token).to.be.equal(usdc.address);
         let oldBalance = await usdc.balanceOf(owner.address);
 
@@ -220,7 +220,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // 59,968,242,935,978,697,614
         expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
             parseUsdc(USER_2_DEPOSIT_AMOUNT),
-            parseUniform("0.05")
+            parseUniform("0.06")
         );
       });
 
@@ -229,7 +229,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // should've withdrawn all (except admin), so verify that
         expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
         expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
-        expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
+        expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
         expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
         expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(
@@ -258,7 +258,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
       expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
-      expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
+      expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
       expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
@@ -302,7 +302,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
       expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
-      expect(await usdc.balanceOf(router.address)).to.lt(parseEther("1"));
+      expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
       expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
