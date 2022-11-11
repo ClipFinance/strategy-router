@@ -438,10 +438,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
 
-        (uint256 batchValueInUsd, ) = getBatchValueUsd();
-        if (firstDepositAtTimestamp == 0 && batchValueInUsd > 0) {
-            firstDepositAtTimestamp = block.timestamp;
-        }
+        if (firstDepositAtTimestamp == 0) firstDepositAtTimestamp = block.timestamp;
 
         emit Deposit(msg.sender, depositToken, _amount);
     }
@@ -587,7 +584,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
-        upkeepNeeded = firstDepositAtTimestamp + allocationWindowTime < block.timestamp;
+        upkeepNeeded = firstDepositAtTimestamp > 0 && firstDepositAtTimestamp + allocationWindowTime < block.timestamp;
     }
 
     /// @notice Execute upkeep routine that proxies to allocateToStrategies
