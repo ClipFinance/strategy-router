@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -30,10 +30,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
-    /// @notice Fires when user withdraw from batch.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, address token, uint256 amount);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -45,6 +41,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Fires when moderator converts foreign receipts into shares token.
     /// @param receiptIds Indexes of the receipts burned.
     event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
+
+    /// @notice Fires when user withdraw from batch.
+    /// @param user who initiated withdrawal.
+    /// @param receiptIds original IDs of the corresponding deposited receipts (NFTs).
+    /// @param token that is being withdrawn. can be one token multiple times.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
 
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
@@ -429,12 +432,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Withdraw tokens from batch.
     /// @notice Receipts are burned and user receives amount of tokens that was noted.
     /// @notice Cycle noted in receipts should be current cycle.
-    /// @param receiptIds Receipt NFTs ids.
-    function withdrawFromBatch(uint256[] calldata receiptIds) public {
-        batch.withdraw(msg.sender, receiptIds, currentCycleId);
+    /// @param _receiptIds Receipt NFTs ids.
+    function withdrawFromBatch(uint256[] calldata _receiptIds) public {
+        (uint256[] memory receiptIds, address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
+            batch.withdraw(msg.sender, _receiptIds, currentCycleId);
 
         currentCycleDepositsCount -= receiptIds.length;
         if (currentCycleDepositsCount == 0) currentCycleFirstDepositAt = 0;
+
+        emit WithdrawFromBatch(msg.sender, receiptIds, tokens, withdrawnTokenAmounts);
     }
 
     /// @notice Deposit token into batch.
@@ -608,7 +614,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
-        (uint256 strategiesLockedUsd, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
+        (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
         uint256 tokenAmountToWithdraw;
