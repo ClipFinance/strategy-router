@@ -176,7 +176,7 @@ async function main() {
   )).wait();
   await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
   await (await router.setMinDepositUsd(MIN_DEPOSIT)).wait();
-  await (await router.setCycleDuration(CYCLE_DURATION)).wait();
+  await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 

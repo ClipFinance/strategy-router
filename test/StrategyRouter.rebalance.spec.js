@@ -36,7 +36,7 @@ describe("Test rebalance functions", function () {
 
     // setup params for testing
     await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
-    await router.setCycleDuration(1);
+    await router.setAllocationWindowTime(1);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));
