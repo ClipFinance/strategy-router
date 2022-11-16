@@ -601,6 +601,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         upkeepNeeded = currentCycleFirstDepositAt > 0 && currentCycleFirstDepositAt + allocationWindowTime < block.timestamp;
     }
 
+    function timestamp() external view returns (uint256 upkeepNeeded) {
+        upkeepNeeded = block.timestamp;
+    }
+
     /// @notice Execute upkeep routine that proxies to allocateToStrategies
     /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
     /// @dev Automation function
