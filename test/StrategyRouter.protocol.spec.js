@@ -14,7 +14,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   let parseUsdc, parseBusd;
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
-  let cycleDuration;
+  let allocationWindowTime;
   let strategyBiswap, strategyBiswap2;
 
   let snapshotId;
@@ -29,7 +29,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     // setup params for testing
     await setupParamsOnBNB(router, oracle, exchange);
-    cycleDuration = await router.cycleDuration();
+    allocationWindowTime = await router.allocationWindowTime();
 
     // get tokens on bnb chain for testing
     ({usdc, busd, parseUsdc, parseBusd} = await setupTokens());
@@ -170,7 +170,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       const USER_1_RECEIPT_7 = 6;
 
       it("Allocate batch to strategies", async function () {
-        await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
+        await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
 
         // user #2 from previous test has 60 usdc still sitting in batch, thus in strategies ~0 left with some dust
         expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
@@ -189,7 +189,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       it("User #1 deposit 100 usdc and allocate batch to strategies", async function () {
         await router.depositToBatch(usdc.address, parseUsdc("100"));
 
-        await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
+        await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
 
         await router.allocateToStrategies();
 
@@ -247,7 +247,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       for (let i = 0; i < 5; i++) {
         await router.depositToBatch(usdc.address, parseUsdc("10"));
-        await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
+        await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
         await router.allocateToStrategies();
         let receipts = await receiptContract.getTokensOfOwner(owner.address);
         receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
@@ -271,7 +271,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       // deposit to strategies
       await router.depositToBatch(usdc.address, parseUsdc("10"));
-      await skipTimeAndBlocks(cycleDuration, cycleDuration/3);
+      await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
       await router.allocateToStrategies();
 
       // deploy new strategy
