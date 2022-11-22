@@ -100,6 +100,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
+    uint256 private constant FEE_PERCENT_PRECISION = 100;
 
     /// @notice The time of the first deposit that triggered a current cycle
     uint256 public currentCycleFirstDepositAt;
@@ -175,7 +176,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 5 - rebalance token in batch to match our desired strategies ratio
         step 6 - batch transfers funds to strategies and strategies deposit tokens to their respective farms
         step 7 - we calculate share price for the current cycle and calculate a new amount of shares to issue
-        step 8 - store remaining information for the current cycle
+        step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
+        step 9 - store remaining information for the current cycle
         */
         // step 1
         uint256 _currentCycleId = currentCycleId;
@@ -203,6 +205,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 4
         uint256 strategiesLength = strategies.length;
+        (uint256 balanceBeforeCompoundInUsd, ) = getStrategiesValue();
         for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
@@ -236,7 +239,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();
+        uint256 totalShares = sharesToken.totalSupply();        
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].pricePerShare = (balanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
@@ -248,6 +251,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 8
+        uint256 protocolFeeInShares = balanceAfterCompoundInUsd * totalShares / balanceBeforeCompoundInUsd - totalShares;
+        sharesToken.mint(feeAddress, protocolFeeInShares);
+
+        // step 9
         cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd;
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
