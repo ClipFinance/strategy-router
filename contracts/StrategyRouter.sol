@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
 import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
@@ -15,10 +16,10 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-// import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
-contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
     /* EVENTS */
 
     /// @notice Fires when user deposits in batch.
@@ -29,10 +30,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
-    /// @notice Fires when user withdraw from batch.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, address token, uint256 amount);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -45,10 +42,16 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param receiptIds Indexes of the receipts burned.
     event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
 
+    /// @notice Fires when user withdraw from batch.
+    /// @param user who initiated withdrawal.
+    /// @param receiptIds original IDs of the corresponding deposited receipts (NFTs).
+    /// @param token that is being withdrawn. can be one token multiple times.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
+
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
-    event SetCycleDuration(uint256 newDuration);
-    event SetMinUsdPerCycle(uint256 newAmount);
+    event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
     event SetAddresses(
@@ -96,12 +99,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
+    uint256 private constant MAX_FEE_PERCENT = 2000;
 
-    uint256 public cycleDuration;
-    uint256 public minUsdPerCycle;
-    uint256 public minDeposit;
-    uint256 public feePercent;
+    /// @notice The time of the first deposit that triggered a current cycle
+    uint256 public currentCycleFirstDepositAt;
+    /// @notice Current cycle duration in seconds, until funds are allocated from batch to strategies
+    uint256 public allocationWindowTime;
+    /// @notice Current cycle counter. Incremented at the end of the cycle
     uint256 public currentCycleId;
+    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.  
+    uint256 public currentCycleDepositsCount;
+    /// @notice Protocol comission in percents taken from yield. One percent is 100.
+    uint256 public feePercent;
 
     ReceiptNFT private receiptContract;
     Exchange public exchange;
@@ -130,7 +139,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
 
         cycles[0].startAt = block.timestamp;
-        cycleDuration = 1 days;
+        allocationWindowTime = 1 hours;
         moderators[owner()] = true;
     }
 
@@ -154,14 +163,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Universal Functions
 
     /// @notice Send pending money collected in the batch into the strategies.
-    /// @notice Can be called when `cycleDuration` seconds has been passed or
-    ///         batch usd value has reached `minUsdPerCycle`.
+    /// @notice Can be called when `allocationWindowTime` seconds has been passed or
+    ///         batch usd value is more than zero.
     function allocateToStrategies() external {
         /*
         step 1 - preparing data and assigning local variables for later reference
         step 2 - check requirements to launch a cycle
-            condition #1: at least `cycleDuration` time must be passed
-            condition #2: deposit in the current cycle are more than minimum threshold
+            condition #1: deposit in the current cycle is greater than zero
         step 3 - store USD price of supported tokens as cycle information
         step 4 - collect yield and re-deposit/re-stake depending on strategy
         step 5 - rebalance token in batch to match our desired strategies ratio
@@ -174,8 +182,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
-        if (cycles[_currentCycleId].startAt + cycleDuration > block.timestamp && batchValueInUsd < minUsdPerCycle)
-            revert CycleNotClosableYet();
+        if (batchValueInUsd == 0) revert CycleNotClosableYet();
+
+        currentCycleFirstDepositAt = 0;
 
         // step 3
         {
@@ -243,8 +252,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
-        // start new cycle
+        // Cycle cleaning up routine
         ++currentCycleId;
+        currentCycleDepositsCount = 0;
         cycles[_currentCycleId].startAt = block.timestamp;
     }
 
@@ -403,23 +413,23 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 cycles
             );
             unlockedShares += receiptShares;
-            if(unlockedShares > shares) {
-                // receipts fulfilled requested shares and more,  
+            if (unlockedShares > shares) {
+                // receipts fulfilled requested shares and more,
                 // so get rid of extra shares and update receipt amount
                 uint256 leftoverShares = unlockedShares - shares;
                 unlockedShares -= leftoverShares;
 
                 ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
-                uint256 newReceiptAmount = receipt.tokenAmountUniform * leftoverShares / receiptShares;
+                uint256 newReceiptAmount = (receipt.tokenAmountUniform * leftoverShares) / receiptShares;
                 _receiptContract.setAmount(receiptId, newReceiptAmount);
             } else {
                 // unlocked shares less or equal to requested, so can take whole receipt amount
                 _receiptContract.burn(receiptId);
             }
-            if(unlockedShares == shares) break;
+            if (unlockedShares == shares) break;
         }
 
-        // if receipts didn't fulfilled requested shares amount, then try to take more from caller 
+        // if receipts didn't fulfilled requested shares amount, then try to take more from caller
         if (unlockedShares < shares) {
             // lack of shares -> get from user
             sharesToken.transferFromAutoApproved(msg.sender, address(this), shares - unlockedShares);
@@ -434,9 +444,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Withdraw tokens from batch.
     /// @notice Receipts are burned and user receives amount of tokens that was noted.
     /// @notice Cycle noted in receipts should be current cycle.
-    /// @param receiptIds Receipt NFTs ids.
-    function withdrawFromBatch(uint256[] calldata receiptIds) public {
-        batch.withdraw(msg.sender, receiptIds, currentCycleId);
+    /// @param _receiptIds Receipt NFTs ids.
+    function withdrawFromBatch(uint256[] calldata _receiptIds) public {
+        (uint256[] memory receiptIds, address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
+            batch.withdraw(msg.sender, _receiptIds, currentCycleId);
+
+        currentCycleDepositsCount -= receiptIds.length;
+        if (currentCycleDepositsCount == 0) currentCycleFirstDepositAt = 0;
+
+        emit WithdrawFromBatch(msg.sender, receiptIds, tokens, withdrawnTokenAmounts);
     }
 
     /// @notice Deposit token into batch.
@@ -446,6 +462,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function depositToBatch(address depositToken, uint256 _amount) external {
         batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
+
+        currentCycleDepositsCount++;
+        if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
+
         emit Deposit(msg.sender, depositToken, _amount);
     }
 
@@ -474,16 +494,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Set percent to take from harvested rewards as protocol fee.
     /// @dev Admin function.
     function setFeesPercent(uint256 percent) external onlyOwner {
+        require(percent <= MAX_FEE_PERCENT, "20% Max!");
         feePercent = percent;
         emit SetFeePercent(percent);
-    }
-
-    /// @notice Minimum usd needed to be able to close the cycle.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Admin function.
-    function setMinUsdPerCycle(uint256 amount) external onlyOwner {
-        minUsdPerCycle = amount;
-        emit SetMinUsdPerCycle(amount);
     }
 
     /// @notice Minimum to be deposited in the batch.
@@ -495,11 +508,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
-    /// @param duration Duration of cycle in seconds.
+    /// @param timeInSeconds Duration of cycle in seconds.
     /// @dev Admin function.
-    function setCycleDuration(uint256 duration) external onlyOwner {
-        cycleDuration = duration;
-        emit SetCycleDuration(duration);
+    function setAllocationWindowTime(uint256 timeInSeconds) external onlyOwner {
+        allocationWindowTime = timeInSeconds;
+        emit SetAllocationWindowTime(timeInSeconds);
     }
 
     /// @notice Add strategy.
@@ -592,12 +605,32 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
     }
 
+    /// @notice Checkes weither upkeep method is ready to be called. 
+    /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
+    /// @return upkeepNeeded Returns weither upkeep method needs to be executed
+    /// @dev Automation function
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
+        upkeepNeeded = currentCycleFirstDepositAt > 0 && currentCycleFirstDepositAt + allocationWindowTime < block.timestamp;
+    }
+
+    function timestamp() external view returns (uint256 upkeepNeeded) {
+        upkeepNeeded = block.timestamp;
+    }
+
+    /// @notice Execute upkeep routine that proxies to allocateToStrategies
+    /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
+    /// @dev Automation function
+    function performUpkeep(bytes calldata) external override {
+        this.allocateToStrategies();
+    }
+
+
     // Internals
 
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
-        (uint256 strategiesLockedUsd, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
+        (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
         uint256 tokenAmountToWithdraw;

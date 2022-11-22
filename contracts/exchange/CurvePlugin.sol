@@ -9,6 +9,7 @@ import "../StrategyRouter.sol";
 
 import "hardhat/console.sol";
 
+/// On BSC Curve protocol is ACryptoS
 contract CurvePlugin is IExchangePlugin, Ownable {
     error RoutedSwapFailed();
     error RouteNotFound();
@@ -41,12 +42,12 @@ contract CurvePlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getFee(address tokenA, address tokenB) public view override returns (uint256 feePercent) {
-        uint256 feeDenominator = 1e10;
+    function getExchangeProtocolFee(address tokenA, address tokenB) public view override returns (uint256 feePercent) {
+        uint256 curveProtocolFeeDenominator = 1e10;
         address pool = getPool(tokenA, tokenB);
         uint256 fee = ICurvePool(pool).fee();
         // change precision from 10 to 18 decimals, 10 + (18 - 10)
-        return fee * (1e18 / feeDenominator); // 0.01% or 0.0001 with 18 decimals
+        return fee * (1e18 / curveProtocolFeeDenominator); // 0.01% or 0.0001 with 18 decimals
     }
 
     function getAmountOut(

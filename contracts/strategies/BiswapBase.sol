@@ -34,6 +34,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_A;
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
+    uint256 private constant ETHER = 1e18;
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
@@ -75,7 +76,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     function deposit(uint256 amount) external override onlyOwner {
         Exchange exchange = strategyRouter.getExchange();
 
-        uint256 dexFee = exchange.getFee(amount / 2, address(tokenA), address(tokenB));
+        uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
         uint256 amountB = calculateSwapAmount(amount / 2, dexFee);
         uint256 amountA = amount - amountB;
 
@@ -232,12 +233,12 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
         if (amountB > amountA && (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B) {
-            uint256 dexFee = exchange.getFee(toSwap / 2, address(tokenA), address(tokenB));
+            uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
             toSwap = calculateSwapAmount(toSwap / 2, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(toSwap, address(tokenB), address(tokenA), address(this));
         } else if (amountA > amountB && (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A) {
-            uint256 dexFee = exchange.getFee(toSwap / 2, address(tokenA), address(tokenB));
+            uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
             toSwap = calculateSwapAmount(toSwap / 2, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(toSwap, address(tokenA), address(tokenB), address(this));
@@ -297,10 +298,10 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return (amountA - comissionA, amountB - comissionB);
     }
 
-    function calculateSwapAmount(uint256 half, uint256 dexFee) private view returns (uint256 amountAfterFee) {
-        (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
-        uint256 halfWithFee = (2 * r0 * (dexFee + 1e18)) / ((r0 * (dexFee + 1e18)) / 1e18 + r1);
-        uint256 amountB = (half * halfWithFee) / 1e18;
+    function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {
+        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
+        uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
+        uint256 amountB = (tokenAmount * halfWithFee) / 1e18;
         return amountB;
     }
 }
