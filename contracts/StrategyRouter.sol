@@ -205,23 +205,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 4
         uint256 strategiesLength = strategies.length;
-        (uint256 balanceBeforeCompoundInUsd, ) = getStrategiesValue();
+        (uint256 strategiesBalanceBeforeCompoundInUsd, ) = getStrategiesValue();
         for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
         // step 5
-        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue(); // value $1010 ($10 compounded)
-
-        // TODO get previous TVL from previous cycle. if current cycle = 0, then TVL = 0
-        // calculate compounded profit: current TVL minus previous TVL
-        // take Clip's commission from overall profit
-        // subtract from current TVL Clip's commission and set correct current TVL.
-        //   result could be negative as we paid more in all kinds of fees
-        // save corrected current TVL in Cycle[tvlBeforeRebalanceInUsd]
-        // calculate price per share
-        // mint CLT for Clip's treasure address. CLT amount = fee / price per share
-
+        (uint256 strategiesBalanceAfterCompoundInUsd, ) = getStrategiesValue(); // value $1010 ($10 compounded)
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
@@ -236,25 +226,50 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-        (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
-        uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
+        (uint256 strategiesBalanceAfterDepositInUsd, ) = getStrategiesValue();
+        uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();        
+        uint256 totalShares = sharesToken.totalSupply();
+
+        // get previous TVL from previous cycle. if current cycle = 0, then TVL = 0
+        // calculate compounded profit: current TVL minus previous TVL
+        // take Clip's commission from overall profit
+        // subtract from current TVL Clip's commission and set correct current TVL.
+        // result could be negative as we paid more in all kinds of fees
+        // save corrected current TVL in Cycle[tvlBeforeRebalanceInUsd]
+        // calculate price per share
+        // mint CLT for Clip's treasure address. CLT amount = fee / price per share
+
+        /*
+            Example:
+            Previous cycle strategies TVL (strategiesBalanceBeforeCompoundInUsd) = 1000 USD
+            and total shares count is 1000 CLT
+            Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
+            TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
+
+            Hence protocol commission in shares (protocolCommissionInShares) will be
+
+            (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
+        */
+        //              2 USD           =   1010 USD                           -            1000 USD                   * 2000 / (100 * 100)
+        uint256 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - strategiesBalanceBeforeCompoundInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+        //              1.98412698 CLT     =        1010 USD                      * 1000 CLT    /       1010 USD                       -    2 USD                  - 1000 CLT
+        uint256 protocolCommissionInShares = (strategiesBalanceAfterCompoundInUsd * totalShares / (strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd)) - totalShares;
+        sharesToken.mint(feeAddress, protocolCommissionInShares);
+
+        // 1008 USD
+        uint256 finalStrategiesBalanceCommissionDeductedInUsd = strategiesBalanceAfterDepositInUsd - protocolCommissionInUsd;
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
-            cycles[_currentCycleId].pricePerShare = (balanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
+            cycles[_currentCycleId].pricePerShare = (finalStrategiesBalanceCommissionDeductedInUsd * PRECISION) / sharesToken.totalSupply();
         } else {
-            cycles[_currentCycleId].pricePerShare = (balanceAfterCompoundInUsd * PRECISION) / totalShares;
+            cycles[_currentCycleId].pricePerShare = (finalStrategiesBalanceCommissionDeductedInUsd * PRECISION) / totalShares;
 
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
         }
 
         // step 8
-        uint256 protocolFeeInShares = balanceAfterCompoundInUsd * totalShares / balanceBeforeCompoundInUsd - totalShares;
-        sharesToken.mint(feeAddress, protocolFeeInShares);
-
-        // step 9
         cycles[_currentCycleId].receivedByStrategiesInUsd = receivedByStrategiesInUsd;
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
