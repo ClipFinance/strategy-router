@@ -87,14 +87,16 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 startAt;
         // batch USD value before deposited into strategies
         uint256 totalDepositedInUsd;
-        // price per share in USD
-        uint256 pricePerShare;
-        // USD value received by strategies
+        // USD value received by strategies after all swaps necessary to ape into strategies
         uint256 receivedByStrategiesInUsd;
-        // tokens price at time of the deposit to strategies
-        mapping(address => uint256) prices;
         // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
         uint256 tvlBeforeRebalanceInUsd;
+        // Accumulated compound up till current cycle 
+        uint256 accumulatedCompoundInUsd;
+        // price per share in USD
+        uint256 pricePerShare;
+        // tokens price at time of the deposit to strategies
+        mapping(address => uint256) prices;
     }
 
     uint8 private constant UNIFORM_DECIMALS = 18;
@@ -251,11 +253,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
             (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
         */
-        //              2 USD           =   1010 USD                           -            1000 USD                   * 2000 / (100 * 100)
+        //              2 USD           =   1010 USD                           -            1000 USD                   * 2000       / (100 * 100)
         uint256 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - strategiesBalanceBeforeCompoundInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
         //              1.98412698 CLT     =        1010 USD                      * 1000 CLT    /       1010 USD                       -    2 USD                  - 1000 CLT
         uint256 protocolCommissionInShares = (strategiesBalanceAfterCompoundInUsd * totalShares / (strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd)) - totalShares;
         sharesToken.mint(feeAddress, protocolCommissionInShares);
+
+        // [TODO] 
+        // We should calculate share price based on the the compund collected. Later on, when user withdraws from protocol, they 
+        // provide reciprt ID. We take this receipt ID and check what was share price at the moment of deposit, and what it is now,
+        // and then we calculate how much USD this deposit is worth. This will also take into account all collected compount since 
+        // deposit. 
 
         // 1008 USD
         uint256 finalStrategiesBalanceCommissionDeductedInUsd = strategiesBalanceAfterDepositInUsd - protocolCommissionInUsd;
@@ -458,6 +466,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // shares into usd using current PPS
+        // [TODO] We should calculate here how much each receipt is worth, based on the price per share at the time of the deposit
+        // (stored in cycle), and now (stored in latest cycle) and provide here final USD value that protocol should send to the user
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
