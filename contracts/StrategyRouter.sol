@@ -75,6 +75,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error CantRemoveLastStrategy();
     error NothingToRebalance();
     error NotModerator();
+    error WithdrawnAmountLowerThanExpectedAmount();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -98,6 +99,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
+    uint256 private constant WITHDRAWAL_THRESHOLD_USD = 1e17;
 
     /// @notice The time of the first deposit that triggered a current cycle
     uint256 public currentCycleFirstDepositAt;
@@ -380,8 +382,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function withdrawFromStrategies(
         uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256 shares
-    ) external {
+        uint256 shares,
+        uint256 minAmountToWithdraw
+    ) external returns (uint256 withdrawnAmount) {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
@@ -426,7 +429,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // shares into usd using current PPS
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
-        _withdrawFromStrategies(usdToWithdraw, withdrawToken);
+        withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minAmountToWithdraw);
     }
 
     /// @notice Withdraw tokens from batch.
@@ -617,7 +620,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
-    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
+    /// @param minAmountToWithdraw min amount expected to be withdrawn
+    /// give up on withdrawing amount below the threshold cause more will be spend on gas fees
+    /// @return amount of tokens that were actually withdrawn
+    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minAmountToWithdraw)
+        private
+        returns (uint256)
+    {
         (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
@@ -639,7 +648,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
 
             // convert usd to token amount
-            tokenAmountToWithdraw = (withdrawAmountUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
+            uint256 tokenAmountToWithdraw = (withdrawAmountUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
             // convert uniform decimals to token decimas
             tokenAmountToWithdraw = StrategyRouterLib.fromUniform(tokenAmountToWithdraw, tokenAddress);
 
@@ -656,13 +665,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     tokenAddress,
                     withdrawToken
                 );
+                // set token price to point out to a withdraw token
+                (tokenUsdPrice, oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
+                tokenAmountToWithdrawUniform = StrategyRouterLib.toUniform(tokenAmountToWithdraw, withdrawToken);
+                withdrawAmountUsd -= StrategyRouterLib.toUniform(tokenAmountToWithdraw, withdrawToken)
+                    * tokenUsdPrice / 10**oraclePriceDecimals;
+            } else {
+                withdrawAmountUsd -= StrategyRouterLib.toUniform(tokenAmountToWithdraw, tokenAddress)
+                    * tokenUsdPrice / 10**oraclePriceDecimals;
             }
-            withdrawAmountUsd = 0;
         }
 
         // if we didn't fulfilled withdraw amount above,
         // swap tokens one by one until withraw amount is fulfilled
-        if (withdrawAmountUsd != 0) {
+        if (withdrawAmountUsd >= WITHDRAWAL_THRESHOLD_USD) {
             for (uint256 i; i < strategiesCount; i++) {
                 address tokenAddress = strategies[i].depositToken;
                 uint256 tokenAmountToSwap;
@@ -672,26 +688,36 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 tokenAmountToSwap = strategyTokenBalancesUsd[i] < withdrawAmountUsd
                     ? strategyTokenBalancesUsd[i]
                     : withdrawAmountUsd;
-                unchecked {
-                    withdrawAmountUsd -= tokenAmountToSwap;
-                }
+
                 // convert usd value into token amount
                 tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
                 tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, tokenAddress);
                 tokenAmountToSwap = IStrategy(strategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                 // swap for requested token
-                tokenAmountToWithdraw += StrategyRouterLib.trySwap(
+                uint256 withdrawTokenAmountReceived = StrategyRouterLib.trySwap(
                     exchange,
                     tokenAmountToSwap,
                     tokenAddress,
                     withdrawToken
                 );
-                if (withdrawAmountUsd == 0) break;
+                tokenAmountToWithdraw += withdrawTokenAmountReceived;
+
+                (tokenUsdPrice, oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
+                withdrawTokenAmountReceived = StrategyRouterLib.toUniform(withdrawTokenAmountReceived, withdrawToken);
+                withdrawAmountUsd -= withdrawTokenAmountReceived * tokenUsdPrice / 10**oraclePriceDecimals;
+
+                if (withdrawAmountUsd < WITHDRAWAL_THRESHOLD_USD) break;
             }
+        }
+
+        if (tokenAmountToWithdraw < minAmountToWithdraw) {
+            revert WithdrawnAmountLowerThanExpectedAmount();
         }
 
         IERC20(withdrawToken).transfer(msg.sender, tokenAmountToWithdraw);
         emit WithdrawFromStrategies(msg.sender, withdrawToken, tokenAmountToWithdraw);
+
+        return tokenAmountToWithdraw;
     }
 }
