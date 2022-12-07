@@ -90,9 +90,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // USD value received by strategies after all swaps necessary to ape into strategies
         uint256 receivedByStrategiesInUsd;
         // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
-        uint256 tvlBeforeRebalanceInUsd;
-        // Accumulated compound up till current cycle 
-        uint256 accumulatedCompoundInUsd;
+        uint256 tvlBalanceComissionDeductedInUsd;
         // price per share in USD
         uint256 pricePerShare;
         // tokens price at time of the deposit to strategies
@@ -238,26 +236,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // take Clip's commission from overall profit
         // subtract from current TVL Clip's commission and set correct current TVL.
         // result could be negative as we paid more in all kinds of fees
-        // save corrected current TVL in Cycle[tvlBeforeRebalanceInUsd]
+        // save corrected current TVL in Cycle[tvlBalanceComissionDeductedInUsd]
         // calculate price per share
         // mint CLT for Clip's treasure address. CLT amount = fee / price per share
-
-        /*
-            Example:
-            Previous cycle strategies TVL (strategiesBalanceBeforeCompoundInUsd) = 1000 USD
-            and total shares count is 1000 CLT
-            Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
-            TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
-
-            Hence protocol commission in shares (protocolCommissionInShares) will be
-
-            (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
-        */
-        //              2 USD           =   1010 USD                           -            1000 USD                   * 2000       / (100 * 100)
-        uint256 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - strategiesBalanceBeforeCompoundInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
-        //              1.98412698 CLT     =        1010 USD                      * 1000 CLT    /       1010 USD                       -    2 USD                  - 1000 CLT
-        uint256 protocolCommissionInShares = (strategiesBalanceAfterCompoundInUsd * totalShares / (strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd)) - totalShares;
-        sharesToken.mint(feeAddress, protocolCommissionInShares);
 
         // [TODO] 
         // We should calculate share price based on the the compund collected. Later on, when user withdraws from protocol, they 
@@ -265,16 +246,33 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // and then we calculate how much USD this deposit is worth. This will also take into account all collected compount since 
         // deposit. 
 
-        // 1008 USD
-        uint256 finalStrategiesBalanceCommissionDeductedInUsd = strategiesBalanceAfterDepositInUsd - protocolCommissionInUsd;
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
-            cycles[_currentCycleId].pricePerShare = (finalStrategiesBalanceCommissionDeductedInUsd * PRECISION) / sharesToken.totalSupply();
+            cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterCompoundInUsd * PRECISION) / sharesToken.totalSupply();
         } else {
-            cycles[_currentCycleId].pricePerShare = (finalStrategiesBalanceCommissionDeductedInUsd * PRECISION) / totalShares;
+            /*
+                Example:
+                Previous cycle strategies TVL (strategiesBalanceBeforeCompoundInUsd) = 1000 USD
+                and total shares count is 1000 CLT
+                Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
+                TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
+
+                Hence protocol commission in shares (protocolCommissionInShares) will be
+
+                (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
+            */
+
+            // double check here if this won't break in case depeg happened
+            uint256 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+
+            cycles[_currentCycleId].tvlBalanceComissionDeductedInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
 
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
+
+            uint256 protocolCommissionInShares = (protocolCommissionInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
+            sharesToken.mint(feeAddress, protocolCommissionInShares);
         }
 
         // step 8
