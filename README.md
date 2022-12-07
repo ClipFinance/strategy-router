@@ -21,3 +21,8 @@ To run specific test file `npx hardhat test test/router.js`.
 Deploy to get ABI
 Go to directory and launch:  
 `solcjs --abi --include-path node_modules/ --base-path . contracts/StrategyRouter.sol`
+
+To upgrade `StrategyRouter.sol` run on BSC run:
+```bash
+STRATEGY_ROUTER_PROXY_ADDRESS=<proxy_address> STRATEGY_ROUTER_LIB_ADDRESS=<lib_address> npx hardhat run scripts/upgradeStrategyRouter.js --network bnb
+```
