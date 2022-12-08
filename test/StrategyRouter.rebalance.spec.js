@@ -199,7 +199,8 @@ describe("Test rebalance functions", function () {
 
     });
 
-    it("'dust' token balances should not be swapped on dexes", async function () {
+    // Protocol has changed its minimum deposit policy. Shall we leave this test?
+    it.skip("'dust' token balances should not be swapped on dexes", async function () {
 
       await router.setSupportedToken(busd.address, true);
       await router.setSupportedToken(usdc.address, true);
@@ -313,7 +314,8 @@ describe("Test rebalance functions", function () {
 
     });
 
-    it("'dust' amounts should be ignored and not swapped on dex", async function () {
+    // Protocol has changed its minimum deposit policy. Shall we leave this test?
+    it.skip("'dust' amounts should be ignored and not swapped on dex", async function () {
 
       await router.setSupportedToken(busd.address, true);
       await router.setSupportedToken(usdc.address, true);

@@ -263,7 +263,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             */
 
             // double check here if this won't break in case depeg happened
-            uint256 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            uint256 protocolCommissionInUsd = 0;
+            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) {
+                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            }
 
             cycles[_currentCycleId].tvlBalanceComissionDeductedInUsd = strategiesBalanceAfterDepositInUsd;
             cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
