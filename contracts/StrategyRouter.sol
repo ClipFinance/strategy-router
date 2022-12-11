@@ -90,7 +90,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // USD value received by strategies after all swaps necessary to ape into strategies
         uint256 receivedByStrategiesInUsd;
         // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
-        uint256 strategiesBalanceWithCopoundAndBatchDepositsInUsd;
+        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd;
         // price per share in USD
         uint256 pricePerShare;
         // tokens price at time of the deposit to strategies
@@ -235,7 +235,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // take Clip's commission from overall profit
         // subtract from current TVL Clip's commission and set correct current TVL.
         // result could be negative as we paid more in all kinds of fees
-        // save corrected current TVL in Cycle[strategiesBalanceWithCopoundAndBatchDepositsInUsd]
+        // save corrected current TVL in Cycle[strategiesBalanceWithCompoundAndBatchDepositsInUsd]
         // calculate price per share
         // mint CLT for Clip's treasure address. CLT amount = fee / price per share
 
@@ -263,11 +263,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
             // double check here if this won't break in case depeg happened
             uint256 protocolCommissionInUsd = 0;
-            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCopoundAndBatchDepositsInUsd) {
-                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCopoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) {
+                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
             }
 
-            cycles[_currentCycleId].strategiesBalanceWithCopoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
             cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
 
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
@@ -666,6 +666,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 strategiesCount = strategies.length;
 
         uint256 tokenAmountToWithdraw;
+
+        // Withhold withdraw amount from cycle's TVL, to not to affect AllocateToStrategies calculations
+        cycles[currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= withdrawAmountUsd;
 
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
