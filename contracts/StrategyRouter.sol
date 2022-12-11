@@ -90,7 +90,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // USD value received by strategies after all swaps necessary to ape into strategies
         uint256 receivedByStrategiesInUsd;
         // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
-        uint256 tvlBalanceComissionDeductedInUsd;
+        uint256 strategiesBalanceWithCopoundAndBatchDepositsInUsd;
         // price per share in USD
         uint256 pricePerShare;
         // tokens price at time of the deposit to strategies
@@ -205,7 +205,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 4
         uint256 strategiesLength = strategies.length;
-        (uint256 strategiesBalanceBeforeCompoundInUsd, ) = getStrategiesValue();
         for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
@@ -236,7 +235,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // take Clip's commission from overall profit
         // subtract from current TVL Clip's commission and set correct current TVL.
         // result could be negative as we paid more in all kinds of fees
-        // save corrected current TVL in Cycle[tvlBalanceComissionDeductedInUsd]
+        // save corrected current TVL in Cycle[strategiesBalanceWithCopoundAndBatchDepositsInUsd]
         // calculate price per share
         // mint CLT for Clip's treasure address. CLT amount = fee / price per share
 
@@ -248,11 +247,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
-            cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterCompoundInUsd * PRECISION) / sharesToken.totalSupply();
+            cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
         } else {
             /*
                 Example:
-                Previous cycle strategies TVL (strategiesBalanceBeforeCompoundInUsd) = 1000 USD
+                Previous cycle strategies TVL = 1000 USD
                 and total shares count is 1000 CLT
                 Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
                 TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
@@ -264,11 +263,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
             // double check here if this won't break in case depeg happened
             uint256 protocolCommissionInUsd = 0;
-            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) {
-                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].tvlBalanceComissionDeductedInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCopoundAndBatchDepositsInUsd) {
+                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCopoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
             }
 
-            cycles[_currentCycleId].tvlBalanceComissionDeductedInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId].strategiesBalanceWithCopoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
             cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
 
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
