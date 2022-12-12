@@ -116,7 +116,6 @@ async function setupTestParams(router, oracle, exchange, usdc, usdt, busd) {
 
   const [owner,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
-  await router.setMinDepositUsd(parseUniform("0.9"));
   await router.setFeesPercent(2000);
   await router.setFeesCollectionAddress(feeAddress.address);
   await router.setAllocationWindowTime(1);
@@ -155,7 +154,6 @@ async function setupRouterParams(router, oracle, exchange) {
 
   const [owner, feeAddress] = await ethers.getSigners();
   // Setup router params
-  await router.setMinDepositUsd(parseUniform("0.9"));
   await router.setFeesPercent(2000);
   await router.setFeesCollectionAddress(feeAddress.address);
   await router.setAllocationWindowTime(1);
@@ -197,7 +195,6 @@ async function setupPancakePlugin(exchange, usdc, usdt, busd) {
 async function setupParamsOnBNB(router, oracle, exchange) {
   const [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
   // Setup router params
-  await router.setMinDepositUsd(parseUniform("0.9"));
   await router.setFeesPercent(2000);
   await router.setFeesCollectionAddress(feeAddress.address);
   await router.setAllocationWindowTime(1);
