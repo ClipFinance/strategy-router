@@ -341,7 +341,6 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       let oldBalance = await usdc.balanceOf(owner.address);
       let shares = await router.calculateSharesFromReceipts([receipts[0]]);
       let sharesValueUsd = await router.calculateSharesUsdValue(shares);
-      console.log(sharesValueUsd);
       let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
       let expectedWithdrawAmount = sharesValueUsd
         .mul(price)

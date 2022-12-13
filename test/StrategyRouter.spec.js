@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
 const { MaxUint256, parseUniform } = require("./utils");
+const { BigNumber } = require("ethers");
 
 
 describe("Test StrategyRouter", function () {
@@ -84,9 +85,24 @@ describe("Test StrategyRouter", function () {
     await router.allocateToStrategies()
 
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
@@ -98,8 +114,24 @@ describe("Test StrategyRouter", function () {
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.redeemReceiptsToShares([1]);
 
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
+
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([], usdc.address, receiptsShares);
+    await router.withdrawFromStrategies(
+      [],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
@@ -115,8 +147,24 @@ describe("Test StrategyRouter", function () {
     let receiptsShares = await router.calculateSharesFromReceipts([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
 
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
+
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
+    await router.withdrawFromStrategies(
+      [2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
   });
@@ -128,10 +176,28 @@ describe("Test StrategyRouter", function () {
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    let withdrawShares = sharesBalance.add(receiptsShares);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
     // if this call not revert, that means receipt still exists and not burned
@@ -145,10 +211,29 @@ describe("Test StrategyRouter", function () {
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    let withdrawShares = sharesBalance.add(receiptsShares);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2)
+    ;
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
     // if this not revert, means receipt still exists and not burned
@@ -178,7 +263,24 @@ describe("Test StrategyRouter", function () {
     // withdraw user shares
     let oldBalance = await usdc.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
+    let expectedWithdrawAmount = sharesValueUsd
+      .mul(price)
+      .div(
+        BigNumber.from(10).pow(pricePrecision)
+      )
+      .mul(99)
+      .div(100)
+    ; // 1% slippage
+
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("10"),
