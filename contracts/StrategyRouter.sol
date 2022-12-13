@@ -622,24 +622,24 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param withdrawToken Supported token to receive after withdraw.
     /// @param minAmountToWithdraw min amount expected to be withdrawn
     /// give up on withdrawing amount below the threshold cause more will be spend on gas fees
-    /// @return amount of tokens that were actually withdrawn
+    /// @return tokenAmountToWithdraw amount of tokens that were actually withdrawn
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minAmountToWithdraw)
         private
-        returns (uint256)
+        returns (uint256 tokenAmountToWithdraw)
     {
         (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
-        uint256 tokenAmountToWithdraw;
-
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
         uint256 supportedTokenId = type(uint256).max; // index of strategy, uint.max means not found
-        for (uint256 i; i < strategiesCount; i++) {
-            address strategyDepositToken = strategies[i].depositToken;
-            if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
-                supportedTokenId = i;
-                if (strategyDepositToken == withdrawToken) break;
+        {
+            for (uint256 i; i < strategiesCount; i++) {
+                address strategyDepositToken = strategies[i].depositToken;
+                if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
+                    supportedTokenId = i;
+                    if (strategyDepositToken == withdrawToken) break;
+                }
             }
         }
 
@@ -665,15 +665,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     tokenAddress,
                     withdrawToken
                 );
-                // set token price to point out to a withdraw token
-                (tokenUsdPrice, oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
-                tokenAmountToWithdrawUniform = StrategyRouterLib.toUniform(tokenAmountToWithdraw, withdrawToken);
-                withdrawAmountUsd -= StrategyRouterLib.toUniform(tokenAmountToWithdraw, withdrawToken)
-                    * tokenUsdPrice / 10**oraclePriceDecimals;
-            } else {
-                withdrawAmountUsd -= StrategyRouterLib.toUniform(tokenAmountToWithdraw, tokenAddress)
-                    * tokenUsdPrice / 10**oraclePriceDecimals;
             }
+            // we assume that the whole requested amount was withdrawn
+            // we on purpose do not adjust for slippage, fees, etc
+            // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+            // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
+            withdrawAmountUsd = 0;
         }
 
         // if we didn't fulfilled withdraw amount above,
@@ -688,6 +685,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 tokenAmountToSwap = strategyTokenBalancesUsd[i] < withdrawAmountUsd
                     ? strategyTokenBalancesUsd[i]
                     : withdrawAmountUsd;
+                unchecked {
+                    // we assume that the whole requested amount was withdrawn
+                    // we on purpose do not adjust for slippage, fees, etc
+                    // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+                    // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
+                    withdrawAmountUsd -= tokenAmountToSwap;
+                }
 
                 // convert usd value into token amount
                 tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
@@ -695,17 +699,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, tokenAddress);
                 tokenAmountToSwap = IStrategy(strategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                 // swap for requested token
-                uint256 withdrawTokenAmountReceived = StrategyRouterLib.trySwap(
+                tokenAmountToWithdraw += StrategyRouterLib.trySwap(
                     exchange,
                     tokenAmountToSwap,
                     tokenAddress,
                     withdrawToken
                 );
-                tokenAmountToWithdraw += withdrawTokenAmountReceived;
-
-                (tokenUsdPrice, oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
-                withdrawTokenAmountReceived = StrategyRouterLib.toUniform(withdrawTokenAmountReceived, withdrawToken);
-                withdrawAmountUsd -= withdrawTokenAmountReceived * tokenUsdPrice / 10**oraclePriceDecimals;
 
                 if (withdrawAmountUsd < WITHDRAWAL_THRESHOLD_USD) break;
             }
