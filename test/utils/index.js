@@ -31,16 +31,16 @@ async function deployProxy(contractName, initializeArgs = []) {
   return await contract.deployed();
 }
 
-async function getBUSD() {
-  return await mintTokens(hre.networkVariables.busd);
+async function getBUSD(receiverAddress = null) {
+  return await mintTokens(hre.networkVariables.busd, receiverAddress);
 }
 
-async function getUSDC() {
-  return await mintTokens(hre.networkVariables.usdc);
+async function getUSDC(receiverAddress = null) {
+  return await mintTokens(hre.networkVariables.usdc, receiverAddress);
 }
 
-async function getUSDT() {
-  return await mintTokens(hre.networkVariables.usdt);
+async function getUSDT(receiverAddress = null) {
+  return await mintTokens(hre.networkVariables.usdt, receiverAddress);
 }
 
 // 'getTokens' functions are helpers to retrieve tokens during tests. 
@@ -71,8 +71,13 @@ async function getTokens(tokenAddress, holderAddress) {
   return { tokenContract, parse };
 }
 
-async function mintTokens(tokenAddress) {
-  const [owner] = await ethers.getSigners();
+async function mintTokens(tokenAddress, receiverAddress = null) {
+  let topupEthBalance = false;
+  if (!receiverAddress) {
+    const [owner] = await ethers.getSigners();
+    receiverAddress = owner.address;
+    topupEthBalance = true;
+  }
 
   let tokenContract = await ethers.getContractAt(
     [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"burn","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"getOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"string","name":"symbol","type":"string"},{"internalType":"uint8","name":"decimals","type":"uint8"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"bool","name":"mintable","type":"bool"},{"internalType":"address","name":"owner","type":"address"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"mint","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"mintable","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"sender","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}],
@@ -81,7 +86,7 @@ async function mintTokens(tokenAddress) {
   let decimals = await tokenContract.decimals();
   let parse = (args) => parseUnits(args, decimals);
   let tokenAmount = parse("10000000");
-  let to = owner.address;
+  let to = receiverAddress;
 
   const tokenOwnerAddress = await tokenContract.getOwner();
   await hre.network.provider.request({
@@ -89,11 +94,13 @@ async function mintTokens(tokenAddress) {
     params: [tokenOwnerAddress],
   });
 
-  // set eth in case if holderAddress has 0 eth.
-  await network.provider.send("hardhat_setBalance", [
-    owner.address.toString(),
-    "0x" + Number(parseEther("10000").toHexString(2)).toString(2),
-  ]);
+  if (topupEthBalance) {
+    // set eth in case if holderAddress has 0 eth.
+    await network.provider.send("hardhat_setBalance", [
+      receiverAddress,
+      "0x" + Number(parseEther("10000").toHexString(2)).toString(2),
+    ]);
+  }
 
   let tokenOwner = await ethers.getSigner(tokenOwnerAddress);
   await tokenContract.connect(tokenOwner).mint(
