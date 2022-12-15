@@ -668,7 +668,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 tokenAmountToWithdraw;
 
         // Withhold withdraw amount from cycle's TVL, to not to affect AllocateToStrategies calculations
-        cycles[currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= withdrawAmountUsd;
+        cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= withdrawAmountUsd;
 
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
