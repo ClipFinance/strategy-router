@@ -94,6 +94,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -123,6 +126,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -156,6 +162,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -189,6 +198,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -225,6 +237,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     let oldBalance = await usdc.balanceOf(owner.address);
@@ -273,6 +288,9 @@ describe("Test StrategyRouter", function () {
       )
       .mul(99)
       .div(100)
+      .div(
+        BigNumber.from(10).pow(18 - usdc.decimalNumber)
+      )
     ; // 1% slippage
 
     await router.withdrawFromStrategies(

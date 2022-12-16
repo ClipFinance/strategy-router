@@ -39,12 +39,15 @@ async function setupFakeTokens() {
 
   let parseUsdc = (args) => parseUnits(args, 18);
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
+  usdc.decimalNumber = 18;
 
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
+  busd.decimalNumber = 8;
 
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
+  usdt.decimalNumber = 6;
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
