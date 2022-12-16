@@ -383,7 +383,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256 shares,
-        uint256 minAmountToWithdraw
+        uint256 minTokenAmountToWithdraw
     ) external returns (uint256 withdrawnAmount) {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
@@ -429,7 +429,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // shares into usd using current PPS
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
-        withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minAmountToWithdraw);
+        withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minTokenAmountToWithdraw);
     }
 
     /// @notice Withdraw tokens from batch.
@@ -620,10 +620,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
-    /// @param minAmountToWithdraw min amount expected to be withdrawn
+    /// @param minTokenAmountToWithdraw min amount expected to be withdrawn
     /// give up on withdrawing amount below the threshold cause more will be spend on gas fees
     /// @return tokenAmountToWithdraw amount of tokens that were actually withdrawn
-    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minAmountToWithdraw)
+    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minTokenAmountToWithdraw)
         private
         returns (uint256 tokenAmountToWithdraw)
     {
@@ -710,7 +710,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             }
         }
 
-        if (tokenAmountToWithdraw < minAmountToWithdraw) {
+        if (tokenAmountToWithdraw < minTokenAmountToWithdraw) {
             revert WithdrawnAmountLowerThanExpectedAmount();
         }
 
