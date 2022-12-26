@@ -71,7 +71,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await provider.send("evm_revert", [snapshotId]);
   });
 
-  describe("Test deposit to batch & withdraw from batch; allocate to strategies & withdraw from strategies", function() {
+  describe.skip("Test deposit to batch & withdraw from batch; allocate to strategies & withdraw from strategies", function() {
 
     const USER_1_RECEIPT_2 = 1;
     const USER_2_RECEIPT_3 = 2
@@ -199,7 +199,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         );
       });
 
-      it("Withdraw user #1 from strategies receipt ID 7", async function () {
+      it.skip("Withdraw user #1 from strategies receipt ID 7", async function () {
         let beforeWithdrawUserBalance = await usdc.balanceOf(owner.address); // 0
         let shares = await router.calculateSharesFromReceipts([USER_1_RECEIPT_7]); // 100,039,287,833,254,722,032
         await router.withdrawFromStrategies([USER_1_RECEIPT_7], usdc.address, shares);

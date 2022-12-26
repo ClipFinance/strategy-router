@@ -89,7 +89,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 totalDepositedInUsd;
         // USD value received by strategies after all swaps necessary to ape into strategies
         uint256 receivedByStrategiesInUsd;
-        // Protocol TVL after compound idle strategy and fee collection but before rebalance & actual deposit to strategies
+        // Protocol TVL after compound idle strategy and actual deposit to strategies
         uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd;
         // price per share in USD
         uint256 pricePerShare;
@@ -176,6 +176,26 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 5 - rebalance token in batch to match our desired strategies ratio
         step 6 - batch transfers funds to strategies and strategies deposit tokens to their respective farms
         step 7 - we calculate share price for the current cycle and calculate a new amount of shares to issue
+
+            Description:
+
+                step 7.1 - Get previous TVL from previous cycle and calculate compounded profit: current TVL 
+                           minus previous cycle TVL. if current cycle = 0, then TVL = 0
+                step 7.2 - Save corrected current TVL in Cycle[strategiesBalanceWithCompoundAndBatchDepositsInUsd] for the next cycle
+                step 7.3 - Calculate price per share
+                step 7.4 - Mint shares for the new protocol's deposits
+                step 7.5 - Mint CLT for Clip's treasure address. CLT amount = fee / price per share
+
+            Case example:
+
+                Previous cycle strategies TVL = 1000 USD and total shares count is 1000 CLT
+                Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
+                TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
+
+                Hence protocol commission in shares (protocolCommissionInShares) will be
+
+                (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
+
         step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
         step 9 - store remaining information for the current cycle
         */
@@ -230,49 +250,27 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         uint256 totalShares = sharesToken.totalSupply();
 
-        // get previous TVL from previous cycle. if current cycle = 0, then TVL = 0
-        // calculate compounded profit: current TVL minus previous TVL
-        // take Clip's commission from overall profit
-        // subtract from current TVL Clip's commission and set correct current TVL.
-        // result could be negative as we paid more in all kinds of fees
-        // save corrected current TVL in Cycle[strategiesBalanceWithCompoundAndBatchDepositsInUsd]
-        // calculate price per share
-        // mint CLT for Clip's treasure address. CLT amount = fee / price per share
-
-        // [TODO] 
-        // We should calculate share price based on the the compund collected. Later on, when user withdraws from protocol, they 
-        // provide reciprt ID. We take this receipt ID and check what was share price at the moment of deposit, and what it is now,
-        // and then we calculate how much USD this deposit is worth. This will also take into account all collected compount since 
-        // deposit. 
-
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
+            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
             cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
         } else {
-            /*
-                Example:
-                Previous cycle strategies TVL = 1000 USD
-                and total shares count is 1000 CLT
-                Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
-                TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
-
-                Hence protocol commission in shares (protocolCommissionInShares) will be
-
-                (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
-            */
-
-            // double check here if this won't break in case depeg happened
+            // step 7.1
             uint256 protocolCommissionInUsd = 0;
             if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) {
                 protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
             }
 
+            // step 7.2
             cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            // step 7.3
             cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
 
+            // step 7.4
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
 
+            // step 7.5
             uint256 protocolCommissionInShares = (protocolCommissionInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(feeAddress, protocolCommissionInShares);
         }
@@ -282,7 +280,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
-        // Cycle cleaning up routine
+
+        // step 9
         ++currentCycleId;
         currentCycleDepositsCount = 0;
         cycles[_currentCycleId].startAt = block.timestamp;
@@ -470,6 +469,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // (stored in cycle), and now (stored in latest cycle) and provide here final USD value that protocol should send to the user
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
+
+        // Withhold withdrawen amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
+        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare;
+        cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
+
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
     }
 
@@ -666,9 +670,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 strategiesCount = strategies.length;
 
         uint256 tokenAmountToWithdraw;
-
-        // Withhold withdraw amount from cycle's TVL, to not to affect AllocateToStrategies calculations
-        cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= withdrawAmountUsd;
 
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
