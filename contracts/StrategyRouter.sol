@@ -471,7 +471,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         sharesToken.burn(address(this), shares);
 
         // Withhold withdrawen amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
-        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare;
+        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare / PRECISION;
         cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
 
         _withdrawFromStrategies(usdToWithdraw, withdrawToken);
