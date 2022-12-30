@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-//import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -660,6 +660,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         this.allocateToStrategies();
     }
 
+    // @dev Returns cycle data
+    function getCycle(uint256 _cycleId) public view returns (uint256, uint256, uint256, uint256, uint256) {
+        Cycle storage requestedCycle = cycles[_cycleId];
+        return (requestedCycle.startAt, 
+                requestedCycle.totalDepositedInUsd, 
+                requestedCycle.receivedByStrategiesInUsd, 
+                requestedCycle.strategiesBalanceWithCompoundAndBatchDepositsInUsd, 
+                requestedCycle.pricePerShare);
+    }
 
     // Internals
 

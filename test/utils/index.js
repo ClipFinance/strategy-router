@@ -1,5 +1,6 @@
 const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
+const { BigNumber } = require("ethers");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
 BLOCKS_MONTH = MONTH_SECONDS / 3;
@@ -10,13 +11,13 @@ provider = ethers.provider;
 const parseUniform = (args) => parseUnits(args, 18);
 
 module.exports = {
-  getTokens, skipBlocks, skipTimeAndBlocks,
+  matchTokenBalance, getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
   deploy, deployProxy
 }
 
-// helper to reduce code duplication, transforms 3 lines of deployemnt into 1
+// helper to reduce code duplication, transforms 3 lines of deployment into 1
 async function deploy(contractName, ...constructorArgs) {
   let factory = await ethers.getContractFactory(contractName);
   let contract = await factory.deploy(...constructorArgs);
@@ -41,6 +42,37 @@ async function getUSDC() {
 
 async function getUSDT() {
   return await getTokens(hre.networkVariables.usdt, hre.networkVariables.usdtHolder);
+}
+
+async function matchTokenBalance(tokenAddress, tokenHolder, matchAmount) {
+
+  const [owner] = await ethers.getSigners();
+  let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
+  let tokenBalance = await tokenContract.balanceOf(tokenHolder);
+
+  let tokenMaster;
+
+  switch(tokenAddress) {
+    case hre.networkVariables.busd:
+      tokenMaster = hre.networkVariables.busdHolder;
+      break;
+    case hre.networkVariables.usdc:
+      tokenMaster = hre.networkVariables.usdcHolder;
+      break;
+    case hre.networkVariables.usdt:
+      tokenMaster = hre.networkVariables.usdtHolder;
+      break;
+    default: 
+    tokenMaster = owner;
+  }
+
+  if (tokenBalance < matchAmount) {
+    let diffAmount = BigNumber.from(matchAmount).sub(BigNumber.from(tokenBalance));
+    await tokenContract.connect(tokenMaster).transfer(
+      tokenHolder,
+      diffAmount
+    );
+  }
 }
 
 // 'getTokens' functions are helpers to retrieve tokens during tests. 
