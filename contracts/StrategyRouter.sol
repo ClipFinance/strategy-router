@@ -661,13 +661,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     // @dev Returns cycle data
-    function getCycle(uint256 _cycleId) public view returns (uint256, uint256, uint256, uint256, uint256) {
+    function getCycle(uint256 _cycleId) public view returns (
+        uint256 startAt, 
+        uint256 totalDepositedInUsd, 
+        uint256 receivedByStrategiesInUsd, 
+        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd,
+        uint256 pricePerShare
+    ) {
         Cycle storage requestedCycle = cycles[_cycleId];
-        return (requestedCycle.startAt, 
-                requestedCycle.totalDepositedInUsd, 
-                requestedCycle.receivedByStrategiesInUsd, 
-                requestedCycle.strategiesBalanceWithCompoundAndBatchDepositsInUsd, 
-                requestedCycle.pricePerShare);
+        
+        startAt = requestedCycle.startAt;
+        totalDepositedInUsd = requestedCycle.totalDepositedInUsd;
+        receivedByStrategiesInUsd = requestedCycle.receivedByStrategiesInUsd;
+        strategiesBalanceWithCompoundAndBatchDepositsInUsd = requestedCycle.strategiesBalanceWithCompoundAndBatchDepositsInUsd;
+        pricePerShare = requestedCycle.pricePerShare;
     }
 
     // Internals

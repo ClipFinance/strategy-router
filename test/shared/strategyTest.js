@@ -107,8 +107,6 @@ module.exports = function strategyTest(strategyName) {
       let newFeeBalance = await depositToken.balanceOf(feeAddress.address);
       let newBalance = await strategy.totalTokens();
 
-      // We are collecting protocol fee in share token. Shall we take away this line?
-      // expect(newFeeBalance).to.be.gt(oldFeeBalance);
       expect(newBalance).to.be.gt(oldBalance);
 
       // withdraw all
