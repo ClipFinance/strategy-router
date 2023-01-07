@@ -99,7 +99,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
-    uint256 private constant WITHDRAWAL_THRESHOLD_USD = 1e17;
+    uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17;
 
     /// @notice The time of the first deposit that triggered a current cycle
     uint256 public currentCycleFirstDepositAt;
@@ -675,7 +675,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // if we didn't fulfilled withdraw amount above,
         // swap tokens one by one until withraw amount is fulfilled
-        if (withdrawAmountUsd >= WITHDRAWAL_THRESHOLD_USD) {
+        if (withdrawAmountUsd >= WITHDRAWAL_DUST_THRESHOLD_USD) {
             for (uint256 i; i < strategiesCount; i++) {
                 address tokenAddress = strategies[i].depositToken;
                 uint256 tokenAmountToSwap;
@@ -706,7 +706,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     withdrawToken
                 );
 
-                if (withdrawAmountUsd < WITHDRAWAL_THRESHOLD_USD) break;
+                if (withdrawAmountUsd < WITHDRAWAL_DUST_THRESHOLD_USD) break;
             }
         }
 
