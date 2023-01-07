@@ -99,7 +99,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
-    uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17;
+    // we do not try to withdraw amount below this threshold
+    // cause gas spendings are high compared to this amount
+    uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17; // 10 cents / 0.1 USD
 
     /// @notice The time of the first deposit that triggered a current cycle
     uint256 public currentCycleFirstDepositAt;
@@ -621,7 +623,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
     /// @param minTokenAmountToWithdraw min amount expected to be withdrawn
-    /// give up on withdrawing amount below the threshold cause more will be spend on gas fees
     /// @return tokenAmountToWithdraw amount of tokens that were actually withdrawn
     function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minTokenAmountToWithdraw)
         private
@@ -669,7 +670,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             // we assume that the whole requested amount was withdrawn
             // we on purpose do not adjust for slippage, fees, etc
             // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
-            // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
+            // if the actual withdrawn amount (tokenAmountToWithdraw) doesn't meet the requested amount
+            // then the slippage protection will revert execution at the end of this function
+            // with WithdrawnAmountLowerThanExpectedAmount error
             withdrawAmountUsd = 0;
         }
 

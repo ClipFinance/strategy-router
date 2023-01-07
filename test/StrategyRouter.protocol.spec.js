@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
-const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = require("./utils");
+const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform, convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 const { BigNumber } = require("ethers");
 
 
@@ -204,15 +204,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         let beforeWithdrawUserBalance = await usdc.balanceOf(owner.address); // 0
         let shares = await router.calculateSharesFromReceipts([USER_1_RECEIPT_7]); // 100,039,287,833,254,722,032
         let sharesValueUsd = await router.calculateSharesUsdValue(shares);
-        let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-        let expectedWithdrawAmount = sharesValueUsd
-          .mul(price)
-          .div(
-            BigNumber.from(10).pow(pricePrecision)
-          )
-          .mul(99)
-          .div(100)
-        ; // 1% slippage
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
         await router.withdrawFromStrategies(
           [USER_1_RECEIPT_7],
           usdc.address,
@@ -231,15 +230,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         let beforeWithdrawUserBalance = await usdc.balanceOf(user2.address); // 0
         let shares = await router.calculateSharesFromReceipts([USER_2_RECEIPT_3]); // 60,023,588,917,116,858,591
         let sharesValueUsd = await router.calculateSharesUsdValue(shares);
-        let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-        let expectedWithdrawAmount = sharesValueUsd
-          .mul(price)
-          .div(
-            BigNumber.from(10).pow(pricePrecision)
-          )
-          .mul(99)
-          .div(100)
-        ; // 1% slippage
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
         await router.connect(user2).withdrawFromStrategies(
           [USER_2_RECEIPT_3],
           usdc.address,
@@ -284,15 +282,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
         let shares = await router.calculateSharesFromReceipts([receipts[0]]);
         let sharesValueUsd = await router.calculateSharesUsdValue(shares);
-        let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-        let expectedWithdrawAmount = sharesValueUsd
-          .mul(price)
-          .div(
-            BigNumber.from(10).pow(pricePrecision)
-          )
-          .mul(99)
-          .div(100)
-        ; // 1% slippage
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
         await router.withdrawFromStrategies(
           [receipts[0]],
           usdc.address,
@@ -341,15 +338,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       let oldBalance = await usdc.balanceOf(owner.address);
       let shares = await router.calculateSharesFromReceipts([receipts[0]]);
       let sharesValueUsd = await router.calculateSharesUsdValue(shares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-      ; // 1% slippage
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdc,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
       await router.withdrawFromStrategies(
         [receipts[0]],
         usdc.address,

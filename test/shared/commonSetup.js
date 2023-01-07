@@ -3,7 +3,7 @@ const { ethers, upgrades } = require("hardhat");
 const { getUSDC, getBUSD, getUSDT, deploy, parseUniform, deployProxy } = require("../utils");
 
 module.exports = {
-  setupTokens, setupCore, deployFakeStrategy, deployFakeUnderflowStrategy,
+  setupTokens, setupCore, deployFakeStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams, setupRouterParams,
   setupFakePrices, setupPancakePlugin,
   setupFakeExchangePlugin, mintFakeToken
@@ -16,13 +16,13 @@ async function deployFakeStrategy({ router, token, weight = 10_000, profitPercen
   await router.addStrategy(strategy.address, token.address, weight);
 }
 
-async function deployFakeUnderflowStrategy({
-  router, token, underflowBps,
-  weight = 10_000, profitPercent = 10_000,
+async function deployFakeUnderFulfilledWithdrawalStrategy({
+  router, token, underFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0,
 }) {
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy(
-    "UnderflowMockStrategy",
+    "UnderFulfilledWithdrawalMockStrategy",
     underflowBps,
     token.address,
     profitPercent

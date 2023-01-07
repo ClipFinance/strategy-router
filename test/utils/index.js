@@ -1,5 +1,6 @@
 const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
+const { BigNumber } = require("../../ethers");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
 BLOCKS_MONTH = MONTH_SECONDS / 3;
@@ -13,7 +14,8 @@ module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
-  deploy, deployProxy
+  deploy, deployProxy,
+  convertFromUsdToTokenAmount, applySlippageInBps,
 }
 
 // helper to reduce code duplication, transforms 3 lines of deployemnt into 1
@@ -140,4 +142,28 @@ function printStruct(struct) {
     }
   }
   console.log(out);
+}
+
+async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
+{
+  let [price, pricePrecision] = await oracle.getTokenUsdPrice(token.address);
+  let expectedWithdrawAmount = valueInUsd
+    .mul(price)
+    .div(
+      BigNumber.from(10).pow(pricePrecision)
+    )
+    .div(
+      BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
+    )
+  ;
+
+  return expectedWithdrawAmount;
+}
+
+function applySlippageInBps(amount, slippageInBps)
+{
+  return amount
+    .mul(10000 - slippageInBps)
+    .div(10000)
+  ;
 }

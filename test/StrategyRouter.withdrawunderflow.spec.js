@@ -1,41 +1,41 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy, deployFakeUnderflowStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
-const { MaxUint256, parseUniform } = require("./utils");
+const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
+const { MaxUint256, parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 const { BigNumber } = require("ethers");
 const { loadFixture } = require("ethereum-waffle");
 
 describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
-  function deploySingleStrategy(underflowBps) {
+  function deploySingleStrategy(underFulfilledWithdrawalBps) {
     return async function ({router, usdc}) {
-      await deployFakeUnderflowStrategy({
+      await deployFakeUnderFulfilledWithdrawalStrategy({
         router,
         token: usdc,
-        underflowBps,
+        underFulfilledWithdrawalBps,
       });
     }
   }
 
   function deployMultipleStrategies(
-    busdUnderflowBps,
-    usdcUnderflowBps,
-    usdtUnderflowBps
+    busdUnderFulfilledWithdrawalBps,
+    usdcUnderFulfilledWithdrawalBps,
+    usdtUnderFulfilledWithdrawalBps
   ) {
     return async function ({router, usdc, usdt, busd}) {
-      await deployFakeUnderflowStrategy({
+      await deployFakeUnderFulfilledWithdrawalStrategy({
         router,
         token: busd,
-        underflowBps: busdUnderflowBps,
+        underFulfilledWithdrawalBps: busdUnderFulfilledWithdrawalBps,
       });
-      await deployFakeUnderflowStrategy({
+      await deployFakeUnderFulfilledWithdrawalStrategy({
         router,
         token: usdc,
-        underflowBps: usdcUnderflowBps,
+        underFulfilledWithdrawalBps: usdcUnderFulfilledWithdrawalBps,
       });
-      await deployFakeUnderflowStrategy({
+      await deployFakeUnderFulfilledWithdrawalStrategy({
         router,
         token: usdt,
-        underflowBps: usdtUnderflowBps,
+        underFulfilledWithdrawalBps: usdtUnderFulfilledWithdrawalBps,
       });
     }
   }
@@ -89,7 +89,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   }
 
   describe("when withdraw from a single strategy", async function () {
-    it("when less then expected withdrawn from a strategy", async function () {
+    it("verify that less amount was withdrawn from a strategy than requested due to underfulfilled withdrawal on the strategy", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -108,18 +108,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - usdc.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdc,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
@@ -136,7 +133,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
-    it("when less then expected withdrawn due to oracle different prices", async function () {
+    it("verify that less amount was withdrawn from a strategy than requested due to front-end and on-chain oracle different prices", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -155,18 +152,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(busd.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - busd.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // set up oracle price different from a client to get less BUSD than expected
       await oracle.setPrice(busd.address, 9_000_000_000); // $0.9
@@ -186,7 +180,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
-    it("when less then expected withdrawn due to exchange slippage", async function () {
+    it("verify that less amount was withdrawn from a strategy than requested due to exchange slippage", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -206,18 +200,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(busd.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - busd.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
@@ -230,7 +221,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   });
 
   describe("when withdraw from multiple strategies", async function () {
-    it("when less then expected withdrawn from a strategy", async function () {
+    it("verify that less amount was withdrawn from strategies than requested due to underfulfilled withdrawal on a single strategy", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -255,18 +246,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(usdc.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - usdc.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdc,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
@@ -283,7 +271,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
-    it("when less then expected withdrawn due to oracle different prices", async function () {
+    it("verify that less amount was withdrawn from strategies than requested due to front-end and on-chain oracle different prices", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -308,18 +296,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(busd.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - busd.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // set up oracle price different from a client to get less BUSD than expected
       await oracle.setPrice(busd.address, parseBusd('2')); // $2
@@ -339,7 +324,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
-    it("when less then expected withdrawn due to exchange slippage", async function () {
+    it("verify that less amount was withdrawn from strategies than requested due to exchange slippage", async function () {
       const {
         router, sharesToken, oracle,
         busd, parseBusd, usdc, parseUsdc
@@ -359,18 +344,15 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ;
 
       let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
-      let [price, pricePrecision] = await oracle.getTokenUsdPrice(busd.address);
-      let expectedWithdrawAmount = sharesValueUsd
-        .mul(price)
-        .div(
-          BigNumber.from(10).pow(pricePrecision)
-        )
-        .mul(99)
-        .div(100)
-        .div(
-          BigNumber.from(10).pow(18 - busd.decimalNumber)
-        )
-      ; // 1% slippage
+
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
