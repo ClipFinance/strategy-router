@@ -23,7 +23,7 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy(
     "UnderFulfilledWithdrawalMockStrategy",
-    underflowBps,
+    underFulfilledWithdrawalBps,
     token.address,
     profitPercent
   );

@@ -1,6 +1,6 @@
 const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { BigNumber } = require("../../ethers");
+const { BigNumber } = require("ethers");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
 BLOCKS_MONTH = MONTH_SECONDS / 3;
