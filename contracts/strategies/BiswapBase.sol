@@ -5,6 +5,7 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IStrategy.sol";
+import "../interfaces/IUsdOracle.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
@@ -24,6 +25,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     ERC20 internal immutable tokenB;
     ERC20 internal immutable lpToken;
     StrategyRouter internal immutable strategyRouter;
+    IUsdOracle internal immutable oracle;
 
     ERC20 internal constant bsw = ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
     IBiswapFarm internal constant farm = IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
@@ -47,7 +49,8 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 _poolId,
         ERC20 _tokenA,
         ERC20 _tokenB,
-        ERC20 _lpToken
+        ERC20 _lpToken,
+        IUsdOracle _oracle
     ) {
         strategyRouter = _strategyRouter;
         poolId = _poolId;
@@ -56,6 +59,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         lpToken = _lpToken;
         LEFTOVER_THRESHOLD_TOKEN_A = 10**_tokenA.decimals();
         LEFTOVER_THRESHOLD_TOKEN_B = 10**_tokenB.decimals();
+        oracle = _oracle;
         
         // lock implementation
         _disableInitializers();
@@ -77,7 +81,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
-        uint256 amountB = calculateSwapAmount(amount / 2, dexFee);
+        uint256 amountB = calculateSwapAmount(amount, dexFee);
         uint256 amountA = amount - amountB;
 
         tokenA.transfer(address(exchange), amountB);
@@ -234,12 +238,12 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 toSwap;
         if (amountB > amountA && (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B) {
             uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
-            toSwap = calculateSwapAmount(toSwap / 2, dexFee);
+            toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(toSwap, address(tokenB), address(tokenA), address(this));
         } else if (amountA > amountB && (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A) {
             uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
-            toSwap = calculateSwapAmount(toSwap / 2, dexFee);
+            toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(toSwap, address(tokenA), address(tokenB), address(this));
         }
@@ -301,8 +305,18 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
 
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
-        uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
-        uint256 amountB = (tokenAmount * halfWithFee) / 1e18;
-        return amountB;
+        address token0 = IUniswapV2Pair(address(lpToken)).token0();
+        uint256 priceBinA = getPriceBinA();
+        (reserve0, reserve1) = address(tokenA) == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
+        uint256 amountXToSell = (tokenAmount * reserve1 * 1e18) / (priceBinA * reserve0 * (1e18 - dexFee) / 1e18 + reserve1 * 1e18);
+        uint256 amountY = (amountXToSell * priceBinA * (1e18 - dexFee)) / 1e36;
+        return amountY;
+    }
+
+    // Return Price B in A with 18 decimals
+    function getPriceBinA() public view returns (uint256 price) {
+        (uint256 priceB, uint8 priceBDecimals) = oracle.getTokenUsdPrice(address(tokenB));
+        (uint256 priceA, uint8 priceADecimals) = oracle.getTokenUsdPrice(address(tokenA));
+        price = (priceB * 1e18 * (10 ** priceADecimals)) / (priceA * (10 ** priceBDecimals));
     }
 }
