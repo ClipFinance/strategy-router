@@ -367,9 +367,12 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
     });
 
-    it("Test rebalance function", async function () {
-
-      // console.log("strategies balance", await router.getStrategiesValue());
+    // leave this test to verify rebalance threshold works until refactored
+    it("When swap amount is below swap threshold rebalance doesn't happen", async function () {
+      let { balances, totalBalance } = await router.getStrategiesValue();
+      // strategies should be balanced as 10% and 90%
+      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
+      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
 
       // deposit to strategies
       await router.updateStrategy(0, 1000);
@@ -377,12 +380,25 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       await router.rebalanceStrategies();
 
+      ({ balances, totalBalance } = await router.getStrategiesValue());
+      // console.log(totalBalance, balances);
+      // strategies should be balanced as 0% and 100% cause rebalance didn't happen
+      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
+      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
+    });
+
+    it("Test rebalance function", async function () {
+      // deposit to strategies
+      await router.updateStrategy(0, 2000);
+      await router.updateStrategy(1, 8000);
+
+      await router.rebalanceStrategies();
+
       let { balances, totalBalance } = await router.getStrategiesValue();
       // console.log(totalBalance, balances);
       // strategies should be balanced as 10% and 90%
-      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(10, 1);
-      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(90, 1);
-
+      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(20, 1);
+      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(80, 1);
     });
   });
 });
