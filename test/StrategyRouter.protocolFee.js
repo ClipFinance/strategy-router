@@ -5,7 +5,7 @@ const { saturateTokenBalancesInStrategies, parseUniform } = require("./utils");
 const { convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 
 
-describe("Test StrategyRouter protocol fee collection", function () {
+describe.only("Test StrategyRouter protocol fee collection", function () {
 
   let feeAddress;
   // mock tokens with different decimals
@@ -51,9 +51,9 @@ describe("Test StrategyRouter protocol fee collection", function () {
     await router.setSupportedToken(usdt.address, true);
 
     // add fake strategies
-    await deployFakeStrategy({ router, token: busd });
-    await deployFakeStrategy({ router, token: usdc });
-    await deployFakeStrategy({ router, token: usdt });
+    await deployFakeStrategy({ router, token: busd, profitPercent: 10_000 }); // 1% profit
+    await deployFakeStrategy({ router, token: usdc, profitPercent: 10_000 }); // 1% profit
+    await deployFakeStrategy({ router, token: usdt, profitPercent: 10_000 }); // 1% profit
 
     await saturateTokenBalancesInStrategies(router);
   });
