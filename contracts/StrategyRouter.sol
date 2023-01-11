@@ -234,7 +234,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 5
-        (uint256 strategiesBalanceAfterCompoundInUsd, ) = getStrategiesValue(); // value $1010 ($10 compounded)
+        (uint256 strategiesBalanceAfterCompoundInUsd, ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6

@@ -5,7 +5,7 @@ const { saturateTokenBalancesInStrategies, parseUniform } = require("./utils");
 const { convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 
 
-describe.only("Test StrategyRouter protocol fee collection", function () {
+describe("Test StrategyRouter protocol fee collection", function () {
 
   let feeAddress;
   // mock tokens with different decimals
@@ -68,6 +68,155 @@ describe.only("Test StrategyRouter protocol fee collection", function () {
 
   after(async () => {
     await provider.send("evm_revert", [initialSnapshot]);
+  });
+
+  describe("Strategy has zero commission, protocol fee is zero", function () {
+    beforeEach(async function () {
+      await router.setFeesPercent(0);
+    });
+
+    it("should have no shares if there was yield", async function () {
+      // deposit to strategies  
+      await router.depositToBatch(busd.address, parseBusd("1000"));
+      await router.allocateToStrategies();
+  
+      let totalShares = await sharesToken.totalSupply();
+      // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
+      expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("2"));
+
+      let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+      expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
+
+      const currentCycleId = await router.currentCycleId();
+      expect(currentCycleId.toString()).to.be.equal("1");  
+
+      // get struct data and check TVL at the end of cycle
+      let cycleData = await router.getCycle(currentCycleId-1);
+
+      // totalDepositedInUsd; deposited BUSD with rate 1.01
+      expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
+      // receivedByStrategiesInUsd
+      expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
+      // strategiesBalanceWithCompoundAndBatchDepositsInUsd
+      expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
+      // pricePerShare
+      expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
+    });
+
+    describe("after first cycle", function () {
+      beforeEach(async function () {
+        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.allocateToStrategies();
+      });
+
+      it("should have on shares if there was yield", async function () {
+        // deposit to strategies  
+        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.allocateToStrategies();
+    
+        let totalShares = await sharesToken.totalSupply();
+        // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("5"));
+  
+        let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+        expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
+  
+        const currentCycleId = await router.currentCycleId();
+        expect(currentCycleId.toString()).to.be.equal("2");  
+  
+        // get struct data and check TVL at the end of cycle
+        let cycleData = await router.getCycle(currentCycleId-1);
+  
+        // totalDepositedInUsd; deposited BUSD with rate 1.01
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
+        // receivedByStrategiesInUsd
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
+        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("2000"), parseUniform("6"));
+        // pricePerShare
+        expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
+      });
+    });
+  });
+
+  describe("Stablecoin rate fluctuates", function () {
+    beforeEach(async function () {
+      await router.depositToBatch(busd.address, parseBusd("1000"));
+      await router.allocateToStrategies();
+    });
+
+    describe("after first cycle rate drops", function () {
+      beforeEach(async function () {
+        let busdAmount = parseBusd("0.95");
+        await oracle.setPrice(busd.address, busdAmount);
+      });
+
+      it("should have no shares if there was yield", async function () {
+        // deposit to strategies  
+        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.allocateToStrategies();
+    
+        let totalShares = await sharesToken.totalSupply();
+        // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("5"));
+  
+        let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+        expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
+  
+        const currentCycleId = await router.currentCycleId();
+        expect(currentCycleId.toString()).to.be.equal("2");  
+  
+        // get struct data and check TVL at the end of cycle
+        let cycleData = await router.getCycle(currentCycleId-1);
+  
+        // totalDepositedInUsd; deposited BUSD with rate 1.01
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("950"));
+        // receivedByStrategiesInUsd
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("980"), parseUniform("3"));
+        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("1970"), parseUniform("5"));
+        // pricePerShare
+        expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("0.99"), parseUniform("0.01"));
+      });
+
+      describe("after second cycle rate pumps", function () {
+        beforeEach(async function () {
+          let busdAmount = parseBusd("1.05");
+          await oracle.setPrice(busd.address, busdAmount);
+
+          await router.depositToBatch(busd.address, parseBusd("1000"));
+          await router.allocateToStrategies();
+        });
+  
+        it("should have shares if there was yield", async function () {
+          // deposit to strategies  
+          await router.depositToBatch(busd.address, parseBusd("1000"));
+          await router.allocateToStrategies();
+      
+          let totalShares = await sharesToken.totalSupply();
+          // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("2980"), parseUniform("4"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.closeTo(parseUniform("8.56"), parseUniform("0.1"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("3");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          // totalDepositedInUsd; deposited BUSD with rate 1.01
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1050"));
+          // receivedByStrategiesInUsd
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1010"), parseUniform("1"));
+          // strategiesBalanceWithCompoundAndBatchDepositsInUsd
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("3060"), parseUniform("4"));
+          // pricePerShare
+          expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.01"));
+        });
+      });
+    });
   });
 
   describe("protocols collecting fee in shares", function () {
