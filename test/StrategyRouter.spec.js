@@ -1,8 +1,8 @@
 const { expect } = require("chai");
-const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { MaxUint256, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
+const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
+const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
@@ -71,7 +71,7 @@ describe("Test StrategyRouter", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-it("should allocateToStrategies", async function () {
+  it("should allocateToStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
     await router.allocateToStrategies()
