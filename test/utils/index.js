@@ -13,8 +13,8 @@ const parseUniform = (args) => parseUnits(args, 18);
 module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
-  parseUniform, provider, getUSDC, getBUSD, getUSDT,
-  deploy, deployProxy, matchTokenBalancesInStrategies, matchStrategyBalanceInAdvance
+  parseUniform, provider, getUSDC, getBUSD, getUSDT, deploy, deployProxy, 
+  matchTokenBalancesInStrategies, matchStrategyBalanceInAdvance, saturateTokenBalancesInStrategies
 }
 
 // helper to reduce code duplication, transforms 3 lines of deployment into 1
@@ -100,6 +100,8 @@ function printStruct(struct) {
   console.log(out);
 }
 
+// Use this method if you want deposit token's smart contract balance to match exactly mocked strategy recorder balance 
+//
 // When mock strategy compound method called, strategy's balance is updated
 // However this recorded balance is now different from what is recorded in token smart contract
 // for mocked strategy address
@@ -108,13 +110,26 @@ function printStruct(struct) {
 // To avoid such situation, we should call this method, that will match recorded balance of strategy
 // to actual balance in token smart contract
 // This only affects MockedStrategies, due to how that handle compound.
-async function matchTokenBalancesInStrategies (router) {
+async function matchTokenBalancesInStrategies(router) {
   const strategiesData = await router.getStrategies();
   for( i = 0; i < strategiesData.length; i++) {
-    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i][0]);
+    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
     let depositToken = await strategyContract.depositToken();
     let strategyBalance = await strategyContract.totalTokens();
-    await matchTokenBalance(depositToken, strategiesData[i][0], strategyBalance);
+    await matchTokenBalance(depositToken, strategiesData[i].strategyAddress, strategyBalance);
+  }
+}
+
+// Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance 
+async function saturateTokenBalancesInStrategies(router) {
+  const strategiesData = await router.getStrategies();
+  for( i = 0; i < strategiesData.length; i++) {
+    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
+    let depositTokenAddress = await strategyContract.depositToken();
+    let depositTokenContract = await ethers.getContractAt("ERC20", depositTokenAddress);
+    let depositTokenDecimals = await depositTokenContract.decimals();
+    let strategyBalance = parseUnits("1000000", depositTokenDecimals);
+    await matchTokenBalance(depositTokenAddress, strategiesData[i].strategyAddress, strategyBalance);
   }
 }
 

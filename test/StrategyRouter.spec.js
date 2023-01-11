@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { matchTokenBalancesInStrategies, matchStrategyBalanceInAdvance, parseUniform } = require("./utils");
+const { saturateTokenBalancesInStrategies, parseUniform } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
@@ -55,6 +55,8 @@ describe("Test StrategyRouter", function () {
     await deployFakeStrategy({ router, token: busd });
     await deployFakeStrategy({ router, token: usdc });
     await deployFakeStrategy({ router, token: usdt });
+
+    await saturateTokenBalancesInStrategies(router);
   });
 
   beforeEach(async function () {
@@ -75,13 +77,11 @@ describe("Test StrategyRouter", function () {
       // admin initial deposit to set initial shares and pps
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
     });
 
     it("should allocateToStrategies", async function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       let strategiesBalance = await router.getStrategiesValue();
       expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
@@ -90,7 +90,6 @@ describe("Test StrategyRouter", function () {
     it("should withdrawFromStrategies only receipts", async function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       let receiptsShares = await router.calculateSharesFromReceipts([1]);
 
@@ -103,7 +102,6 @@ describe("Test StrategyRouter", function () {
     it("should withdrawFromStrategies only shares", async function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       let receiptsShares = await router.calculateSharesFromReceipts([1]);
       await router.redeemReceiptsToShares([1]);
@@ -118,7 +116,6 @@ describe("Test StrategyRouter", function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       await router.redeemReceiptsToShares([1]);
 
@@ -136,7 +133,6 @@ describe("Test StrategyRouter", function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       let sharesBalance = await sharesToken.balanceOf(owner.address);
       let receiptsShares = await router.calculateSharesFromReceipts([1]);
@@ -154,7 +150,6 @@ describe("Test StrategyRouter", function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       let sharesBalance = await sharesToken.balanceOf(owner.address);
       let receiptsShares = await router.calculateSharesFromReceipts([1]);
@@ -175,7 +170,6 @@ describe("Test StrategyRouter", function () {
       // deposit to strategies
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.allocateToStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       // deploy new farm
       const Farm = await ethers.getContractFactory("MockStrategy");
@@ -187,11 +181,8 @@ describe("Test StrategyRouter", function () {
       await router.addStrategy(farm2.address, usdc.address, 1000);
 
       // remove 2nd farm with index 1
-      // After we adjusted MockStrategy to increase balance after each compound, this started to fail
-      await matchStrategyBalanceInAdvance(router, 1);
-      await router.removeStrategy(1); // Compound method is called inside
+      await router.removeStrategy(1);
       await router.rebalanceStrategies();
-      await matchTokenBalancesInStrategies(router);
 
       // withdraw user shares
       let oldBalance = await usdc.balanceOf(owner.address);
@@ -209,7 +200,6 @@ describe("Test StrategyRouter", function () {
         [, nonModerator] = await ethers.getSigners();
         await router.depositToBatch(busd.address, parseBusd("10"));
         await router.allocateToStrategies();
-        await matchTokenBalancesInStrategies(router);
         await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1])).to.be.revertedWith("NotModerator()");
       });
 
@@ -217,7 +207,6 @@ describe("Test StrategyRouter", function () {
         await router.setModerator(owner.address, true);
         await router.depositToBatch(busd.address, parseBusd("10"));
         await router.allocateToStrategies();
-        await matchTokenBalancesInStrategies(router);
         let receiptsShares = await router.calculateSharesFromReceipts([1]);
 
         let oldBalance = await sharesToken.balanceOf(owner.address);
@@ -234,7 +223,6 @@ describe("Test StrategyRouter", function () {
         await router.depositToBatch(busd.address, parseBusd("10"));
         await router.depositToBatch(busd.address, parseBusd("10"));
         await router.allocateToStrategies();
-        await matchTokenBalancesInStrategies(router);
         let receiptsShares = await router.calculateSharesFromReceipts([1]);
         let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
 
@@ -255,7 +243,6 @@ describe("Test StrategyRouter", function () {
         await busd.connect(owner2).approve(router.address, parseBusd("10"));
         await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
         await router.allocateToStrategies();
-        await matchTokenBalancesInStrategies(router);
         let receiptsShares = await router.calculateSharesFromReceipts([1]);
         let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
 
@@ -283,7 +270,6 @@ describe("Test StrategyRouter", function () {
         await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
         await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
         await router.allocateToStrategies();
-        await matchTokenBalancesInStrategies(router);
         let receiptsShares = await router.calculateSharesFromReceipts([1, 2]);
         let receiptsShares2 = await router.calculateSharesFromReceipts([3, 4]);
 
