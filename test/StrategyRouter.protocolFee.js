@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
 const { saturateTokenBalancesInStrategies, parseUniform } = require("./utils");
+const { convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 
 
 describe("Test StrategyRouter protocol fee collection", function () {
@@ -168,7 +169,16 @@ describe("Test StrategyRouter protocol fee collection", function () {
         it("should decrease previous cycle recorder balance on withdrawal", async function () {
           let receiptIds = [1];
           let shares = await router.calculateSharesFromReceipts(receiptIds);
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            200 // 2% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("1"));
@@ -196,7 +206,16 @@ describe("Test StrategyRouter protocol fee collection", function () {
           beforeEach(async function () {
             let receiptIds = [1];
             let shares = await router.calculateSharesFromReceipts(receiptIds);
-            await router.withdrawFromStrategies(receiptIds, busd.address, shares);
+            let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+            let expectedWithdrawAmount = applySlippageInBps(
+              await convertFromUsdToTokenAmount(
+                oracle,
+                busd,
+                sharesValueUsd
+              ),
+              200 // 2% slippage
+            );
+            await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
           });
 
           it("should have shares if there was yield", async function () {

@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
-const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform } = require("./utils");
+const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform, convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
@@ -19,7 +19,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
   let snapshotId;
 
-  beforeEach(async function () {
+  before(async function () {
 
     [owner, user2] = await ethers.getSigners();
     snapshotId = await provider.send("evm_snapshot");
@@ -67,7 +67,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
   });
 
-  afterEach(async function () {
+  after(async function () {
     await provider.send("evm_revert", [snapshotId]);
   });
 
@@ -81,14 +81,11 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     const USER_2_DEPOSIT_AMOUNT = "60";
 
     describe("Test deposit to batch and withdraw from batch", function () {
-      
-      beforeEach(async function () {
-        // receipt ID 2
-        await router.depositToBatch(usdc.address, parseUsdc("100"))
-      });
-
       // value is position in array while receipt_2 is ID number (ID is by 1 bigger than position in array)
       it("User deposit 100 usdc and verify batch balance", async function () {
+
+        // receipt ID 2
+        await router.depositToBatch(usdc.address, parseUsdc("100"))
 
         // historically have this test with some delta
         expect(await usdc.balanceOf(batch.address)).to.be.closeTo(
@@ -115,22 +112,19 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       it("2 users did multiple deposits and 1 user withdraws everything from current cycle", async function () {
 
-        await expect(router.withdrawFromBatch([USER_1_RECEIPT_2])).to.emit(router, 'WithdrawFromBatch')
-        .withArgs(owner.address, [USER_1_RECEIPT_2], [usdc.address], [parseUsdc("100")]);
-
         // was withdrawn in last previous test
         await expect(receiptContract.getReceipt(USER_1_RECEIPT_2)).revertedWith("NonExistingToken");
 
         await usdc.transfer(user2.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
         await usdc.connect(user2).approve(router.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
-        await router.connect(user2).depositToBatch(usdc.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
+        await router.connect(user2).depositToBatch(usdc.address, parseUsdc(USER_2_DEPOSIT_AMOUNT))
 
         let oldUsdcBal = await usdc.balanceOf(owner.address);
         let oldBusdBal = await busd.balanceOf(owner.address);
 
-        await router.depositToBatch(usdc.address, parseUsdc("50"));
-        await router.depositToBatch(busd.address, parseBusd("120"));
-        await router.depositToBatch(usdc.address, parseUsdc("75"));
+        await router.depositToBatch(usdc.address, parseUsdc("50"))
+        await router.depositToBatch(busd.address, parseBusd("120"))
+        await router.depositToBatch(usdc.address, parseUsdc("75"))
 
         // 3 receipts were just created, but the 4th one was initial admin deposit of 1 busd that is already allocated
         // to strategies, but since it was not removed, receipt is still there.
@@ -175,24 +169,6 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       const USER_1_RECEIPT_7 = 6;
 
-      beforeEach(async function () {
-        // receipt ID 2
-        await router.depositToBatch(usdc.address, parseUsdc("100"))
-
-        await expect(router.withdrawFromBatch([USER_1_RECEIPT_2])).to.emit(router, 'WithdrawFromBatch')
-        .withArgs(owner.address, [USER_1_RECEIPT_2], [usdc.address], [parseUsdc("100")]);
-
-        await usdc.transfer(user2.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
-        await usdc.connect(user2).approve(router.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
-        await router.connect(user2).depositToBatch(usdc.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
-
-        await router.depositToBatch(usdc.address, parseUsdc("50"));
-        await router.depositToBatch(busd.address, parseBusd("120"));
-        await router.depositToBatch(usdc.address, parseUsdc("75"));
-
-        await router.withdrawFromBatch([ USER_1_RECEIPT_4, USER_1_RECEIPT_5, USER_1_RECEIPT_6]);
-      });
-
       it("Allocate batch to strategies", async function () {
         await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
 
@@ -210,88 +186,86 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         );
       });
 
-      describe("after first allocation", function () {
-        beforeEach(async function () {
-          await router.allocateToStrategies();
-        });
+      it("User #1 deposit 100 usdc and allocate batch to strategies", async function () {
+        await router.depositToBatch(usdc.address, parseUsdc("100"));
 
+        await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
 
-        it("User #1 deposit 100 usdc and allocate batch to strategies", async function () {
-          await router.depositToBatch(usdc.address, parseUsdc("100"));
+        await router.allocateToStrategies();
 
-          await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
-
-          await router.allocateToStrategies();
-
-          expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
+        expect((await router.getStrategiesValue()).totalBalance).to.be.closeTo(
             parseUniform("160"), // 161.102493729346097917
             parseUniform("2.0")
-          );
-        });
+        );
+      });
 
-        describe("after second allocation", function () {
-          beforeEach(async function () {
-            await router.depositToBatch(usdc.address, parseUsdc("100"));
-            await skipTimeAndBlocks(allocationWindowTime, allocationWindowTime/3);
-            await router.allocateToStrategies();
-          });
-  
-          it("Withdraw user #1 from strategies receipt ID 7", async function () {
+      it("Withdraw user #1 from strategies receipt ID 7", async function () {
+        let beforeWithdrawUserBalance = await usdc.balanceOf(owner.address); // 0
+        let shares = await router.calculateSharesFromReceipts([USER_1_RECEIPT_7]); // 100,039,287,833,254,722,032
+        let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
+        await router.withdrawFromStrategies(
+          [USER_1_RECEIPT_7],
+          usdc.address,
+          shares,
+          expectedWithdrawAmount
+        );
+        let afterWithdrawUserBalance = await usdc.balanceOf(owner.address);
 
-            let beforeWithdrawUserBalance = await usdc.balanceOf(owner.address); // 0
-            let shares = await router.calculateSharesFromReceipts([USER_1_RECEIPT_7]); // 100,039,287,833,254,722,032
-            await router.withdrawFromStrategies([USER_1_RECEIPT_7], usdc.address, shares);
-            let afterWithdrawUserBalance = await usdc.balanceOf(owner.address);
-  
-            expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
-                parseUsdc("100"),
-                parseUniform("1.0")
-            );
-          });
-  
-          describe("after first withdrawal", function () {
-            beforeEach(async function () {
-              let shares = await router.calculateSharesFromReceipts([USER_1_RECEIPT_7]); // 100,039,287,833,254,722,032
-              await router.withdrawFromStrategies([USER_1_RECEIPT_7], usdc.address, shares);
-            });
+        expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
+            parseUsdc("100"),
+            parseUniform("1.0")
+        );
+      });
 
-            it("Withdraw user #2 from strategies receipt ID 3", async function () {
-              let beforeWithdrawUserBalance = await usdc.balanceOf(user2.address); // 0
-              let shares = await router.calculateSharesFromReceipts([USER_2_RECEIPT_3]); // 60,023,588,917,116,858,591
-              await router.connect(user2).withdrawFromStrategies([USER_2_RECEIPT_3], usdc.address, shares);
-              let afterWithdrawUserBalance = await usdc.balanceOf(user2.address);
-    
-              // TODO describe on why result changes from time to time
-              // 59,968,242,935,978,697,614
-              // 59,906,344,997,371,393,851
-              expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
-                  parseUsdc(USER_2_DEPOSIT_AMOUNT),
-                  parseUniform("0.1")
-              );
-            });
-    
-            describe("after second withdrawal", function () {
-              beforeEach(async function () {
-                let shares = await router.calculateSharesFromReceipts([USER_2_RECEIPT_3]); // 60,023,588,917,116,858,591
-                await router.connect(user2).withdrawFromStrategies([USER_2_RECEIPT_3], usdc.address, shares);
-              });
-              
-              it("Verify funds were withdrawn from strategies", async function () {
-      
-                // should've withdrawn all (except admin), so verify that
-                expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
-                expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
-                expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
-      
-                expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
-                expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(
-                    parseEther("1"), // admin deposit 1,000,354,593,918,860,232
-                    parseEther("0.025")
-                );
-              });
-            });
-          });
-        });
+      it("Withdraw user #2 from strategies receipt ID 3", async function () {
+        let beforeWithdrawUserBalance = await usdc.balanceOf(user2.address); // 0
+        let shares = await router.calculateSharesFromReceipts([USER_2_RECEIPT_3]); // 60,023,588,917,116,858,591
+        let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
+        await router.connect(user2).withdrawFromStrategies(
+          [USER_2_RECEIPT_3],
+          usdc.address,
+          shares,
+          expectedWithdrawAmount
+        );
+        let afterWithdrawUserBalance = await usdc.balanceOf(user2.address);
+
+        // TODO describe on why result changes from time to time
+        // 59,968,242,935,978,697,614
+        // 59,906,344,997,371,393,851
+        expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
+            parseUsdc(USER_2_DEPOSIT_AMOUNT),
+            parseUniform("0.1")
+        );
+      });
+
+      it("Verify funds were withdrawn from strategies", async function () {
+
+        // should've withdrawn all (except admin), so verify that
+        expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
+        expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
+        expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
+
+        expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
+        expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(
+            parseEther("1"), // admin deposit 1,000,354,593,918,860,232
+            parseEther("0.025")
+        );
       });
     });
   });
@@ -306,7 +280,21 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         let receipts = await receiptContract.getTokensOfOwner(owner.address);
         receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
         let shares = await router.calculateSharesFromReceipts([receipts[0]]);
-        await router.withdrawFromStrategies([receipts[0]], usdc.address, shares);
+        let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+        let expectedWithdrawAmount = applySlippageInBps(
+          await convertFromUsdToTokenAmount(
+            oracle,
+            usdc,
+            sharesValueUsd
+          ),
+          100 // 1% slippage
+        );
+        await router.withdrawFromStrategies(
+          [receipts[0]],
+          usdc.address,
+          shares,
+          expectedWithdrawAmount
+        );
 
         // console.log("strategies balance");
         // printStruct(await router.getStrategiesValue());
@@ -348,7 +336,21 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       receipts = receipts.filter(id => id != 0); // ignore nft of admin initial deposit
       let oldBalance = await usdc.balanceOf(owner.address);
       let shares = await router.calculateSharesFromReceipts([receipts[0]]);
-      await router.withdrawFromStrategies([receipts[0]], usdc.address, shares);
+      let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+      let expectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdc,
+          sharesValueUsd
+        ),
+        100 // 1% slippage
+      );
+      await router.withdrawFromStrategies(
+        [receipts[0]],
+        usdc.address,
+        shares,
+        expectedWithdrawAmount
+      );
       let newBalance = await usdc.balanceOf(owner.address);
       expect(newBalance.sub(oldBalance)).to.be.closeTo(
           parseUsdc("10"),
@@ -383,4 +385,3 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     });
   });
 });
-
