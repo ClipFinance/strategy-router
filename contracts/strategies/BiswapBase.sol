@@ -182,8 +182,8 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         // this formula is from uniswap.remove_liquidity -> uniswapPair.burn function
         uint256 balanceA = tokenA.balanceOf(address(lpToken));
         uint256 balanceB = tokenB.balanceOf(address(lpToken));
-        uint256 amountA = (liquidity * balanceA) / _totalSupply;
-        uint256 amountB = (liquidity * balanceB) / _totalSupply;
+        uint256 amountA = (liquidity * balanceA) / _totalSupply + tokenA.balanceOf(address(this));
+        uint256 amountB = (liquidity * balanceB) / _totalSupply + tokenB.balanceOf(address(this));
 
         if (amountB > 0) {
             address token0 = IUniswapV2Pair(address(lpToken)).token0();

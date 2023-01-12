@@ -41,7 +41,7 @@ module.exports = function strategyTest(strategyName) {
       let StrategyFactory = await ethers.getContractFactory(strategyName)
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
         kind: 'uups',
-        constructorArgs: [router.address],
+        constructorArgs: [router.address, oracle.address],
       });
       await strategy.deployed();
 
