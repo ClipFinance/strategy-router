@@ -370,7 +370,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // leave this test to verify rebalance threshold works until refactored
     it("When swap amount is below swap threshold rebalance doesn't happen", async function () {
       let { balances, totalBalance } = await router.getStrategiesValue();
-      // strategies should be balanced as 10% and 90%
+      // strategies should be balanced as 00% and 100%
       expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
 
@@ -396,7 +396,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       let { balances, totalBalance } = await router.getStrategiesValue();
       // console.log(totalBalance, balances);
-      // strategies should be balanced as 10% and 90%
+      // strategies should be balanced as 20% and 80%
       expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(20, 1);
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(80, 1);
     });
