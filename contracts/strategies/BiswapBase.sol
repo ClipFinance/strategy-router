@@ -99,8 +99,10 @@ contract BiswapBase is
             address(tokenA),
             address(tokenB)
         );
-        uint256 amountB = calculateSwapAmount(amount, dexFee);
-        uint256 amountA = amount - amountB;
+        (uint256 amountA, uint256 amountB) = calculateSwapAmount(
+            amount,
+            dexFee
+        );
 
         tokenA.transfer(address(exchange), amountB);
         amountB = exchange.swap(
@@ -306,7 +308,8 @@ contract BiswapBase is
                 address(tokenA),
                 address(tokenB)
             );
-            toSwap = calculateSwapAmount(toSwap, dexFee);
+            // TODO: looks wrong
+            (toSwap, ) = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -323,7 +326,7 @@ contract BiswapBase is
                 address(tokenA),
                 address(tokenB)
             );
-            toSwap = calculateSwapAmount(toSwap, dexFee);
+            (toSwap, ) = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -426,7 +429,7 @@ contract BiswapBase is
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee)
         private
         view
-        returns (uint256 amountAfterFee)
+        returns (uint256 amountA, uint256 amountB)
     {
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(
             address(lpToken)
@@ -456,10 +459,8 @@ contract BiswapBase is
                 1e18 +
                 reserve1 *
                 1e18);
-        uint256 amountBToSell = (amountAToSell *
-            oraclePrice *
-            (1e18 - dexFee)) / 1e36;
-        return amountBToSell;
+        amountB = (amountAToSell * oraclePrice * (1e18 - dexFee)) / 1e36;
+        amountA = tokenAmount - amountAToSell;
     }
 
     // Return Price of token0 in token1 with 18 decimals
