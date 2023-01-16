@@ -46,7 +46,7 @@ contract BiswapBase is
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
-    uint256 private constant PRICE_DELTA = 1e12;
+    uint256 private constant PRICE_DELTA = 1e17;
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
