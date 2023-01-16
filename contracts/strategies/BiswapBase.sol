@@ -16,20 +16,29 @@ import "hardhat/console.sol";
 // their code on github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy {
+contract BiswapBase is
+    Initializable,
+    UUPSUpgradeable,
+    OwnableUpgradeable,
+    IStrategy
+{
     error CallerUpgrader();
+    error PriceManipulation();
 
     address internal upgrader;
-    
+
     ERC20 internal immutable tokenA;
     ERC20 internal immutable tokenB;
     ERC20 internal immutable lpToken;
     StrategyRouter internal immutable strategyRouter;
     IUsdOracle internal immutable oracle;
 
-    ERC20 internal constant bsw = ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
-    IBiswapFarm internal constant farm = IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
-    IUniswapV2Router02 internal constant biswapRouter = IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
+    ERC20 internal constant bsw =
+        ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
+    IBiswapFarm internal constant farm =
+        IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
+    IUniswapV2Router02 internal constant biswapRouter =
+        IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
 
     uint256 internal immutable poolId;
 
@@ -37,6 +46,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
+    uint256 private constant PRICE_DELTA = 1e12;
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
@@ -60,7 +70,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         LEFTOVER_THRESHOLD_TOKEN_A = 10**_tokenA.decimals();
         LEFTOVER_THRESHOLD_TOKEN_B = 10**_tokenB.decimals();
         oracle = _oracle;
-        
+
         // lock implementation
         _disableInitializers();
     }
@@ -71,7 +81,11 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         upgrader = _upgrader;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {}
+    function _authorizeUpgrade(address newImplementation)
+        internal
+        override
+        onlyUpgrader
+    {}
 
     function depositToken() external view override returns (address) {
         return address(tokenA);
@@ -80,12 +94,21 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     function deposit(uint256 amount) external override onlyOwner {
         Exchange exchange = strategyRouter.getExchange();
 
-        uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
+        uint256 dexFee = exchange.getExchangeProtocolFee(
+            amount / 2,
+            address(tokenA),
+            address(tokenB)
+        );
         uint256 amountB = calculateSwapAmount(amount, dexFee);
         uint256 amountA = amount - amountB;
 
         tokenA.transfer(address(exchange), amountB);
-        amountB = exchange.swap(amountB, address(tokenA), address(tokenB), address(this));
+        amountB = exchange.swap(
+            amountB,
+            address(tokenA),
+            address(tokenB),
+            address(this)
+        );
 
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
@@ -110,37 +133,58 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        address token0 = IUniswapV2Pair(address(lpToken)).token0();
-        address token1 = IUniswapV2Pair(address(lpToken)).token1();
-        uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
-        uint256 balance1 = IERC20(token1).balanceOf(address(lpToken));
+        uint256 tokenABalance = tokenA.balanceOf(address(this));
+        if (strategyTokenAmountToWithdraw <= tokenABalance) {
+            tokenA.transfer(msg.sender, strategyTokenAmountToWithdraw);
+            return strategyTokenAmountToWithdraw;
+        } else {
+            strategyTokenAmountToWithdraw -= tokenABalance;
 
-        uint256 amountA = strategyTokenAmountToWithdraw / 2;
-        uint256 amountB = strategyTokenAmountToWithdraw - amountA;
+            address token0 = IUniswapV2Pair(address(lpToken)).token0();
+            address token1 = IUniswapV2Pair(address(lpToken)).token1();
+            uint256 balance0 = IERC20(token0).balanceOf(address(lpToken));
+            uint256 balance1 = IERC20(token1).balanceOf(address(lpToken));
 
-        (balance0, balance1) = token0 == address(tokenA) ? (balance0, balance1) : (balance1, balance0);
+            uint256 amountA = strategyTokenAmountToWithdraw / 2;
+            uint256 amountB = strategyTokenAmountToWithdraw - amountA;
 
-        amountB = biswapRouter.quote(amountB, balance0, balance1);
+            (balance0, balance1) = token0 == address(tokenA)
+                ? (balance0, balance1)
+                : (balance1, balance0);
 
-        uint256 liquidityToRemove = (lpToken.totalSupply() * (amountA + amountB)) / (balance0 + balance1);
+            amountB = biswapRouter.quote(amountB, balance0, balance1);
 
-        farm.withdraw(poolId, liquidityToRemove);
-        lpToken.approve(address(biswapRouter), liquidityToRemove);
-        (amountA, amountB) = biswapRouter.removeLiquidity(
-            address(tokenA),
-            address(tokenB),
-            lpToken.balanceOf(address(this)),
-            0,
-            0,
-            address(this),
-            block.timestamp
-        );
+            uint256 liquidityToRemove = (lpToken.totalSupply() *
+                (amountA + amountB)) / (balance0 + balance1);
 
-        Exchange exchange = strategyRouter.getExchange();
-        tokenB.transfer(address(exchange), amountB);
-        amountA += exchange.swap(amountB, address(tokenB), address(tokenA), address(this));
-        tokenA.transfer(msg.sender, amountA);
-        return amountA;
+            farm.withdraw(poolId, liquidityToRemove);
+            uint256 bswAmount = bsw.balanceOf(address(this));
+            sellRewardToTokenA(bswAmount);
+
+            lpToken.approve(address(biswapRouter), liquidityToRemove);
+            (amountA, amountB) = biswapRouter.removeLiquidity(
+                address(tokenA),
+                address(tokenB),
+                lpToken.balanceOf(address(this)),
+                0,
+                0,
+                address(this),
+                block.timestamp
+            );
+
+            Exchange exchange = strategyRouter.getExchange();
+            tokenB.transfer(address(exchange), amountB);
+            amountA +=
+                exchange.swap(
+                    amountB,
+                    address(tokenB),
+                    address(tokenA),
+                    address(this)
+                ) +
+                tokenABalance;
+            tokenA.transfer(msg.sender, amountA);
+            return amountA;
+        }
     }
 
     function compound() external override onlyOwner {
@@ -182,8 +226,12 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         // this formula is from uniswap.remove_liquidity -> uniswapPair.burn function
         uint256 balanceA = tokenA.balanceOf(address(lpToken));
         uint256 balanceB = tokenB.balanceOf(address(lpToken));
-        uint256 amountA = (liquidity * balanceA) / _totalSupply + tokenA.balanceOf(address(this));
-        uint256 amountB = (liquidity * balanceB) / _totalSupply + tokenB.balanceOf(address(this));
+        uint256 amountA = (liquidity * balanceA) /
+            _totalSupply +
+            tokenA.balanceOf(address(this));
+        uint256 amountB = (liquidity * balanceB) /
+            _totalSupply +
+            tokenB.balanceOf(address(this));
 
         if (amountB > 0) {
             address token0 = IUniswapV2Pair(address(lpToken)).token0();
@@ -199,10 +247,18 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return amountA;
     }
 
-    function withdrawAll() external override onlyOwner returns (uint256 amountWithdrawn) {
-        (uint256 amount, ) = farm.userInfo(poolId, address(this));
-        if (amount > 0) {
-            farm.withdraw(poolId, amount);
+    function withdrawAll()
+        external
+        override
+        onlyOwner
+        returns (uint256 amountWithdrawn)
+    {
+        (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
+        if (liquidity > 0) {
+            farm.withdraw(poolId, liquidity);
+            uint256 bswAmount = bsw.balanceOf(address(this));
+            sellRewardToTokenA(bswAmount);
+
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(biswapRouter), lpAmount);
             biswapRouter.removeLiquidity(
@@ -222,7 +278,12 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         if (amountB > 0) {
             Exchange exchange = strategyRouter.getExchange();
             tokenB.transfer(address(exchange), amountB);
-            amountA += exchange.swap(amountB, address(tokenB), address(tokenA), address(this));
+            amountA += exchange.swap(
+                amountB,
+                address(tokenB),
+                address(tokenA),
+                address(this)
+            );
         }
         if (amountA > 0) {
             tokenA.transfer(msg.sender, amountA);
@@ -236,33 +297,89 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 amountB = tokenB.balanceOf(address(this));
         uint256 amountA = tokenA.balanceOf(address(this)) - amountIgnore;
         uint256 toSwap;
-        if (amountB > amountA && (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B) {
-            uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
+        if (
+            amountB > amountA &&
+            (toSwap = amountB - amountA) > LEFTOVER_THRESHOLD_TOKEN_B
+        ) {
+            uint256 dexFee = exchange.getExchangeProtocolFee(
+                toSwap / 2,
+                address(tokenA),
+                address(tokenB)
+            );
             toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
-            exchange.swap(toSwap, address(tokenB), address(tokenA), address(this));
-        } else if (amountA > amountB && (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A) {
-            uint256 dexFee = exchange.getExchangeProtocolFee(toSwap / 2, address(tokenA), address(tokenB));
+            exchange.swap(
+                toSwap,
+                address(tokenB),
+                address(tokenA),
+                address(this)
+            );
+        } else if (
+            amountA > amountB &&
+            (toSwap = amountA - amountB) > LEFTOVER_THRESHOLD_TOKEN_A
+        ) {
+            uint256 dexFee = exchange.getExchangeProtocolFee(
+                toSwap / 2,
+                address(tokenA),
+                address(tokenB)
+            );
             toSwap = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
-            exchange.swap(toSwap, address(tokenA), address(tokenB), address(this));
+            exchange.swap(
+                toSwap,
+                address(tokenA),
+                address(tokenB),
+                address(this)
+            );
         }
     }
 
     // swap bsw for tokenA & tokenB in proportions 50/50
-    function sellReward(uint256 bswAmount) private returns (uint256 receivedA, uint256 receivedB) {
+    function sellReward(uint256 bswAmount)
+        private
+        returns (uint256 receivedA, uint256 receivedB)
+    {
         // sell for lp ratio
         uint256 amountA = bswAmount / 2;
         uint256 amountB = bswAmount - amountA;
 
         Exchange exchange = strategyRouter.getExchange();
         bsw.transfer(address(exchange), amountA);
-        receivedA = exchange.swap(amountA, address(bsw), address(tokenA), address(this));
+        receivedA = exchange.swap(
+            amountA,
+            address(bsw),
+            address(tokenA),
+            address(this)
+        );
 
         bsw.transfer(address(exchange), amountB);
-        receivedB = exchange.swap(amountB, address(bsw), address(tokenB), address(this));
+        receivedB = exchange.swap(
+            amountB,
+            address(bsw),
+            address(tokenB),
+            address(this)
+        );
 
-        (receivedA, receivedB) = collectProtocolCommission(receivedA, receivedB);
+        (receivedA, receivedB) = collectProtocolCommission(
+            receivedA,
+            receivedB
+        );
+    }
+
+    function sellRewardToTokenA(uint256 bswAmount)
+        private
+        returns (uint256 receivedA)
+    {
+        Exchange exchange = strategyRouter.getExchange();
+        bsw.transfer(address(exchange), bswAmount);
+        receivedA = exchange.swap(
+            bswAmount,
+            address(bsw),
+            address(tokenA),
+            address(this)
+        );
+
+        (receivedA, ) = collectProtocolCommission(receivedA, 0);
     }
 
     function collectProtocolCommission(uint256 amountA, uint256 amountB)
@@ -272,16 +389,19 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
         address feeAddress = StrategyRouter(strategyRouter).feeAddress();
         uint256 ratioUint;
-        uint256 feeAmount = ((amountA + amountB) * feePercent) / PERCENT_DENOMINATOR;
+        uint256 feeAmount = ((amountA + amountB) * feePercent) /
+            PERCENT_DENOMINATOR;
         {
-            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
+            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken))
+                .getReserves();
 
             // equation: (a - (c*v))/(b - (c-c*v)) = z/x
             // solution for v = (a*x - b*z + c*z) / (c * (z+x))
             // a,b is current token amounts, z,x is pair reserves, c is total fee amount to take from a+b
             // v is ratio to apply to feeAmount and take fee from a and b
             // a and z should be converted to same decimals as token b (TODO for cases when decimals are different)
-            int256 numerator = int256(amountA * r1 + feeAmount * r0) - int256(amountB * r0);
+            int256 numerator = int256(amountA * r1 + feeAmount * r0) -
+                int256(amountB * r0);
             int256 denominator = int256(feeAmount * (r0 + r1));
             int256 ratio = (numerator * 1e18) / denominator;
             // ratio here could be negative or greater than 1.0
@@ -303,20 +423,59 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return (amountA - comissionA, amountB - comissionB);
     }
 
-    function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {
-        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
+    function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee)
+        private
+        view
+        returns (uint256 amountAfterFee)
+    {
+        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(
+            address(lpToken)
+        ).getReserves();
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
-        uint256 priceBinA = getPriceBinA();
-        (reserve0, reserve1) = address(tokenA) == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
-        uint256 amountXToSell = (tokenAmount * reserve1 * 1e18) / (priceBinA * reserve0 * (1e18 - dexFee) / 1e18 + reserve1 * 1e18);
-        uint256 amountY = (amountXToSell * priceBinA * (1e18 - dexFee)) / 1e36;
-        return amountY;
+        uint256 oraclePrice;
+        uint256 ammPrice;
+        (reserve0, reserve1, oraclePrice, ammPrice) = address(tokenA) == token0
+            ? (
+                reserve0,
+                reserve1,
+                getOraclePrice(address(tokenA), address(tokenB)),
+                (reserve0 * 1e18) / reserve1
+            )
+            : (
+                reserve1,
+                reserve0,
+                getOraclePrice(address(tokenB), address(tokenA)),
+                (reserve1 * 1e18) / reserve0
+            );
+        uint256 priceDiff = oraclePrice > ammPrice
+            ? oraclePrice - ammPrice
+            : ammPrice - oraclePrice;
+        if (priceDiff > PRICE_DELTA) revert PriceManipulation();
+        uint256 amountAToSell = (tokenAmount * reserve1 * 1e18) /
+            ((oraclePrice * reserve0 * (1e18 - dexFee)) /
+                1e18 +
+                reserve1 *
+                1e18);
+        uint256 amountBToSell = (amountAToSell *
+            oraclePrice *
+            (1e18 - dexFee)) / 1e36;
+        return amountBToSell;
     }
 
-    // Return Price B in A with 18 decimals
-    function getPriceBinA() public view returns (uint256 price) {
-        (uint256 priceB, uint8 priceBDecimals) = oracle.getTokenUsdPrice(address(tokenB));
-        (uint256 priceA, uint8 priceADecimals) = oracle.getTokenUsdPrice(address(tokenA));
-        price = (priceB * 1e18 * (10 ** priceADecimals)) / (priceA * (10 ** priceBDecimals));
+    // Return Price of token0 in token1 with 18 decimals
+    function getOraclePrice(address token0, address token1)
+        public
+        view
+        returns (uint256 price)
+    {
+        (uint256 price0, uint8 price0Decimals) = oracle.getTokenUsdPrice(
+            token0
+        );
+        (uint256 price1, uint8 price1Decimals) = oracle.getTokenUsdPrice(
+            token1
+        );
+        price =
+            (price1 * 1e18 * (10**price0Decimals)) /
+            (price0 * (10**price1Decimals));
     }
 }
