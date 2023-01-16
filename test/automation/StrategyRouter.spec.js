@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestParams, deployFakeStrategy } = require("../shared/commonSetup");
 const { skipTimeAndBlocks, provider, parseUniform } = require("../utils");
 
-describe.only("StrategyRouter upkeep automation", function () {
+describe("StrategyRouter upkeep automation", function () {
 
   let owner, user1, user2;
   // mock tokens with different decimals

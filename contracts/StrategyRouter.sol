@@ -75,6 +75,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error CantRemoveLastStrategy();
     error NothingToRebalance();
     error NotModerator();
+    error WithdrawnAmountLowerThanExpectedAmount();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -98,6 +99,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
+    // we do not try to withdraw amount below this threshold
+    // cause gas spendings are high compared to this amount
+    uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17; // 10 cents / 0.1 USD
 
     /// @notice The time of the first deposit that triggered a current cycle
     uint256 public currentCycleFirstDepositAt;
@@ -380,8 +384,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function withdrawFromStrategies(
         uint256[] calldata receiptIds,
         address withdrawToken,
-        uint256 shares
-    ) external {
+        uint256 shares,
+        uint256 minTokenAmountToWithdraw
+    ) external returns (uint256 withdrawnAmount) {
         if (shares == 0) revert AmountNotSpecified();
         if (!supportsToken(withdrawToken)) revert UnsupportedToken();
 
@@ -426,7 +431,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // shares into usd using current PPS
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
-        _withdrawFromStrategies(usdToWithdraw, withdrawToken);
+        withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minTokenAmountToWithdraw);
     }
 
     /// @notice Withdraw tokens from batch.
@@ -617,20 +622,25 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @param withdrawAmountUsd - USD value to withdraw. `UNIFORM_DECIMALS` decimals.
     /// @param withdrawToken Supported token to receive after withdraw.
-    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken) private {
+    /// @param minTokenAmountToWithdraw min amount expected to be withdrawn
+    /// @return tokenAmountToWithdraw amount of tokens that were actually withdrawn
+    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minTokenAmountToWithdraw)
+        private
+        returns (uint256 tokenAmountToWithdraw)
+    {
         (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
-
-        uint256 tokenAmountToWithdraw;
 
         // find token to withdraw requested token without extra swaps
         // otherwise try to find token that is sufficient to fulfill requested amount
         uint256 supportedTokenId = type(uint256).max; // index of strategy, uint.max means not found
-        for (uint256 i; i < strategiesCount; i++) {
-            address strategyDepositToken = strategies[i].depositToken;
-            if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
-                supportedTokenId = i;
-                if (strategyDepositToken == withdrawToken) break;
+        {
+            for (uint256 i; i < strategiesCount; i++) {
+                address strategyDepositToken = strategies[i].depositToken;
+                if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
+                    supportedTokenId = i;
+                    if (strategyDepositToken == withdrawToken) break;
+                }
             }
         }
 
@@ -657,12 +667,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     withdrawToken
                 );
             }
+            // we assume that the whole requested amount was withdrawn
+            // we on purpose do not adjust for slippage, fees, etc
+            // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+            // if the actual withdrawn amount (tokenAmountToWithdraw) doesn't meet the requested amount
+            // then the slippage protection will revert execution at the end of this function
+            // with WithdrawnAmountLowerThanExpectedAmount error
             withdrawAmountUsd = 0;
         }
 
         // if we didn't fulfilled withdraw amount above,
         // swap tokens one by one until withraw amount is fulfilled
-        if (withdrawAmountUsd != 0) {
+        if (withdrawAmountUsd >= WITHDRAWAL_DUST_THRESHOLD_USD) {
             for (uint256 i; i < strategiesCount; i++) {
                 address tokenAddress = strategies[i].depositToken;
                 uint256 tokenAmountToSwap;
@@ -673,8 +689,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     ? strategyTokenBalancesUsd[i]
                     : withdrawAmountUsd;
                 unchecked {
+                    // we assume that the whole requested amount was withdrawn
+                    // we on purpose do not adjust for slippage, fees, etc
+                    // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+                    // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
                     withdrawAmountUsd -= tokenAmountToSwap;
                 }
+
                 // convert usd value into token amount
                 tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
@@ -687,11 +708,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     tokenAddress,
                     withdrawToken
                 );
-                if (withdrawAmountUsd == 0) break;
+
+                if (withdrawAmountUsd < WITHDRAWAL_DUST_THRESHOLD_USD) break;
             }
+        }
+
+        if (tokenAmountToWithdraw < minTokenAmountToWithdraw) {
+            revert WithdrawnAmountLowerThanExpectedAmount();
         }
 
         IERC20(withdrawToken).transfer(msg.sender, tokenAmountToWithdraw);
         emit WithdrawFromStrategies(msg.sender, withdrawToken, tokenAmountToWithdraw);
+
+        return tokenAmountToWithdraw;
     }
 }
