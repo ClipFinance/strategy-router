@@ -306,6 +306,7 @@ library StrategyRouterLib {
 
         uint256[] memory underflows = new uint256[](strategies.length);
         uint256[] memory overflows = new uint256[](strategies.length);
+        console.log('totalBalance', totalBalance);
         for (uint256 i; i < strategies.length; i++) {
             uint256 desiredBalance = (totalBalance * getStrategyPercentWeight(i, strategies)) / PRECISION;
             desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
@@ -318,6 +319,7 @@ library StrategyRouterLib {
             }
             console.log('overflows', i, overflows[i]);
             console.log('underflows', i, underflows[i]);
+            console.log('strategyDatas[i].balance', i, strategyDatas[i].balance);
         }
 
         _rebalanceStrategies(
@@ -357,15 +359,17 @@ library StrategyRouterLib {
                     continue;
                 }
                 IStrategy(strategyDatas[i].strategyAddress).withdraw(overflows[i]);
+//                console.log('balance', i, IStrategy(strategyDatas[i].tokenAddress).)
             }
         }
 
 //        uint256[] memory supportedTokenBalances = new uint256[](supportedTokensLen);
-//        for (uint256 i; i < supportedTokensLen; i++) {
-//            //        for (uint256 i; i < supportedTokensLen; i++) {
+        for (uint256 i; i < supportedTokensLen; i++) {
+            //        for (uint256 i; i < supportedTokensLen; i++) {
 //            supportedTokenBalances[i] = IERC20(supportedTokens[i]).balanceOf(address(this));
-////            totalBalance += toUniform(supportedTokenBalances[i], supportedTokens[i]);
-//        }
+            supportedTokenDatas[i].balance = IERC20(supportedTokenDatas[i].tokenAddress).balanceOf(address(this));
+//            totalBalance += toUniform(supportedTokenBalances[i], supportedTokens[i]);
+        }
 
         for (uint256 i; i < len; i++) {
             if (underflows[i] > 0) {
@@ -386,11 +390,16 @@ library StrategyRouterLib {
                             continue;
                         }
                         uint256 received = tokenBalanceUniform > underflowUniform
-                            ? fromUniform(underflowUniform, strategyDatas[j].tokenAddress)
+                            ? fromUniform(underflowUniform, supportedTokenDatas[j].tokenAddress)
                             : supportedTokenDatas[j].balance;
 
+                        console.log('underflowUniform', underflowUniform);
+                        console.log('tokenBalanceUniform', tokenBalanceUniform);
+                        console.log('supportedTokenDatas[j].balance', j, supportedTokenDatas[j].balance);
+                        console.log('received', received);
+                        console.log('true balance', IERC20(supportedTokenDatas[j].tokenAddress).balanceOf(address(this)));
                         supportedTokenDatas[j].balance -= received;
-                        received = trySwap(exchange, received, underflowToken, supportedTokenDatas[j].tokenAddress);
+                        received = trySwap(exchange, received, supportedTokenDatas[j].tokenAddress, underflowToken);
                         underflows[i] -= received;
                         underflowTokenBalance += received;
 
