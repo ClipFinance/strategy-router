@@ -595,7 +595,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
+        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, getSupportedTokens());
     }
 
     /// @notice Checkes weither upkeep method is ready to be called. 
