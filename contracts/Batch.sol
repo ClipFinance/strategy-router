@@ -287,44 +287,51 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         for (uint256 i; i < _strategiesAndSupportedTokensBalances.length; i++) {
-            for (uint256 j; j < strategiesCount; j++) {
-                // if we are not going to buy this token (nothing to sell), we simply skip to the next one
-                // if we can sell this token we go into swap routine
-                // we proceed to swap routine if there is some tokens to buy and some tokens sell
-                // if found which token to buy and which token to sell we proceed to swap routine
-                if (toSell[i] > 0 && toBuy[j] > 0) {
-                    // if toSell's 'i' greater than strats-1 (e.g. strats 2, tokens 2, i=2, 2>2-1==true)
-                    // then take supported_token[2-2=0]
+            address sellToken = i > strategiesCount - 1
+                ? _tokens[i - strategiesCount]
+                : router.getStrategyDepositToken(i);
+            uint256 toSellUniform = toUniform(toSell[i], sellToken);
+            if (toSellUniform > REBALANCE_SWAP_THRESHOLD) {
+                for (uint256 j; j < strategiesCount; j++) {
+                    // if we are not going to buy this token (nothing to sell), we simply skip to the next one
+                    // if we can sell this token we go into swap routine
+                    // we proceed to swap routine if there is some tokens to buy and some tokens sell
+                    // if found which token to buy and which token to sell we proceed to swap routine
+
+                    // if toSell's 'i' greater than strategies - 1 (e.g. strategies 2, tokens 2, i = 2, 2 > 2 - 1 == true)
+                    // then take supported_token[2 - 2 = 0]
                     // otherwise take strategy_token[0 or 1]
-                    address sellToken = i > strategiesCount - 1
-                        ? _tokens[i - strategiesCount]
-                        : router.getStrategyDepositToken(i);
                     address buyToken = router.getStrategyDepositToken(j);
 
-                    uint256 toSellUniform = toUniform(toSell[i], sellToken);
                     uint256 toBuyUniform = toUniform(toBuy[j], buyToken);
-                    /*
-                    Weight of strategies is in token amount not usd equivalent
-                    In case of stablecoin depeg an administrative decision will be made to move out of the strategy
-                    that has exposure to depegged stablecoin.
-                    curSell should have sellToken decimals
-                    */
-                    uint256 curSell = toSellUniform > toBuyUniform
-                        ? changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals())
-                        : toSell[i];
 
-                    // no need to swap small amounts
-                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
-                        toSell[i] = 0;
-                        toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
-                        break;
+                    if (toBuyUniform > REBALANCE_SWAP_THRESHOLD) {
+                        /*
+                            Weight of strategies is in token amount not usd equivalent
+                            In case of stablecoin depeg an administrative decision will be made to move out of the strategy
+                            that has exposure to depegged stablecoin.
+                            curSell should have sellToken decimals
+                        */
+                        uint256 curSell;
+                        if (toSellUniform > toBuyUniform) {
+                            curSell = changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals());
+                            toSellUniform -= toBuyUniform;
+                        } else {
+                            curSell = toSell[i];
+                            toSellUniform = 0;
+                        }
+
+                        uint256 received = _trySwap(curSell, sellToken, buyToken);
+
+                        _strategiesAndSupportedTokensBalances[i] -= curSell;
+                        _strategiesAndSupportedTokensBalances[j] += received;
+                        toSell[i] -= curSell;
+                        toBuy[j] -= received;
+
+                        if (toSellUniform <= REBALANCE_SWAP_THRESHOLD) {
+                            break; // nothing to sell in this iteration, continue with the next selling item
+                        }
                     }
-                    uint256 received = _trySwap(curSell, sellToken, buyToken);
-
-                    _strategiesAndSupportedTokensBalances[i] -= curSell;
-                    _strategiesAndSupportedTokensBalances[j] += received;
-                    toSell[i] -= curSell;
-                    toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                 }
             }
         }
