@@ -14,8 +14,7 @@ module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
-  deploy, deployProxy,
-  matchTokenBalancesInStrategies, matchStrategyBalanceInAdvance, saturateTokenBalancesInStrategies,
+  deploy, deployProxy, saturateTokenBalancesInStrategies,
   convertFromUsdToTokenAmount, applySlippageInBps,
 }
 
@@ -145,26 +144,6 @@ function printStruct(struct) {
   console.log(out);
 }
 
-// Use this method if you want deposit token's smart contract balance to match exactly mocked strategy recorder balance 
-//
-// When mock strategy compound method called, strategy's balance is updated
-// However this recorded balance is now different from what is recorded in token smart contract
-// for mocked strategy address
-// If we try to make withdrawal actions, we will run into an error raised by token smart contract
-// since we will try to withdraw a recorder balance that is bigger that the actual balance in token smart contract
-// To avoid such situation, we should call this method, that will match recorded balance of strategy
-// to actual balance in token smart contract
-// This only affects MockedStrategies, due to how that handle compound.
-async function matchTokenBalancesInStrategies(router) {
-  const strategiesData = await router.getStrategies();
-  for( i = 0; i < strategiesData.length; i++) {
-    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
-    let depositToken = await strategyContract.depositToken();
-    let strategyBalance = await strategyContract.totalTokens();
-    await matchTokenBalance(depositToken, strategiesData[i].strategyAddress, strategyBalance);
-  }
-}
-
 // Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance 
 async function saturateTokenBalancesInStrategies(router) {
   const strategiesData = await router.getStrategies();
@@ -207,19 +186,6 @@ async function matchTokenBalance(tokenAddress, tokenHolder, matchAmount) {
       diffAmount
     );
   }
-}
-
-async function matchStrategyBalanceInAdvance(router, strategyIndex) {
-  const strategiesData = await router.getStrategies();
-  let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[strategyIndex][0]);
-  let depositToken = await strategyContract.depositToken();
-  let tokenContract = await ethers.getContractAt("ERC20", depositToken);
-  // note sure why, but here we get balance that is a bit different in  260 WEI, 
-  // comparing to what we log in mocked strategy on withdrawal. Not sure of why this happening
-  let tokenBalance = await tokenContract.balanceOf(strategiesData[strategyIndex][0]);
-  let newSafeBalance = tokenBalance.mul(BigNumber.from(10100000005)).div(BigNumber.from(10000000000));
-
-  await matchTokenBalance(depositToken, strategiesData[strategyIndex][0], newSafeBalance);
 }
 
 async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)

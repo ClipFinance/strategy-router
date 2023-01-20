@@ -81,7 +81,6 @@ describe("Test StrategyRouter protocol fee collection", function () {
       await router.allocateToStrategies();
   
       let totalShares = await sharesToken.totalSupply();
-      // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
       expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("2"));
 
       let protocolShares = await sharesToken.balanceOf(feeAddress.address);
@@ -194,7 +193,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           await router.allocateToStrategies();
       
           let totalShares = await sharesToken.totalSupply();
-          // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
+          // 2980 shares - because after 2 cycle compound has brought 20 USD, which made PPS be 1% more valuable
           expect(totalShares.toString()).to.be.closeTo(parseUniform("2980"), parseUniform("4"));
     
           let protocolShares = await sharesToken.balanceOf(feeAddress.address);

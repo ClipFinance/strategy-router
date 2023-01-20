@@ -57,6 +57,10 @@ describe("Test StrategyRouter", function () {
     await deployFakeStrategy({ router, token: usdt });
 
     await saturateTokenBalancesInStrategies(router);
+
+    // admin initial deposit to set initial shares and pps
+    await router.depositToBatch(busd.address, parseBusd("1"));
+    await router.allocateToStrategies();
   });
 
   beforeEach(async function () {
