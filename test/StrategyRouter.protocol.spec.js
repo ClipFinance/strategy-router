@@ -9,14 +9,11 @@ const {
 } = require("./shared/commonSetup");
 const {
   skipTimeAndBlocks,
-  MaxUint256,
-  deploy,
   provider,
   parseUniform,
   convertFromUsdToTokenAmount,
   applySlippageInBps,
 } = require("./utils");
-const { BigNumber } = require("ethers");
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
   let owner, user2;

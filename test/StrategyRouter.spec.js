@@ -1,19 +1,20 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { MaxUint256, parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
-const { BigNumber } = require("ethers");
+const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
+const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
 
-  let owner, nonReceiptOwner;
+  let owner, nonReceiptOwner, feeAddress;
   // mock tokens with different decimals
   let usdc, usdt, busd;
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
+  let allocationWindowTime;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -21,11 +22,12 @@ describe("Test StrategyRouter", function () {
 
   before(async function () {
 
-    [owner, nonReceiptOwner] = await ethers.getSigners();
+    [owner, nonReceiptOwner,,,,,,,,feeAddress] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
+    allocationWindowTime = await router.allocationWindowTime();
 
     // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
@@ -54,6 +56,8 @@ describe("Test StrategyRouter", function () {
     await deployFakeStrategy({ router, token: usdc });
     await deployFakeStrategy({ router, token: usdt });
 
+    await saturateTokenBalancesInStrategies(router);
+
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1"));
     await router.allocateToStrategies();
@@ -70,7 +74,6 @@ describe("Test StrategyRouter", function () {
   after(async () => {
     await provider.send("evm_revert", [initialSnapshot]);
   });
-
 
   it("should allocateToStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
@@ -375,6 +378,5 @@ describe("Test StrategyRouter", function () {
       expect(receipts2.toString()).to.be.equal("");
     });
 
-  });
-
+  }); 
 });
