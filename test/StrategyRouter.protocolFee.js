@@ -77,11 +77,11 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
     it("should have no shares if there was yield", async function () {
       // deposit to strategies  
-      await router.depositToBatch(busd.address, parseBusd("1000"));
+      await router.depositToBatch(busd.address, parseBusd("10000"));
       await router.allocateToStrategies();
   
       let totalShares = await sharesToken.totalSupply();
-      expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("2"));
+      expect(totalShares.toString()).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
 
       let protocolShares = await sharesToken.balanceOf(feeAddress.address);
       expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
@@ -92,30 +92,25 @@ describe("Test StrategyRouter protocol fee collection", function () {
       // get struct data and check TVL at the end of cycle
       let cycleData = await router.getCycle(currentCycleId-1);
 
-      // totalDepositedInUsd; deposited BUSD with rate 1.01
-      expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-      // receivedByStrategiesInUsd
-      expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-      // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-      expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-      // pricePerShare
+      expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+      expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
+      expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
       expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
     });
 
     describe("after first cycle", function () {
       beforeEach(async function () {
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
       });
 
       it("should have on shares if there was yield", async function () {
         // deposit to strategies  
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
     
         let totalShares = await sharesToken.totalSupply();
-        // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
-        expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("5"));
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("19780"), parseUniform("2"));
   
         let protocolShares = await sharesToken.balanceOf(feeAddress.address);
         expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
@@ -126,13 +121,9 @@ describe("Test StrategyRouter protocol fee collection", function () {
         // get struct data and check TVL at the end of cycle
         let cycleData = await router.getCycle(currentCycleId-1);
   
-        // totalDepositedInUsd; deposited BUSD with rate 1.01
-        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-        // receivedByStrategiesInUsd
-        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("2000"), parseUniform("6"));
-        // pricePerShare
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9920"), parseUniform("3"));
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("19980"), parseUniform("2"));
         expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
       });
     });
@@ -140,7 +131,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
   describe("Stablecoin rate fluctuates", function () {
     beforeEach(async function () {
-      await router.depositToBatch(busd.address, parseBusd("1000"));
+      await router.depositToBatch(busd.address, parseBusd("10000"));
       await router.allocateToStrategies();
     });
 
@@ -152,12 +143,11 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
       it("should have no shares if there was yield", async function () {
         // deposit to strategies  
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
     
         let totalShares = await sharesToken.totalSupply();
-        // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
-        expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("5"));
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("19780"), parseUniform("2"));
   
         let protocolShares = await sharesToken.balanceOf(feeAddress.address);
         expect(protocolShares.toString()).to.be.equal(parseUniform("0"));
@@ -168,13 +158,9 @@ describe("Test StrategyRouter protocol fee collection", function () {
         // get struct data and check TVL at the end of cycle
         let cycleData = await router.getCycle(currentCycleId-1);
   
-        // totalDepositedInUsd; deposited BUSD with rate 1.01
-        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("950"));
-        // receivedByStrategiesInUsd
-        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("980"), parseUniform("3"));
-        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("1970"), parseUniform("5"));
-        // pricePerShare
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("9500"));
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9720"), parseUniform("3"));
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("19575"), parseUniform("2"));
         expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("0.99"), parseUniform("0.01"));
       });
 
@@ -183,21 +169,20 @@ describe("Test StrategyRouter protocol fee collection", function () {
           let busdAmount = parseBusd("1.05");
           await oracle.setPrice(busd.address, busdAmount);
 
-          await router.depositToBatch(busd.address, parseBusd("1000"));
+          await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
         });
   
         it("should have shares if there was yield", async function () {
           // deposit to strategies  
-          await router.depositToBatch(busd.address, parseBusd("1000"));
+          await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
       
           let totalShares = await sharesToken.totalSupply();
-          // 2980 shares - because after 2 cycle compound has brought 20 USD, which made PPS be 1% more valuable
-          expect(totalShares.toString()).to.be.closeTo(parseUniform("2980"), parseUniform("4"));
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("29660"), parseUniform("3"));
     
           let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-          expect(protocolShares.toString()).to.be.closeTo(parseUniform("8.56"), parseUniform("0.1"));
+          expect(protocolShares.toString()).to.be.closeTo(parseUniform("85.40"), parseUniform("0.1"));
     
           const currentCycleId = await router.currentCycleId();
           expect(currentCycleId.toString()).to.be.equal("3");  
@@ -205,13 +190,9 @@ describe("Test StrategyRouter protocol fee collection", function () {
           // get struct data and check TVL at the end of cycle
           let cycleData = await router.getCycle(currentCycleId-1);
     
-          // totalDepositedInUsd; deposited BUSD with rate 1.01
-          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1050"));
-          // receivedByStrategiesInUsd
-          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1010"), parseUniform("1"));
-          // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("3060"), parseUniform("4"));
-          // pricePerShare
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10500"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("10010"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("30460"), parseUniform("4"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.01"));
         });
       });
@@ -230,11 +211,11 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
     it("should not have shares after first cycle", async function () {
       // deposit to strategies  
-      await router.depositToBatch(busd.address, parseBusd("1000"));
+      await router.depositToBatch(busd.address, parseBusd("10000"));
       await router.allocateToStrategies();
   
       let totalShares = await sharesToken.totalSupply();
-      expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("2"));
+      expect(totalShares.toString()).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
 
       let protocolShares = await sharesToken.balanceOf(feeAddress.address);
       expect(protocolShares.toString()).to.be.equal("0");
@@ -242,7 +223,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
     describe("after first cycle", function () {
       beforeEach(async function () {
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
       });
 
@@ -255,11 +236,11 @@ describe("Test StrategyRouter protocol fee collection", function () {
         }
 
         // deposit to strategies
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
     
         let totalShares = await sharesToken.totalSupply();
-        expect(totalShares.toString()).to.be.closeTo(parseUniform("2000"), parseUniform("5"));
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("19880"), parseUniform("2"));
   
         let protocolShares = await sharesToken.balanceOf(feeAddress.address);
         expect(protocolShares.toString()).to.be.equal("0");
@@ -270,27 +251,22 @@ describe("Test StrategyRouter protocol fee collection", function () {
         // get struct data and check TVL at the end of cycle
         let cycleData = await router.getCycle(currentCycleId-1);
 
-        // totalDepositedInUsd; deposited BUSD with rate 1.01
-        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-        // receivedByStrategiesInUsd
-        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("2000"), parseUniform("5"));
-        // pricePerShare
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9920"), parseUniform("3"));
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("19880"), parseUniform("2"));
         expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
       });
 
       it("should have shares if there was yield", async function () {
         // deposit to strategies  
-        await router.depositToBatch(busd.address, parseBusd("1000"));
+        await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
     
         let totalShares = await sharesToken.totalSupply();
-        // 1990 shares - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
-        expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("2"));
+        expect(totalShares.toString()).to.be.closeTo(parseUniform("19820"), parseUniform("2"));
   
         let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-        expect(protocolShares.toString()).to.be.closeTo(parseUniform("2"), parseUniform("0.1"));
+        expect(protocolShares.toString()).to.be.closeTo(parseUniform("19.8"), parseUniform("0.1"));
 
         const currentCycleId = await router.currentCycleId();
         expect(currentCycleId.toString()).to.be.equal("2");  
@@ -298,19 +274,15 @@ describe("Test StrategyRouter protocol fee collection", function () {
         // get struct data and check TVL at the end of cycle
         let cycleData = await router.getCycle(currentCycleId-1);
 
-        // totalDepositedInUsd; deposited BUSD with rate 1.01
-        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-        // receivedByStrategiesInUsd
-        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-        // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("2000"), parseUniform("6"));
-        // pricePerShare
+        expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+        expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9920"), parseUniform("3"));
+        expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("19980"), parseUniform("2"));
         expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
       });
 
       describe("after second cycle", function () {
         beforeEach(async function () {
-          await router.depositToBatch(busd.address, parseBusd("1000"));
+          await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
         });
   
@@ -329,10 +301,10 @@ describe("Test StrategyRouter protocol fee collection", function () {
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
           let totalShares = await sharesToken.totalSupply();
-          expect(totalShares.toString()).to.be.closeTo(parseUniform("1000"), parseUniform("1"));
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("2"));
     
           let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-          expect(protocolShares.toString()).to.be.closeTo(parseUniform("2"), parseUniform("0.02"));
+          expect(protocolShares.toString()).to.be.closeTo(parseUniform("19.7"), parseUniform("0.1"));
   
           const currentCycleId = await router.currentCycleId();
           expect(currentCycleId.toString()).to.be.equal("2");  
@@ -340,13 +312,9 @@ describe("Test StrategyRouter protocol fee collection", function () {
           // get struct data and check TVL at the end of cycle
           let cycleData = await router.getCycle(currentCycleId-1);
 
-          // totalDepositedInUsd; deposited BUSD with rate 1.01
-          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-          // receivedByStrategiesInUsd
-          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-          // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("1010"), parseUniform("3"));
-          // pricePerShare
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9920"), parseUniform("3"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("10060"), parseUniform("2"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));
         });
 
@@ -367,15 +335,14 @@ describe("Test StrategyRouter protocol fee collection", function () {
           });
 
           it("should have shares if there was yield", async function () {
-            await router.depositToBatch(busd.address, parseBusd("1000"));
+            await router.depositToBatch(busd.address, parseBusd("10000"));
             await router.allocateToStrategies();
 
             let totalShares = await sharesToken.totalSupply();
-            // 1990 - because after 1 cycle compound has brought 10 USD, which made PPS be 1% more valuable
-            expect(totalShares.toString()).to.be.closeTo(parseUniform("1990"), parseUniform("10"));
+            expect(totalShares.toString()).to.be.closeTo(parseUniform("19740"), parseUniform("2"));
       
             let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-            expect(protocolShares.toString()).to.be.closeTo(parseUniform("4"), parseUniform("0.05"));
+            expect(protocolShares.toString()).to.be.closeTo(parseUniform("39.5"), parseUniform("0.1"));
     
             const currentCycleId = await router.currentCycleId();
             expect(currentCycleId.toString()).to.be.equal("3");  
@@ -383,17 +350,267 @@ describe("Test StrategyRouter protocol fee collection", function () {
             // get struct data and check TVL at the end of cycle
             let cycleData = await router.getCycle(currentCycleId-1);
 
-            // totalDepositedInUsd; deposited BUSD with rate 1.01
-            expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("1010"));
-            // receivedByStrategiesInUsd
-            expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("1000"), parseUniform("3"));
-            // strategiesBalanceWithCompoundAndBatchDepositsInUsd
-            expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("2010"), parseUniform("10"));
-            // pricePerShare
+            expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+            expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9895"), parseUniform("2"));
+            expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("20060"), parseUniform("3"));
             expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.02"));
           });
         });
       });
     });
   });
+
+  describe("user withdraws funds", function () {
+    describe( "stable coin rate varies", function () {
+      beforeEach(async function () {
+        await router.depositToBatch(busd.address, parseBusd("10000"));
+        await router.allocateToStrategies();
+      });
+
+      describe( "rate not changed", function () {
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [0];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            200 // 2% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.eq(parseUniform("0"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.eq(parseUniform("0"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("1");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
+          expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
+        });
+      })
+  
+      describe( "rate decreased", function () {
+        beforeEach(async function () {
+          let busdAmount = parseBusd("0.95");
+          await oracle.setPrice(busd.address, busdAmount);
+        });
+  
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [0];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            200 // 2% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.eq(parseUniform("0"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.eq(parseUniform("0"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("1");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
+          expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
+        });
+      })
+  
+      describe( "rate increased", function () {
+        beforeEach(async function () {
+          let busdAmount = parseBusd("1.05"); // use to be 1.01
+          await oracle.setPrice(busd.address, busdAmount);
+        });
+  
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [0];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            1000 // 10% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.eq(parseUniform("0"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.eq(parseUniform("0"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("1");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9960"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
+          expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
+        });
+      })
+    })
+
+    describe( "Price per share varies", function () {
+      beforeEach(async function () {
+        let busdAmount = parseBusd("1");
+        await oracle.setPrice(busd.address, busdAmount);
+
+        await router.depositToBatch(busd.address, parseBusd("10000"));
+        await router.allocateToStrategies();
+      });
+
+      describe( "PPS not changed", function () {
+        beforeEach(async function () {
+          await router.depositToBatch(busd.address, parseBusd("10000"));
+          await router.allocateToStrategies();
+        });
+
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [1];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            200 // 2% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("9950"), parseUniform("3"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.closeTo(parseUniform("19.7"), parseUniform("0.1"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("2");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10000"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9885"), parseUniform("1"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("10030"), parseUniform("3"));
+          expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.01"), parseUniform("0.005"));
+        });
+      })
+  
+      describe( "PPS decreased", function () {
+        beforeEach(async function () {
+          let busdAmount = parseBusd("0.95");
+          await oracle.setPrice(busd.address, busdAmount);
+
+          await router.depositToBatch(busd.address, parseBusd("10000"));
+          await router.allocateToStrategies();
+        });
+  
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [1];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            200 // 2% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("9930"), parseUniform("2"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.eq(parseUniform("0"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("2");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("9500"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9720"), parseUniform("3"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("9860"), parseUniform("2"));
+          expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("0.99"), parseUniform("0.004"));
+        });
+      })
+  
+      describe( "PPS increased", function () {
+        beforeEach(async function () {
+          let busdAmount = parseBusd("1.05"); // use to be 1.01
+          await oracle.setPrice(busd.address, busdAmount);
+
+          await router.depositToBatch(busd.address, parseBusd("10000"));
+          await router.allocateToStrategies();
+        });
+  
+        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+          let receiptIds = [1];
+          let shares = await router.calculateSharesFromReceipts(receiptIds);
+          let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+          let expectedWithdrawAmount = applySlippageInBps(
+            await convertFromUsdToTokenAmount(
+              oracle,
+              busd,
+              sharesValueUsd
+            ),
+            1000 // 10% slippage
+          );
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
+    
+          let totalShares = await sharesToken.totalSupply();
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("1"));
+    
+          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
+          expect(protocolShares.toString()).to.be.closeTo(parseUniform("52.4"), parseUniform("0.1"));
+    
+          const currentCycleId = await router.currentCycleId();
+          expect(currentCycleId.toString()).to.be.equal("2");  
+    
+          // get struct data and check TVL at the end of cycle
+          let cycleData = await router.getCycle(currentCycleId-1);
+    
+          expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10500"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("10050"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("10195"), parseUniform("2"));
+          expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.005"));
+        });
+      })
+    })
+  })
 });
