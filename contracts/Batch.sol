@@ -321,12 +321,24 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             toSellUniform = 0;
                         }
 
+                        // is there any protocols that could take less sell token amount than we provide them
                         uint256 received = _trySwap(curSell, sellToken, buyToken);
 
                         _strategiesAndSupportedTokensBalances[i] -= curSell;
                         _strategiesAndSupportedTokensBalances[j] += received;
                         toSell[i] -= curSell;
-                        toBuy[j] -= received;
+                        // we are able to receive more tokens then we sold,
+                        // i.e. we have 1000 BUSD to sell, 1000 USDT to buy, 1 BUSD = 1.05 USDT,
+                        // we sell 1000 BUSD and get 1050 USDT
+                        if (received < toBuy[j]) {
+                            unchecked {
+                                toBuy[j] -= received;
+                            }
+                        } else {
+                            unchecked {
+                                toBuy[j] = 0;
+                            }
+                        }
 
                         if (toSellUniform <= REBALANCE_SWAP_THRESHOLD) {
                             break; // nothing to sell in this iteration, continue with the next selling item
