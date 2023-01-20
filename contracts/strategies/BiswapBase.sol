@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -24,14 +25,15 @@ contract BiswapBase is
 {
     error CallerUpgrader();
     error PriceManipulation();
+    error ZeroAmount();
 
-    address internal upgrader;
+    address public upgrader;
 
-    ERC20 internal immutable tokenA;
-    ERC20 internal immutable tokenB;
-    ERC20 internal immutable lpToken;
-    StrategyRouter internal immutable strategyRouter;
-    IUsdOracle internal immutable oracle;
+    ERC20 public immutable tokenA;
+    ERC20 public immutable tokenB;
+    ERC20 public immutable lpToken;
+    StrategyRouter public immutable strategyRouter;
+    IUsdOracle public immutable oracle;
 
     ERC20 internal constant bsw =
         ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
@@ -40,7 +42,7 @@ contract BiswapBase is
     IUniswapV2Router02 internal constant biswapRouter =
         IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
 
-    uint256 internal immutable poolId;
+    uint256 public immutable poolId;
 
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_A;
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
@@ -124,6 +126,8 @@ contract BiswapBase is
             address(this),
             block.timestamp
         );
+
+        if (liquidity == 0) revert ZeroAmount();
 
         lpToken.approve(address(farm), liquidity);
         farm.deposit(poolId, liquidity);
@@ -380,7 +384,7 @@ contract BiswapBase is
     }
 
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee)
-        private
+        internal
         view
         returns (uint256 amountA, uint256 amountB)
     {

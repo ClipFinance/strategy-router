@@ -14,6 +14,7 @@ module.exports = {
   setupCore,
   deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeToken,
   setupFakeTokens,
   setupTokensLiquidityOnPancake,
   setupParamsOnBNB,
@@ -23,6 +24,7 @@ module.exports = {
   setupPancakePlugin,
   setupFakeExchangePlugin,
   mintFakeToken,
+  deployBiswapStrategy,
 };
 
 async function deployFakeStrategy({
@@ -35,6 +37,24 @@ async function deployFakeStrategy({
   let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, token.address, weight);
+}
+
+async function deployBiswapStrategy({
+  router,
+  poolId,
+  tokenA,
+  tokenB,
+  lpToken,
+  oracle,
+  upgrader,
+}) {
+  let BiswapBase = await ethers.getContractFactory("MockBiswapBase");
+  let biswapStrategy = await upgrades.deployProxy(BiswapBase, [upgrader], {
+    kind: "uups",
+    constructorArgs: [router, poolId, tokenA, tokenB, lpToken, oracle],
+  });
+
+  return biswapStrategy;
 }
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({
@@ -75,6 +95,17 @@ async function setupFakeTokens() {
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 }
 
+async function setupFakeToken(
+  totalSupply = (100_000_000).toString(),
+  decimals = 18
+) {
+  let parseToken = (args) => parseUnits(args, decimals);
+  let token = await deploy("MockToken", parseToken(totalSupply), decimals);
+  token.decimalNumber = decimals;
+
+  return { token, parseToken };
+}
+
 async function mintFakeToken(toAddress, token, value) {
   await token.mint(toAddress, value);
 }
@@ -97,7 +128,7 @@ async function setupFakeExchangePlugin(oracle, slippageBps, feeBps) {
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount) {
+async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
   const [owner] = await ethers.getSigners();
   let uniswapRouter = await ethers.getContractAt(
     "IUniswapV2Router02",
@@ -105,7 +136,7 @@ async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount) {
   );
 
   let amountA = parseUnits(amount, await tokenA.decimals());
-  let amountB = parseUnits(amount, await tokenB.decimals());
+  let amountB = parseUnits(amount1 ? amount1 : amount, await tokenB.decimals());
   await tokenA.approve(uniswapRouter.address, amountA);
   await tokenB.approve(uniswapRouter.address, amountB);
   await uniswapRouter.addLiquidity(
