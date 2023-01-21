@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { loadFixture } = require("ethereum-waffle");
+const { BigNumber } = require("ethers");
 
 describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   async function loadState(rateCoefBps = 0) {
@@ -33,7 +34,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
     // setup supported tokens
     await router.setSupportedToken(usdc.address, true);
     await router.setSupportedToken(busd.address, true);
-    // await router.setSupportedToken(usdt.address, true);
+    await router.setSupportedToken(usdt.address, true);
 
     // add fake strategies
     await deployFakeUnderFulfilledWithdrawalStrategy({
@@ -63,15 +64,50 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       await oracle.setPrice(busd.address, parseBusd("1"));
       await oracle.setPrice(usdc.address, parseUsdc("0.95"));
 
+      await router.depositToBatch(busd.address, parseBusd("100"));
+
       // to sell[busd] = 100
       // to buy[usdc] = 100
-      await router.depositToBatch(busd.address, parseBusd("100"));
       await router.allocateToStrategies();
 
       const strategies = await router.getStrategies();
       const strategyBalanceUsdc = await usdc.balanceOf(strategies[0][0]);
-      
+
       expect(strategyBalanceUsdc).to.be.closeTo(parseUsdc('105'), parseUsdc('0.5'));
+    });
+    it('no leftovers on Batch after rebalance', async function() {
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+      } = await loadFixture(loadState);
+
+      // set 1 USDC = 0.95 BUSD
+      // set 1 USDC = 0.95 USDT
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("0.95"));
+
+      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(usdt.address, parseUsdt("100"));
+
+      // to sell[busd] = 100
+      // to sell[usdt] = 100
+      // to buy[usdc] = 200
+      // after the first iteration USDC really bought is 100 / 0.95 = 105.2631
+      // BUT buy[usdc] MUST be 200-100 = 100 to avoid leftovers
+      await router.allocateToStrategies();
+
+      console.log(await busd.balanceOf(batch.address));
+      console.log(await usdt.balanceOf(batch.address));
+
+      expect(
+        await busd.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+      expect(
+        await usdt.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
     });
     it('test before audit fix failure');
   });

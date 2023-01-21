@@ -15,7 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-//import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -276,6 +276,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
                     toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
                 }
+                console.log('toBuy[i]', i, toBuy[i]);
+                console.log('toSell[i]', i, toSell[i]);
             }
         }
 
@@ -315,14 +317,22 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         uint256 curSell;
                         if (toSellUniform > toBuyUniform) {
                             curSell = changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals());
-                            toSellUniform -= toBuyUniform;
+                            toBuy[j] = 0;
+                            unchecked {
+                                toSellUniform -= toBuyUniform;
+                            }
                         } else {
                             curSell = toSell[i];
+                            toBuy[j] -= fromUniform(toSellUniform, buyToken);
                             toSellUniform = 0;
                         }
+                        console.log('curSell', curSell);
+                        console.log('toSell', i, toSell[i]);
+                        console.log('toBuy', j, toBuy[j]);
 
                         // is there any protocols that could take less sell token amount than we provide them
                         uint256 received = _trySwap(curSell, sellToken, buyToken);
+                        console.log('received', i, j, received);
 
                         _strategiesAndSupportedTokensBalances[i] -= curSell;
                         _strategiesAndSupportedTokensBalances[j] += received;
@@ -330,15 +340,15 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         // we are able to receive more tokens then we sold,
                         // i.e. we have 1000 BUSD to sell, 1000 USDT to buy, 1 BUSD = 1.05 USDT,
                         // we sell 1000 BUSD and get 1050 USDT
-                        if (received < toBuy[j]) {
-                            unchecked {
-                                toBuy[j] -= received;
-                            }
-                        } else {
-                            unchecked {
-                                toBuy[j] = 0;
-                            }
-                        }
+//                        if (received < toBuy[j]) {
+//                            unchecked {
+//                                toBuy[j] -= received;
+//                            }
+//                        } else {
+//                            unchecked {
+//                                toBuy[j] = 0;
+//                            }
+//                        }
 
                         if (toSellUniform <= REBALANCE_SWAP_THRESHOLD) {
                             break; // nothing to sell in this iteration, continue with the next selling item
