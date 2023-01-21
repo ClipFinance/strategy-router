@@ -110,5 +110,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
     });
     it('test before audit fix failure');
+    it('test unoptimal orders of tokens and strategies');
   });
 });
