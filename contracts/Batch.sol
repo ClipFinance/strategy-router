@@ -272,10 +272,18 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                         uint256 toSell;
                         if (tokenBalanceUniform > desiredBalanceUniform) {
-                            toSell = fromUniform(desiredBalanceUniform, _tokens[j]);
-                            desiredBalance = 0;
-                            desiredBalanceUniform = 0;
-                            _balances[j] -= toSell;
+                            // manipulation to not leave dust in 1 satoshi
+                            if (tokenBalanceUniform == toUniform((fromUniform(desiredBalanceUniform, _tokens[j]) + 1), _tokens[j])) {
+                                toSell = _balances[j];
+                                desiredBalance = 0;
+                                desiredBalanceUniform = 0;
+                                _balances[j] = 0;
+                            } else {
+                                toSell = fromUniform(desiredBalanceUniform, _tokens[j]);
+                                desiredBalance = 0;
+                                desiredBalanceUniform = 0;
+                                _balances[j] -= toSell;
+                            }
                         } else {
                             toSell = _balances[j];
                             desiredBalance -= fromUniform(tokenBalanceUniform, strategyToken);
