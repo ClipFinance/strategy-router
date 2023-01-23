@@ -16,6 +16,8 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
+import "hardhat/console.sol";
+
 //import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
@@ -176,6 +178,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 8 - store remaining information for the current cycle
         */
         // step 1
+        console.log("step 1");
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
@@ -204,6 +207,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
+
+        //- Current cycle Id, _currentCycleId;
+        //- Current TVL in USD, balanceAfterCompoundInUsd ;
+        //- Current amount of shares, totalShares;
+        // uint256 totalShares = sharesToken.totalSupply();
+        // (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
+        // emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
 
         // step 5
         (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();

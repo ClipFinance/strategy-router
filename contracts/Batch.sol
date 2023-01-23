@@ -15,7 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-//import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -319,6 +319,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                         break;
                     }
+                    console.log("%s, %s, %s", curSell, sellToken, buyToken);
                     uint256 received = _trySwap(curSell, sellToken, buyToken);
 
                     _strategiesAndSupportedTokensBalances[i] -= curSell;
