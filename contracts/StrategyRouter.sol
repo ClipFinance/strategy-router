@@ -30,6 +30,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    /// @notice Fires when compound process is finished.
+    /// @param currentCycle Index of the current cycle.
+    /// @param currentTvl Current TVL in USD.
+    /// @param totalShares Current amount of shares.
+    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvl, uint256 totalShares);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -209,8 +214,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
+        uint256 totalShares = sharesToken.totalSupply();
+        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
+
         // step 5
-        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
@@ -228,7 +236,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();
+        totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].pricePerShare = (balanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
@@ -259,6 +267,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
+
+        uint256 totalShares = sharesToken.totalSupply();
+        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        emit AfterCompound(currentCycleId, balanceAfterCompoundInUsd, totalShares);
     }
 
     /// @dev Returns list of supported tokens.
