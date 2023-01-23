@@ -95,6 +95,7 @@ describe("Test Batch", function () {
         });
 
         it("should depositToBatch create receipt with correct values", async function () {
+            console.log('batch balance', await busd.balanceOf(batch.address));
             let depositAmount = parseBusd("100");
             await router.depositToBatch(busd.address, depositAmount);
 

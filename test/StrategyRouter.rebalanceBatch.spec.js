@@ -111,5 +111,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
     });
     it('test before audit fix failure');
     it('test unoptimal orders of tokens and strategies');
+    it('ensure tokenBalanceUniform > desiredBalanceUniform branches is checked');
+    it('ensure all branches are tested');
+    it('check no remnants on batch more extensively');
   });
 });

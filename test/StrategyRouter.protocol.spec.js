@@ -375,8 +375,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
 
       // deposit to strategies
-      await router.updateStrategy(0, 1000);
-      await router.updateStrategy(1, 9000);
+      await router.updateStrategy(0, 500);
+      await router.updateStrategy(1, 9500);
 
       await router.rebalanceStrategies();
 

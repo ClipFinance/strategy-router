@@ -202,30 +202,43 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 totalInBatch;
 
         // point 1
-        uint256 supportedTokensCount = supportedTokens.length();
-        address[] memory _tokens = new address[](supportedTokensCount);
-        uint256[] memory _balances = new uint256[](supportedTokensCount);
+//        uint256 supportedTokensCount = supportedTokens.length();
+        address[] memory _tokens = new address[](supportedTokens.length());
+        uint256[] memory _balances = new uint256[](supportedTokens.length());
 
         // point 2
-        for (uint256 i; i < supportedTokensCount; i++) {
+        for (uint256 i; i < supportedTokens.length(); i++) {
             _tokens[i] = supportedTokens.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
             // point 3
             totalInBatch += toUniform(_balances[i], _tokens[i]);
         }
+        console.log('totalInBatch', totalInBatch);
 
-        uint256 strategiesCount = router.getStrategiesCount();
-        balances = new uint256[](strategiesCount);
-        for (uint256 i; i < strategiesCount; i++) {
+        // temporal solution, rework in a separate PR
+        StrategyRouter.StrategyInfo[] memory strategies = router.getStrategies();
+//        uint256 strategiesCount = strategies.length;
+        uint totalStrategyWeight;
+        for (uint i; i < strategies.length; i++) {
+            totalStrategyWeight += strategies[i].weight;
+        }
+
+        balances = new uint256[](strategies.length);
+        for (uint256 i; i < strategies.length; i++) {
             address strategyToken = router.getStrategyDepositToken(i);
-            uint256 desiredBalanceUniform = (totalInBatch * router.getStrategyPercentWeight(i)) / 1e18;
+            uint256 desiredBalanceUniform = totalInBatch * strategies[i].weight / totalStrategyWeight;
+            totalInBatch -= desiredBalanceUniform;
+            totalStrategyWeight -= strategies[i].weight;
+
+            console.log('desiredBalanceUniform', desiredBalanceUniform);
+            console.log('router.getStrategyPercentWeight(i)', i, router.getStrategyPercentWeight(i));
             if (desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                 continue;
             }
             uint256 desiredBalance = fromUniform(desiredBalanceUniform, strategyToken);
             uint256 strategySupportedTokenIndex;
-            for (uint256 j; j < supportedTokensCount; j++) {
+            for (uint256 j; j < supportedTokens.length(); j++) {
                 if (strategyToken == _tokens[j]) {
                     strategySupportedTokenIndex = j;
                     break;
@@ -247,9 +260,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 }
             }
             console.log('desiredBalance', desiredBalance);
+            console.log('desiredBalanceUniform', desiredBalanceUniform);
 
             if (desiredBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
-                for (uint256 j; j < supportedTokensCount; j++) {
+                for (uint256 j; j < supportedTokens.length(); j++) {
                     if (j == strategySupportedTokenIndex) {
                         continue;
                     }
@@ -258,7 +272,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                         uint256 toSell;
                         if (tokenBalanceUniform > desiredBalanceUniform) {
-                            toSell = fromUniform(desiredBalance, _tokens[j]);
+                            toSell = fromUniform(desiredBalanceUniform, _tokens[j]);
                             desiredBalance = 0;
                             desiredBalanceUniform = 0;
                             _balances[j] -= toSell;
@@ -268,6 +282,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             desiredBalanceUniform -= tokenBalanceUniform;
                             _balances[j] = 0;
                         }
+                        console.log('tokenBalanceUniform', tokenBalanceUniform);
+                        console.log('desiredBalanceUniform', desiredBalanceUniform);
+                        console.log('toSell', toSell);
 
                         balances[i] += _trySwap(toSell, _tokens[j], strategyToken);
 
