@@ -214,8 +214,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        uint256 totalShares = sharesToken.totalSupply();
         (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
 
         // step 5
@@ -236,7 +236,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
 
-        totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].pricePerShare = (balanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
@@ -268,8 +267,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        uint256 totalShares = sharesToken.totalSupply();
         (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(currentCycleId, balanceAfterCompoundInUsd, totalShares);
     }
 
