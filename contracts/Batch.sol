@@ -226,11 +226,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         balances = new uint256[](strategies.length);
         for (uint256 i; i < strategies.length; i++) {
-            address strategyToken = router.getStrategyDepositToken(i);
+            address strategyToken = strategies[i].depositToken;
             uint256 desiredBalanceUniform = totalInBatch * strategies[i].weight / totalStrategyWeight;
-            totalInBatch -= desiredBalanceUniform;
             totalStrategyWeight -= strategies[i].weight;
 
+            console.log('totalInBatch', totalInBatch);
             console.log('desiredBalanceUniform', desiredBalanceUniform);
             console.log('router.getStrategyPercentWeight(i)', i, router.getStrategyPercentWeight(i));
             if (desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
@@ -248,17 +248,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 tokenBalanceUniform = toUniform(_balances[strategySupportedTokenIndex], strategyToken);
             if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                 if (_balances[strategySupportedTokenIndex] >= desiredBalance) {
-                    _balances[strategySupportedTokenIndex] -= desiredBalance;
-                    balances[i] += desiredBalance;
-                    desiredBalance = 0;
-                    desiredBalanceUniform = 0;
+                    // manipulation to avoid leaving dust
+                    if (tokenBalanceUniform - desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                        totalInBatch -= tokenBalanceUniform;
+                        balances[i] += _balances[strategySupportedTokenIndex];
+                        desiredBalance = 0;
+                        desiredBalanceUniform = 0;
+                        _balances[strategySupportedTokenIndex] = 0;
+                    } else {
+                        totalInBatch -= toUniform(desiredBalance, strategyToken);
+                        _balances[strategySupportedTokenIndex] -= desiredBalance;
+                        balances[i] += desiredBalance;
+                        desiredBalance = 0;
+                        desiredBalanceUniform = 0;
+                    }
                 } else {
+                    totalInBatch -= tokenBalanceUniform;
                     balances[i] += _balances[strategySupportedTokenIndex];
                     desiredBalance -= _balances[strategySupportedTokenIndex];
                     desiredBalanceUniform -= tokenBalanceUniform;
                     _balances[strategySupportedTokenIndex] = 0;
                 }
             }
+            console.log('totalInBatch after manipulation', totalInBatch);
             console.log('desiredBalance', desiredBalance);
             console.log('desiredBalanceUniform', desiredBalanceUniform);
 
@@ -271,25 +283,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     uint256 tokenBalanceUniform = toUniform(_balances[j], _tokens[j]);
                     if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                         uint256 toSell;
-                        if (tokenBalanceUniform > desiredBalanceUniform) {
-                            // manipulation to not leave dust in 1 satoshi
-                            if (tokenBalanceUniform == toUniform((fromUniform(desiredBalanceUniform, _tokens[j]) + 1), _tokens[j])) {
+                        if (tokenBalanceUniform >= desiredBalanceUniform) {
+                            // manipulation to avoid leaving dust
+                            if (tokenBalanceUniform - desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                                totalInBatch -= tokenBalanceUniform;
                                 toSell = _balances[j];
                                 desiredBalance = 0;
                                 desiredBalanceUniform = 0;
                                 _balances[j] = 0;
                             } else {
                                 toSell = fromUniform(desiredBalanceUniform, _tokens[j]);
+                                totalInBatch -= toUniform(toSell, _tokens[j]);
                                 desiredBalance = 0;
                                 desiredBalanceUniform = 0;
                                 _balances[j] -= toSell;
                             }
                         } else {
+                            totalInBatch -= tokenBalanceUniform;
                             toSell = _balances[j];
                             desiredBalance -= fromUniform(tokenBalanceUniform, strategyToken);
                             desiredBalanceUniform -= tokenBalanceUniform;
                             _balances[j] = 0;
                         }
+                        console.log('totalInBatch after manipulation', totalInBatch);
                         console.log('tokenBalanceUniform', tokenBalanceUniform);
                         console.log('desiredBalanceUniform', desiredBalanceUniform);
                         console.log('toSell', toSell);

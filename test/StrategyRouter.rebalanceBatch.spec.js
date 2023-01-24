@@ -37,11 +37,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
     await router.setSupportedToken(usdt.address, true);
 
     // add fake strategies
-    await deployFakeUnderFulfilledWithdrawalStrategy({
-      router,
-      token: usdc,
-      underFulfilledWithdrawalBps: 0,
-    });
     // await deployFakeUnderFulfilledWithdrawalStrategy({
     //   router,
     //   token: usdc,
@@ -59,6 +54,11 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   describe("when withdraw from a single strategy", async function () {
     it('receive more tokens than sold', async function() {
       const { router, oracle, busd, parseBusd, usdc, parseUsdc, batch } = await loadFixture(loadState);
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+      });
 
       // set 1 USDC = 0.95 BUSD
       await oracle.setPrice(busd.address, parseBusd("1"));
@@ -82,6 +82,11 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc, parseUsdc,
         usdt, parseUsdt,
       } = await loadFixture(loadState);
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+      });
 
       // set 1 USDC = 0.95 BUSD
       // set 1 USDC = 0.95 USDT
@@ -114,5 +119,71 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
     it('ensure tokenBalanceUniform > desiredBalanceUniform branches is checked');
     it('ensure all branches are tested');
     it('check no remnants on batch more extensively');
+    it('no remnants on strategy supported tokens', async function () {
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+      } = await loadFixture(loadState);
+
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 9950,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 50,
+      });
+
+      await router.depositToBatch(busd.address, parseBusd("10"));
+
+      // 1 BUSD = 1 USDC
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      await router.allocateToStrategies();
+
+      expect(
+        await busd.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+      expect(
+        await usdt.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+    });
+    it('busd busd', async function () {
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+      } = await loadFixture(loadState);
+
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 9950,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 50,
+      });
+
+      await router.depositToBatch(busd.address, parseBusd("10"));
+
+      await router.allocateToStrategies();
+
+      expect(
+        await busd.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+    });
+    it('3 strategies, 3 deposit tokens, 1 strategy with super low weight');
   });
 });

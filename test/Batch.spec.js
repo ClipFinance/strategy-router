@@ -95,7 +95,6 @@ describe("Test Batch", function () {
         });
 
         it("should depositToBatch create receipt with correct values", async function () {
-            console.log('batch balance', await busd.balanceOf(batch.address));
             let depositAmount = parseBusd("100");
             await router.depositToBatch(busd.address, depositAmount);
 
@@ -111,6 +110,45 @@ describe("Test Batch", function () {
             await oracle.setPrice(busd.address, parseBusd("0.1"));
             await expect(router.depositToBatch(busd.address, parseBusd("2.0")))
                 .to.be.revertedWith("DepositUnderMinimum");
+        });
+    });
+
+    describe("deposit in other tokens than strategy tokens", function () {
+        // snapshot to revert state changes that are made in this scope
+        let _snapshot;
+
+        beforeEach(async () => {
+            _snapshot = await provider.send("evm_snapshot");
+
+            // setup supported tokens
+            await router.setSupportedToken(usdc.address, true);
+            await router.setSupportedToken(busd.address, true);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdc });
+
+            // admin initial deposit to set initial shares and pps
+            await router.depositToBatch(busd.address, parseBusd("1"));
+            await router.allocateToStrategies();
+
+        });
+
+        afterEach(async () => {
+            await provider.send("evm_revert", [_snapshot]);
+        });
+
+        it("should depositToBatch create receipt with correct values", async function() {
+            let depositAmount = parseBusd("100");
+            await router.depositToBatch(busd.address, depositAmount);
+
+            let newReceipt = await receiptContract.getReceipt(1);
+            expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
+            expect(newReceipt.token).to.be.equal(busd.address);
+            expect(newReceipt.tokenAmountUniform).to.be.equal(parseUniform("100"));
+            expect(newReceipt.cycleId).to.be.equal(1);
+            expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
         });
     });
 
