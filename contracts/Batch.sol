@@ -202,12 +202,16 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 totalInBatch;
 
         // point 1
-//        uint256 supportedTokensCount = supportedTokens.length();
-        address[] memory _tokens = new address[](supportedTokens.length());
-        uint256[] memory _balances = new uint256[](supportedTokens.length());
+        address[] memory _tokens;
+        uint256[] memory _balances;
+        {
+            uint256 supportedTokensCount = supportedTokens.length();
+            _tokens = new address[](supportedTokensCount);
+            _balances = new uint256[](supportedTokensCount);
+        }
 
         // point 2
-        for (uint256 i; i < supportedTokens.length(); i++) {
+        for (uint256 i; i < _tokens.length; i++) {
             _tokens[i] = supportedTokens.at(i);
             _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
 
@@ -238,7 +242,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
             uint256 desiredBalance = fromUniform(desiredBalanceUniform, strategyToken);
             uint256 strategySupportedTokenIndex;
-            for (uint256 j; j < supportedTokens.length(); j++) {
+            for (uint256 j; j < _tokens.length; j++) {
                 if (strategyToken == _tokens[j]) {
                     strategySupportedTokenIndex = j;
                     break;
@@ -275,7 +279,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             console.log('desiredBalanceUniform', desiredBalanceUniform);
 
             if (desiredBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
-                for (uint256 j; j < supportedTokens.length(); j++) {
+                for (uint256 j; j < _tokens.length; j++) {
                     if (j == strategySupportedTokenIndex) {
                         continue;
                     }
