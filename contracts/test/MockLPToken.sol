@@ -2,7 +2,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract MockLpToken is ERC20("MockLP", "LP") {
+contract MockLPToken is ERC20("MockLP", "LP") {
     address public token0;
     address public token1;
 

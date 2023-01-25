@@ -48,7 +48,7 @@ contract BiswapBase is
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
-    uint256 private constant PRICE_DELTA = 1e17;
+    uint256 private constant PRICE_DELTA = 1e18;
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
@@ -106,6 +106,8 @@ contract BiswapBase is
             dexFee
         );
 
+        console.log(amountA);
+        console.log(amountB);
         tokenA.transfer(address(exchange), amountB);
         amountB = exchange.swap(
             amountB,
@@ -113,6 +115,9 @@ contract BiswapBase is
             address(tokenB),
             address(this)
         );
+
+        tokenA.approve(address(biswapRouter), 0);
+        tokenB.approve(address(biswapRouter), 0);
 
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
@@ -392,21 +397,20 @@ contract BiswapBase is
             address(lpToken)
         ).getReserves();
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
-        uint256 oraclePrice;
+        uint256 oraclePrice = getOraclePrice(address(tokenB), address(tokenA));
         uint256 ammPrice;
-        (reserve0, reserve1, oraclePrice, ammPrice) = address(tokenA) == token0
+        (reserve0, reserve1,  ammPrice) = address(tokenA) == token0
             ? (
                 reserve0,
                 reserve1,
-                getOraclePrice(address(tokenA), address(tokenB)),
-                (reserve0 * 1e18) / reserve1
+                (reserve1 * 1e18) / reserve0
             )
             : (
                 reserve1,
                 reserve0,
-                getOraclePrice(address(tokenB), address(tokenA)),
-                (reserve1 * 1e18) / reserve0
+                (reserve0 * 1e18) / reserve1
             );
+
         uint256 priceDiff = oraclePrice > ammPrice
             ? oraclePrice - ammPrice
             : ammPrice - oraclePrice;

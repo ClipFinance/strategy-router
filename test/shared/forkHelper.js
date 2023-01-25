@@ -1,5 +1,16 @@
 const { utils, BigNumber } = require("ethers");
 
+async function impersonate(account) {
+  await hre.network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [account],
+  });
+
+  let signer = await ethers.getSigner(account);
+
+  return signer;
+}
+
 async function forkToken(addr) {
   let token = await ethers.getContractAt("MockToken", addr);
   let decimals = Number((await token.decimals()).toString());
@@ -8,6 +19,12 @@ async function forkToken(addr) {
   let parseToken = (args) => utils.parseUnits(args, decimals);
 
   return { token, parseToken };
+}
+
+async function forkContract(contractName, addr) {
+  let contract = await ethers.getContractAt(contractName, addr);
+
+  return contract;
 }
 
 function encodeSlot(types, values) {
@@ -90,6 +107,8 @@ async function mintForkedToken(token, account, amount) {
 }
 
 module.exports = {
+  impersonate,
   forkToken,
+  forkContract,
   mintForkedToken,
 };

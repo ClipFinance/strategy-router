@@ -1,30 +1,29 @@
 const { expect } = require("chai");
-const { ethers, upgrades } = require("hardhat");
-const { utils } = require("ethers");
+const { ethers } = require("hardhat");
+const { utils, constants } = require("ethers");
+const { setupCore, deployBiswapStrategy } = require("../shared/commonSetup");
 const {
-  setupCore,
-  setupFakeTokens,
-  setupFakeToken,
-  setupTokensLiquidityOnPancake,
-  setupTestParams,
-  deployFakeStrategy,
-  deployBiswapStrategy,
-} = require("../shared/commonSetup");
-const { forkToken, mintForkedToken } = require("../shared/forkHelper");
+  forkToken,
+  mintForkedToken,
+  forkContract,
+  impersonate,
+} = require("../shared/forkHelper");
 const { provider, deploy } = require("../utils");
 
-describe.only("Test BiswapBase", function () {
+describe("Test BiswapBase", function () {
   let owner, nonReceiptOwner;
+  // mainnet contracts
+  let biswapFarm, biswapRouter, pancakeRouter, biswapOwner, biswapPoolId;
   // mock tokens with different decimals
-  let tokenA, tokenB, bsw;
+  let tokenA, tokenB, bsw, lpToken;
   // helper functions to parse amounts of mock tokens
-  let parseTokenA, parseTokenB, parseBsw;
+  let parseBsw;
   // Mock lp token
   let mockLpToken;
   // core contracts
-  let router, oracle, exchange, batch, receiptContract, sharesToken;
+  let router, oracle, mockExchange, batch, receiptContract, sharesToken;
   // biswap strategy
-  let biswapStrategy, mockBiswapStrategy;
+  let biswapStrategy;
   // pancake plugin
   let pancakePlugin;
   // revert to test-ready state
@@ -32,60 +31,128 @@ describe.only("Test BiswapBase", function () {
   // revert to fresh fork state
   let initialSnapshot;
 
-  const BISWAP_POOL_ID = 4;
-  const USDT_USDC_LP_ADDR = "0x1483767E665B3591677Fd49F724bf7430C18Bf83";
+  const BISWAP_ROUTER_ADDR = "0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8";
+  const BISWAP_FARM_ADDR = "0xDbc1A13490deeF9c3C12b44FE77b503c1B061739";
 
   before(async function () {
     [owner, nonReceiptOwner] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
-    ({ router, oracle, exchange, batch, receiptContract, sharesToken } =
+    ({ router, oracle, batch, receiptContract, sharesToken } =
       await setupCore());
 
-    const usdtInfo = await forkToken(hre.networkVariables.usdt);
-    tokenA = usdtInfo.token;
-    parseTokenA = usdtInfo.parseToken;
+    mockExchange = await deploy("MockExchange");
 
-    const usdcInfo = await forkToken(hre.networkVariables.usdc);
-    tokenB = usdcInfo.token;
-    parseTokenB = usdcInfo.parseToken;
+    await router.setAddresses(
+      mockExchange.address,
+      oracle.address,
+      sharesToken.address,
+      batch.address,
+      receiptContract.address
+    );
+
+    const token0 = await deploy("MockToken", utils.parseEther("100000000"), 18);
+    const token1 = await deploy("MockToken", utils.parseEther("100000000"), 18);
+    token0.decimals = 18;
+    token1.decimals = 18;
+
+    if (token0.address.toLowerCase() < token1.address.toLowerCase()) {
+      tokenA = token0;
+      tokenB = token1;
+    } else {
+      tokenB = token0;
+      tokenA = token1;
+    }
 
     const bswInfo = await forkToken(hre.networkVariables.bsw);
     bsw = bswInfo.token;
     parseBsw = bswInfo.parseToken;
 
+    await mintForkedToken(
+      bsw.address,
+      owner.address,
+      utils.parseEther("10000000000")
+    );
+
     mockLpToken = await deploy("MockLPToken", tokenA.address, tokenB.address);
+
+    biswapFarm = await forkContract("IBiswapFarm", BISWAP_FARM_ADDR);
+    biswapRouter = await forkContract("IUniswapV2Router02", BISWAP_ROUTER_ADDR);
+    pancakeRouter = await forkContract(
+      "IUniswapV2Router02",
+      hre.networkVariables.uniswapRouter
+    );
+
+    biswapOwner = await impersonate(await biswapFarm.owner());
+
+    await tokenA.approve(biswapRouter.address, constants.MaxUint256);
+    await tokenB.approve(biswapRouter.address, constants.MaxUint256);
+    await tokenA.approve(pancakeRouter.address, constants.MaxUint256);
+    await tokenB.approve(pancakeRouter.address, constants.MaxUint256);
+    await bsw.approve(pancakeRouter.address, constants.MaxUint256);
+
+    await tokenA.transfer(mockExchange.address, utils.parseEther("10000"));
+    await tokenB.transfer(mockExchange.address, utils.parseEther("10000"));
+
+    await biswapRouter.addLiquidity(
+      tokenA.address,
+      tokenB.address,
+      utils.parseEther("1000000"),
+      utils.parseEther("1000000"),
+      0,
+      0,
+      owner.address,
+      7777777777
+    );
+
+    await pancakeRouter.addLiquidity(
+      tokenA.address,
+      bsw.address,
+      utils.parseEther("1000000"),
+      utils.parseEther("5000000"),
+      0,
+      0,
+      owner.address,
+      7777777777
+    );
+    await pancakeRouter.addLiquidity(
+      tokenB.address,
+      bsw.address,
+      utils.parseEther("1000000"),
+      utils.parseEther("5000000"),
+      0,
+      0,
+      owner.address,
+      7777777777
+    );
+
+    const biswapFactory = await forkContract(
+      "IUniswapV2Factory",
+      await biswapRouter.factory()
+    );
+
+    const lpAddr = await biswapFactory.getPair(tokenA.address, tokenB.address);
+    lpToken = await forkContract("MockToken", lpAddr);
+
+    biswapPoolId = await biswapFarm.poolLength();
+
+    await owner.sendTransaction({
+      from: owner.address,
+      to: biswapOwner.address,
+      value: utils.parseEther("1"),
+    });
+    await biswapFarm.connect(biswapOwner).add(70, lpToken.address, false);
 
     biswapStrategy = await deployBiswapStrategy({
       router: router.address,
-      poolId: BISWAP_POOL_ID,
+      poolId: biswapPoolId,
       tokenA: tokenA.address,
       tokenB: tokenB.address,
-      lpToken: USDT_USDC_LP_ADDR,
+      lpToken: lpToken.address,
       oracle: oracle.address,
       upgrader: owner.address,
     });
-
-    mockBiswapStrategy = await deployBiswapStrategy({
-      router: router.address,
-      poolId: BISWAP_POOL_ID,
-      tokenA: tokenA.address,
-      tokenB: tokenB.address,
-      lpToken: mockLpToken.address,
-      oracle: oracle.address,
-      upgrader: owner.address,
-    });
-
-    pancakePlugin = await deploy("UniswapPlugin");
-
-    await exchange.setRoute(
-      [tokenA.address, bsw.address, bsw.address],
-      [tokenB.address, tokenB.address, tokenA.address],
-      [pancakePlugin.address, pancakePlugin.address, pancakePlugin.address]
-    );
-
-    await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
 
     const tokenAPrice = utils.parseUnits("1", 8);
     const tokenBPrice = utils.parseUnits("1", 8);
@@ -109,11 +176,10 @@ describe.only("Test BiswapBase", function () {
     it("check initial values", async function () {
       expect(await biswapStrategy.tokenA()).to.be.eq(tokenA.address);
       expect(await biswapStrategy.tokenB()).to.be.eq(tokenB.address);
-      expect(await biswapStrategy.lpToken()).to.be.eq(USDT_USDC_LP_ADDR);
+      expect(await biswapStrategy.lpToken()).to.be.eq(lpToken.address);
       expect(await biswapStrategy.strategyRouter()).to.be.eq(router.address);
       expect(await biswapStrategy.oracle()).to.be.eq(oracle.address);
-      expect(await biswapStrategy.poolId()).to.be.eq(BISWAP_POOL_ID);
-
+      expect(await biswapStrategy.poolId()).to.be.eq(biswapPoolId);
       expect(await biswapStrategy.depositToken()).to.be.eq(tokenA.address);
     });
   });
@@ -157,13 +223,9 @@ describe.only("Test BiswapBase", function () {
     let tokenAInitialBalance;
 
     beforeEach(async () => {
-      tokenAInitialBalance = parseTokenA("1000000");
+      tokenAInitialBalance = utils.parseEther("1000000");
 
-      await mintForkedToken(
-        tokenA.address,
-        biswapStrategy.address,
-        tokenAInitialBalance
-      );
+      await tokenA.transfer(biswapStrategy.address, tokenAInitialBalance);
     });
 
     it("it reverts if msg.sender is not owner", async function () {
@@ -173,34 +235,69 @@ describe.only("Test BiswapBase", function () {
     });
 
     it("deposit", async function () {
-      await biswapStrategy.deposit(parseTokenA("100"));
+      const amount = utils.parseEther("100");
+      await mockExchange.setAmountReceived(amount.div(2));
+      await biswapStrategy.deposit(amount);
+
+      const farmInfo = await biswapFarm.userInfo(
+        biswapPoolId,
+        biswapStrategy.address
+      );
+      expect(farmInfo.amount).not.eq("0");
+      expect(await tokenA.balanceOf(biswapStrategy.address))
+        .lt(tokenAInitialBalance)
+        .gte(tokenAInitialBalance.sub(amount));
     });
   });
 
-  describe.only("#calculateSwapAmount", function () {
-    let tokenAInitialBalance, tokenAmount;
-    const DEX_FEE = utils.parseEther("0.0025");
+  describe("#calculateSwapAmount", function () {
+    let tokenAmount;
+    let mockBiswapStrategyAB;
+    let mockBiswapStrategyBA;
+    const DEX_FEE = utils.parseEther("0.003");
 
     beforeEach(async () => {
-      tokenAInitialBalance = parseTokenA("1000000");
-      tokenAmount = parseTokenA("1000");
+      tokenAmount = utils.parseEther("2000");
 
-      await mintForkedToken(
-        tokenA.address,
-        biswapStrategy.address,
-        tokenAInitialBalance
-      );
+      mockBiswapStrategyAB = await deployBiswapStrategy({
+        router: router.address,
+        poolId: biswapPoolId,
+        tokenA: tokenA.address,
+        tokenB: tokenB.address,
+        lpToken: mockLpToken.address,
+        oracle: oracle.address,
+        upgrader: owner.address,
+      });
+
+      mockBiswapStrategyBA = await deployBiswapStrategy({
+        router: router.address,
+        poolId: biswapPoolId,
+        tokenA: tokenB.address,
+        tokenB: tokenA.address,
+        lpToken: mockLpToken.address,
+        oracle: oracle.address,
+        upgrader: owner.address,
+      });
     });
 
-    it.only("it reverts if oracle price and biswap price has too much difference", async function () {
+    it("it reverts if oracle price and biswap price has too much difference", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("10000"),
+        utils.parseEther("10000")
+      );
       await oracle.setPriceAndDecimals(
         tokenA.address,
-        utils.parseUnits("2", 8),
+        utils.parseUnits("10", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("0.1", 8),
         8
       );
 
       await expect(
-        biswapStrategy.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
+        mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWith("PriceManipulation()");
 
       await oracle.setPriceAndDecimals(
@@ -210,8 +307,268 @@ describe.only("Test BiswapBase", function () {
       );
 
       await expect(
-        biswapStrategy.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
+        mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWith("PriceManipulation()");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1, PriceYinX: 1, TotalAmountInX: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+
+      const { amountA: amountX, amountB: amountY } =
+        await mockBiswapStrategyAB.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("998497746619929894843");
+      expect(amountY).to.be.equal("998497746619929894841");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1, PriceYinX: 1, TotalAmountInY: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+
+      const { amountA: amountY, amountB: amountX } =
+        await mockBiswapStrategyBA.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("998497746619929894841");
+      expect(amountY).to.be.equal("998497746619929894843");
+    });
+
+    it("test scenario(X: 1200000, Y: 1000000, PriceXinY: 1.2, PriceYinX: 0.83, TotalAmountInX: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1200000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1.2", 8),
+        8
+      );
+
+      const { amountA: amountX, amountB: amountY } =
+        await mockBiswapStrategyAB.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("998497746619929894643");
+      expect(amountY).to.be.equal("832081455516608245534");
+    });
+
+    it("test scenario(X: 1200000, Y: 1000000, PriceXinY: 1.2, PriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1200000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1.2", 8),
+        8
+      );
+
+      const { amountA: amountY, amountB: amountX } =
+        await mockBiswapStrategyBA.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("1198197295943915873809");
+      expect(amountY).to.be.equal("998497746619929894843");
+    });
+
+    it("test scenario(X: 1000000, Y: 1200000, PriceXinY: 0.83, PriceYinX: 1.2, TotalAmountInX: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1200000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1.2", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+
+      const { amountA: amountX, amountB: amountY } =
+        await mockBiswapStrategyAB.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("998497746619929894843");
+      expect(amountY).to.be.equal("1198197295943915873809");
+    });
+
+    it("test scenario(X: 1000000, Y: 1200000, PriceXinY: 0.83, PriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1200000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1.2", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+
+      const { amountA: amountY, amountB: amountX } =
+        await mockBiswapStrategyBA.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("832081455516608245534");
+      expect(amountY).to.be.equal("998497746619929894643");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1.1, PriceYinX: 0.9, TotalAmountInX: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1.1", 8),
+        8
+      );
+
+      const { amountA: amountX, amountB: amountY } =
+        await mockBiswapStrategyAB.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("950882212684787791586");
+      expect(amountY).to.be.equal("950882212684787791584");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1.1, PriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1.1", 8),
+        8
+      );
+
+      const { amountA: amountY, amountB: amountX } =
+        await mockBiswapStrategyBA.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("1046120093480230838936");
+      expect(amountY).to.be.equal("1046120093480230838938");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 0.9, PriceYinX: 1.1, TotalAmountInX: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("0.9", 8),
+        8
+      );
+
+      const { amountA: amountX, amountB: amountY } =
+        await mockBiswapStrategyAB.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("1051133368476541908227");
+      expect(amountY).to.be.equal("1051133368476541908225");
+    });
+
+    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 0.9, PriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000000"),
+        utils.parseEther("1000000")
+      );
+      await oracle.setPriceAndDecimals(
+        tokenA.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("0.9", 8),
+        8
+      );
+
+      const { amountA: amountY, amountB: amountX } =
+        await mockBiswapStrategyBA.calculateSwapAmountPublic(
+          tokenAmount,
+          DEX_FEE
+        );
+
+      expect(amountX).to.be.equal("945870447477995045590");
+      expect(amountY).to.be.equal("945870447477995045592");
     });
   });
 });
