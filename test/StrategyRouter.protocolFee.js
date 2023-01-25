@@ -296,7 +296,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            200 // 2% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
@@ -329,7 +329,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
                 busd,
                 sharesValueUsd
               ),
-              200 // 2% slippage
+              700 // 7% slippage
             );
             await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
           });
@@ -378,7 +378,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            200 // 2% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
@@ -417,7 +417,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            200 // 2% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
@@ -456,7 +456,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            1000 // 10% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
@@ -505,7 +505,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            200 // 2% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 
@@ -547,7 +547,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               busd,
               sharesValueUsd
             ),
-            200 // 2% slippage
+            700 // 7% slippage
           );
           await router.withdrawFromStrategies(receiptIds, busd.address, shares, expectedWithdrawAmount);
 

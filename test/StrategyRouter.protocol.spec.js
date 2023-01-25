@@ -3,6 +3,7 @@ const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
 const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform, convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
+const { BigNumber } = require("ethers");
 
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
@@ -16,15 +17,13 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   let router, oracle, exchange, batch, receiptContract, sharesToken;
   let allocationWindowTime;
   let strategyBiswap, strategyBiswap2;
-  // revert to test-ready state
+
   let snapshotId;
-  // revert to fresh fork state
-  let initialSnapshot;
 
   before(async function () {
 
     [owner, user2] = await ethers.getSigners();
-    initialSnapshot = await provider.send("evm_snapshot");
+    snapshotId = await provider.send("evm_snapshot");
 
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
@@ -69,17 +68,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
   });
 
-  beforeEach(async function () {
-    snapshotId = await provider.send("evm_snapshot");
-  });
-
-  afterEach(async function () {
-    await provider.send("evm_revert", [snapshotId]);
-  });
-
-
   after(async function () {
-    await provider.send("evm_revert", [initialSnapshot]);
+    await provider.send("evm_revert", [snapshotId]);
   });
 
   describe("Test deposit to batch & withdraw from batch; allocate to strategies & withdraw from strategies", function() {
@@ -385,15 +375,14 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
 
       // deposit to strategies
-      await router.updateStrategy(0, 500);
-      await router.updateStrategy(1, 9500);
+      await router.updateStrategy(0, 1000);
+      await router.updateStrategy(1, 9000);
 
       await router.rebalanceStrategies();
 
       ({ balances, totalBalance } = await router.getStrategiesValue());
       // console.log(totalBalance, balances);
       // strategies should be balanced as 0% and 100% cause rebalance didn't happen
-      // due to ~0.05 USD to be allocated to the first strategy below the rebalance threshold
       expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
     });
