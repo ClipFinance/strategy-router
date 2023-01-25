@@ -16,13 +16,15 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
   let router, oracle, exchange, batch, receiptContract, sharesToken;
   let allocationWindowTime;
   let strategyBiswap, strategyBiswap2;
-
+  // revert to test-ready state
   let snapshotId;
+  // revert to fresh fork state
+  let initialSnapshot;
 
   before(async function () {
 
     [owner, user2] = await ethers.getSigners();
-    snapshotId = await provider.send("evm_snapshot");
+    initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
@@ -67,8 +69,17 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await router.allocateToStrategies();
   });
 
-  after(async function () {
+  beforeEach(async function () {
+    snapshotId = await provider.send("evm_snapshot");
+  });
+
+  afterEach(async function () {
     await provider.send("evm_revert", [snapshotId]);
+  });
+
+
+  after(async function () {
+    await provider.send("evm_revert", [initialSnapshot]);
   });
 
   describe("Test deposit to batch & withdraw from batch; allocate to strategies & withdraw from strategies", function() {

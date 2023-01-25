@@ -45,7 +45,7 @@ async function getUSDT(receiverAddress = null) {
   return await mintTokens(hre.networkVariables.usdt, receiverAddress);
 }
 
-// 'getTokens' functions are helpers to retrieve tokens during tests. 
+// 'getTokens' functions are helpers to retrieve tokens during tests.
 // Simply saying to draw fake balance for test wallet.
 async function getTokens(tokenAddress, holderAddress) {
   const [owner] = await ethers.getSigners();
@@ -123,7 +123,7 @@ async function skipBlocks(blocksNum) {
   await hre.network.provider.send("hardhat_mine", [blocksNum]);
 }
 
-// 
+//
 async function skipTimeAndBlocks(timeToSkip, blocksToSkip) {
   await provider.send("evm_increaseTime", [Number(timeToSkip)]);
   await provider.send("evm_mine");
@@ -144,7 +144,7 @@ function printStruct(struct) {
   console.log(out);
 }
 
-// Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance 
+// Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance
 async function saturateTokenBalancesInStrategies(router) {
   const strategiesData = await router.getStrategies();
   for( i = 0; i < strategiesData.length; i++) {
@@ -175,7 +175,7 @@ async function matchTokenBalance(tokenAddress, tokenHolder, matchAmount) {
     case hre.networkVariables.usdt:
       tokenMaster = hre.networkVariables.usdtHolder;
       break;
-    default: 
+    default:
     tokenMaster = owner;
   }
 
@@ -192,10 +192,10 @@ async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
 {
   let [price, pricePrecision] = await oracle.getTokenUsdPrice(token.address);
   let expectedWithdrawAmount = valueInUsd
-    .mul(price)
-    .div(
+    .mul(
       BigNumber.from(10).pow(pricePrecision)
     )
+    .div(price)
     .div(
       BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
     )

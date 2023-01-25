@@ -112,7 +112,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint256 public allocationWindowTime;
     /// @notice Current cycle counter. Incremented at the end of the cycle
     uint256 public currentCycleId;
-    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.  
+    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.
     uint256 public currentCycleDepositsCount;
     /// @notice Protocol comission in percents taken from yield. One percent is 100.
     uint256 public feePercent;
@@ -183,7 +183,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
             Description:
 
-                step 7.1 - Get previous TVL from previous cycle and calculate compounded profit: current TVL 
+                step 7.1 - Get previous TVL from previous cycle and calculate compounded profit: current TVL
                            minus previous cycle TVL. if current cycle = 0, then TVL = 0
                 step 7.2 - Save corrected current TVL in Cycle[strategiesBalanceWithCompoundAndBatchDepositsInUsd] for the next cycle
                 step 7.3 - Calculate price per share
@@ -384,6 +384,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 totalShares = sharesToken.totalSupply();
         if (amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / totalShares;
 
         return (amountShares * currentPricePerShare) / PRECISION;
@@ -646,7 +647,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
     }
 
-    /// @notice Checkes weither upkeep method is ready to be called. 
+    /// @notice Checkes weither upkeep method is ready to be called.
     /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
@@ -667,14 +668,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     // @dev Returns cycle data
     function getCycle(uint256 _cycleId) public view returns (
-        uint256 startAt, 
-        uint256 totalDepositedInUsd, 
-        uint256 receivedByStrategiesInUsd, 
+        uint256 startAt,
+        uint256 totalDepositedInUsd,
+        uint256 receivedByStrategiesInUsd,
         uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd,
         uint256 pricePerShare
     ) {
         Cycle storage requestedCycle = cycles[_cycleId];
-        
+
         startAt = requestedCycle.startAt;
         totalDepositedInUsd = requestedCycle.totalDepositedInUsd;
         receivedByStrategiesInUsd = requestedCycle.receivedByStrategiesInUsd;
