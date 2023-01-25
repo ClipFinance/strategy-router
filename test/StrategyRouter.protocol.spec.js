@@ -383,6 +383,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       ({ balances, totalBalance } = await router.getStrategiesValue());
       // console.log(totalBalance, balances);
       // strategies should be balanced as 0% and 100% cause rebalance didn't happen
+      // due to ~0.05 USD to be allocated to the first strategy below the rebalance threshold
       expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
     });
