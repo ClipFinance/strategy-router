@@ -190,12 +190,16 @@ async function matchTokenBalance(tokenAddress, tokenHolder, matchAmount) {
 
 async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
 {
-  let [price, pricePrecision] = await oracle.getTokenUsdPrice(token.address);
+  let [priceInUsd, priceInUsdPrecision] = await oracle.getTokenUsdPrice(
+    token.address
+  );
   let expectedWithdrawAmount = valueInUsd
     .mul(
-      BigNumber.from(10).pow(pricePrecision)
+      BigNumber.from(10).pow(priceInUsdPrecision)
     )
-    .div(price)
+    .div(
+      priceInUsd
+    )
     .div(
       BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
     )
@@ -208,5 +212,6 @@ function applySlippageInBps(amount, slippageInBps)
 {
   return amount
     .mul(10000 - slippageInBps)
-    .div(10000);
+    .div(10000)
+  ;
 }

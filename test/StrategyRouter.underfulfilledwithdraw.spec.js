@@ -125,12 +125,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         withdrawShares,
         expectedWithdrawAmount
       )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to front-end and on-chain oracle different prices", async function () {
@@ -163,7 +157,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       );
 
       // set up oracle price different from a client to get less BUSD than expected
-      await oracle.setPrice(busd.address, 9_000_000_000); // $0.9
+      await oracle.setPrice(busd.address, parseBusd("1.1")); // $1.1
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
@@ -172,12 +166,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         withdrawShares,
         expectedWithdrawAmount
       )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to exchange slippage", async function () {
@@ -263,12 +251,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         withdrawShares,
         expectedWithdrawAmount
       )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to front-end and on-chain oracle different prices", async function () {
@@ -278,7 +260,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       } = await loadFixture(
         loadState(
           // deploy funds equally to 3 strategies
-          // 5% slippage on busd strategy
           deployMultipleStrategies(
             0,
             0,
@@ -316,12 +297,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         withdrawShares,
         expectedWithdrawAmount
       )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to exchange slippage", async function () {
