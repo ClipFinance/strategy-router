@@ -146,11 +146,15 @@ function printStruct(struct) {
 
 async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
 {
-  let [price, pricePrecision] = await oracle.getTokenUsdPrice(token.address);
+  let [priceInUsd, priceInUsdPrecision] = await oracle.getTokenUsdPrice(
+    token.address
+  );
   let expectedWithdrawAmount = valueInUsd
-    .mul(price)
+    .mul(
+      BigNumber.from(10).pow(priceInUsdPrecision)
+    )
     .div(
-      BigNumber.from(10).pow(pricePrecision)
+      priceInUsd
     )
     .div(
       BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
