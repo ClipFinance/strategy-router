@@ -3,9 +3,9 @@ const hre = require("hardhat");
 const main = async () => {
   await hre.run("verify:verify", {
     contract: "contracts/StrategyRouter.sol:StrategyRouter",
-    address: "0xa55b2c1a428534e74e551d1756d1fbd511f4975b",
+    address: "0x6f96752776a37971ca962744112f030183c9f0e9",
     libraries: {
-      StrategyRouterLib: "0x672fa3e919848BfCca1BB7F8667D33DB16a12a05"
+      StrategyRouterLib: "0xc39e145636067e6761C798fF6358731f91DF332C"
     }
   });
 

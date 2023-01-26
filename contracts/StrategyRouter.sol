@@ -208,13 +208,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        //- Current cycle Id, _currentCycleId;
-        //- Current TVL in USD, balanceAfterCompoundInUsd ;
-        //- Current amount of shares, totalShares;
-        // uint256 totalShares = sharesToken.totalSupply();
-        // (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
-        // emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
-
         // step 5
         (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();

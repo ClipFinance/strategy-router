@@ -4,7 +4,7 @@ const { provider } = require("../test/utils");
 const { parseEther, formatEther } = require("ethers/lib/utils");
 const main = async () => {
   const [signer1] = await ethers.getSigners()
-  const contractAddress = "0x0E7c63268FB39e7B65007aBdbCDB36433ba2bb8A";
+  const contractAddress = "0x0425F0bF54C692697c7dcfD24159d43266471fb8";
 
   const routerContract = await ethers.getContractAt('StrategyRouter', contractAddress, signer1)
   const batchDeposit = await routerContract.getBatchValueUsd();

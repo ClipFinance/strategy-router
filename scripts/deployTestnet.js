@@ -78,32 +78,26 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   console.log("Deploying strategies...");
-  let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdcTest")
-  strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    constructorArgs: [router.address],
-  });
-  console.log("strategyBusd", strategyBusd.address);
-  await (await strategyBusd.transferOwnership(router.address)).wait();
+  // let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdcTest")
+  // strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+  //   kind: 'uups',
+  //   constructorArgs: [router.address],
+  // });
+  // console.log("strategyBusd", strategyBusd.address);
 
-//
-//   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
-//   StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt")
-//   strategyUsdc = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-//     kind: 'uups',
-//     constructorArgs: [router.address],
-//   });
-//   console.log("strategyUsdc", strategyUsdc.address);
-//   await (await strategyUsdc.transferOwnership(router.address)).wait();
-//
+  const mockStrategyFactory = await ethers.getContractFactory("MockStrategy");
+  let mockStrategy = await mockStrategyFactory.deploy(usdc.address, 10000);
+  await mockStrategy.deployed();
+  console.log("strategy:", mockStrategy.address);
+  await (await mockStrategy.transferOwnership(router.address)).wait();
+
+
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~
   console.log("oracle setup...");
-  let oracleTokens = [busd.address, usdc.address, wbnb.address, cake.address];
+  let oracleTokens = [busd.address, usdc.address];
   let priceFeeds = [
     hre.networkVariables.BusdUsdPriceFeed,
     hre.networkVariables.UsdcUsdPriceFeed,
-    hre.networkVariables.BnbUsdPriceFeed,
-    hre.networkVariables.CakeUsdPriceFeed,
   ];
   await (await oracle.setPriceFeeds(oracleTokens, priceFeeds)).wait();
 
@@ -113,8 +107,6 @@ async function main() {
   await (await pancakePlugin.setUseWeth(hre.networkVariables.busd, hre.networkVariables.usdc, true)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.busd, true)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.usdc, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.wbnb, hre.networkVariables.usdc, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.wbnb, hre.networkVariables.busd, true)).wait();
 
 //   // acryptos plugin params
 //   console.log("acryptos plugin setup...");
@@ -146,26 +138,16 @@ async function main() {
       hre.networkVariables.busd,
       hre.networkVariables.cake,
       hre.networkVariables.cake,
-      hre.networkVariables.usdc,
-      hre.networkVariables.busd,
-      hre.networkVariables.usdc,
-      hre.networkVariables.busd,
+
     ],
     [
       hre.networkVariables.usdc,
       hre.networkVariables.busd,
       hre.networkVariables.usdc,
-      hre.networkVariables.wbnb,
-      hre.networkVariables.wbnb,
-      hre.networkVariables.cake,
-      hre.networkVariables.cake,
+
     ],
     [
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
     ]
@@ -200,7 +182,7 @@ async function main() {
   await (await router.setSupportedToken(usdc.address, true)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(strategyBusd.address, busd.address, 10000)).wait();
+  await (await router.addStrategy(mockStrategy.address, busd.address, 10000)).wait();
   // await (await router.addStrategy(strategyUsdc.address, usdc.address, 5000)).wait();
 
 
@@ -216,12 +198,12 @@ async function main() {
   } catch (error) {
     console.error(error);
   }
-  // try {
-  //   console.log("Initial deposit to strategies...");
-  //   await (await router.allocateToStrategies()).wait();
-  // } catch (error) {
-  //   console.error(error);
-  // }
+  try {
+    console.log("Initial deposit to strategies...");
+    await (await router.allocateToStrategies()).wait();
+  } catch (error) {
+    console.error(error);
+  }
 
   // vvvvvvvvvvvvvvvvvvvvvvvvv VERIFICATION vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
   console.log("  - Verification will start in a minute...\n");
