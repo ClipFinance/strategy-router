@@ -41,7 +41,7 @@ module.exports = {
         url: process.env.BNB_URL,
         // blockNumber: 22455358, // use this only with archival node
         enabled: true
-      }
+      },
       // allowUnlimitedContractSize: true,
       // loggingEnabled: false,
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
