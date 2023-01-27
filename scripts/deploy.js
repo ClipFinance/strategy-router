@@ -174,7 +174,6 @@ async function main() {
     batch.address,
     receiptContract.address
   )).wait();
-  await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
   await (await router.setMinDepositUsd(MIN_DEPOSIT)).wait();
   await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
