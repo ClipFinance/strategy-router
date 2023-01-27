@@ -106,8 +106,6 @@ contract BiswapBase is
             dexFee
         );
 
-        console.log(amountA);
-        console.log(amountB);
         tokenA.transfer(address(exchange), amountB);
         amountB = exchange.swap(
             amountB,
@@ -121,6 +119,7 @@ contract BiswapBase is
 
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
+        
         (, , uint256 liquidity) = biswapRouter.addLiquidity(
             address(tokenA),
             address(tokenB),
