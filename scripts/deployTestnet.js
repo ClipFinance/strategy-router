@@ -4,11 +4,7 @@ const { ethers } = require("hardhat");
 const { deploy, deployProxy, parseUniform } = require("../test/utils");
 const fs = require("fs");
 
-// deploy script for testing on mainnet
-// to test on hardhat network:
-//   remove block pinning from config and uncomment 'accounts'
-//   in .env set account with bnb and at least INITIAL_DEPOSIT usdc
-
+// deploy script for testing on testnet
 async function main() {
 
 
@@ -46,8 +42,6 @@ async function main() {
   exchange = await deployProxy("Exchange");
   console.log("Exchange", exchange.address);
 
-  // let acsPlugin = await deploy("CurvePlugin");
-  // console.log("acsPlugin", acsPlugin.address);
   let pancakePlugin = await deploy("UniswapPlugin");
   console.log("pancakePlugin", pancakePlugin.address);
 
@@ -78,19 +72,12 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   console.log("Deploying strategies...");
-  // let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdcTest")
-  // strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-  //   kind: 'uups',
-  //   constructorArgs: [router.address],
-  // });
-  // console.log("strategyBusd", strategyBusd.address);
 
   const mockStrategyFactory = await ethers.getContractFactory("MockStrategy");
   let mockStrategy = await mockStrategyFactory.deploy(usdc.address, 10000);
   await mockStrategy.deployed();
   console.log("strategy:", mockStrategy.address);
   await (await mockStrategy.transferOwnership(router.address)).wait();
-
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~
   console.log("oracle setup...");
@@ -108,29 +95,6 @@ async function main() {
   await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.busd, true)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.usdc, true)).wait();
 
-//   // acryptos plugin params
-//   console.log("acryptos plugin setup...");
-//   await (await acsPlugin.setCurvePool(
-//     hre.networkVariables.busd,
-//     hre.networkVariables.usdt,
-//     hre.networkVariables.acs4usd.address
-//   )).wait();
-//   await (await acsPlugin.setCurvePool(
-//     hre.networkVariables.usdc,
-//     hre.networkVariables.usdt,
-//     hre.networkVariables.acs4usd.address
-//   )).wait();
-//   await (await acsPlugin.setCurvePool(
-//     hre.networkVariables.busd,
-//     hre.networkVariables.usdc,
-//     hre.networkVariables.acs4usd.address
-//   )).wait();
-//   await (await acsPlugin.setCoinIds(
-//     hre.networkVariables.acs4usd.address,
-//     hre.networkVariables.acs4usd.tokens,
-//     hre.networkVariables.acs4usd.coinIds
-//   )).wait();
-//
   // setup Exchange routes
   console.log("exchange routes setup...");
   await (await exchange.setRouteEx(
@@ -171,7 +135,7 @@ async function main() {
     batch.address,
     receiptContract.address
   )).wait();
-  // await (await router.setMinUsdPerCycle(MIN_USD_PER_CYCLE)).wait();
+
   await (await router.setMinDepositUsd(MIN_DEPOSIT)).wait();
   await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
@@ -183,8 +147,6 @@ async function main() {
 
   console.log("Adding strategies...");
   await (await router.addStrategy(mockStrategy.address, busd.address, 10000)).wait();
-  // await (await router.addStrategy(strategyUsdc.address, usdc.address, 5000)).wait();
-
 
   console.log("Approving for initial deposit...");
   if ((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
@@ -218,15 +180,13 @@ async function main() {
   });
 
   await safeVerifyMultiple([
-    // oracle,
-    // exchange,
-    // acsPlugin,
-    // pancakePlugin,
-    // receiptContract,
-    // batch,
-    // sharesToken,
-    // strategyBusd,
-    // strategyUsdc,
+    oracle,
+    exchange,
+    pancakePlugin,
+    receiptContract,
+    batch,
+    sharesToken,
+    mockStrategy
   ]);
 }
 

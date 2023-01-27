@@ -16,8 +16,6 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-import "hardhat/console.sol";
-
 //import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
@@ -178,7 +176,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 8 - store remaining information for the current cycle
         */
         // step 1
-        console.log("step 1");
         uint256 _currentCycleId = currentCycleId;
         (uint256 batchValueInUsd, ) = getBatchValueUsd();
 

@@ -7,7 +7,7 @@ import "../interfaces/ICurvePool.sol";
 import "../interfaces/IExchangePlugin.sol";
 import "../StrategyRouter.sol";
 
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 contract UniswapPlugin is IExchangePlugin, Ownable {
     error RoutedSwapFailed();
@@ -91,12 +91,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     ) private returns (uint256 amountReceivedTokenB) {
         IERC20(path[0]).approve(address(uniswapRouter), amountA);
 
-        console.log("_swap");
-        console.log(amountA);
-        console.log(to);
-        for(uint256 i = 0; i < path.length; i++) {
-            console.log(path[i]);
-        }
         uint256 received = uniswapRouter.swapExactTokensForTokens(amountA, 0, path, address(this), block.timestamp)[
             path.length - 1
         ];

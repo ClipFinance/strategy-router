@@ -21,5 +21,3 @@ To run specific test file `npx hardhat test test/router.js`.
 Deploy to get ABI
 Go to directory and launch:  
 `solcjs --abi --include-path node_modules/ --base-path . contracts/StrategyRouter.sol`
-
-npx hardhat run scripts/deployTestnet.js --network bnbTest

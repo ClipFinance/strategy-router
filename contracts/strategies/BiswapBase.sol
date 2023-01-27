@@ -25,9 +25,9 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     ERC20 internal immutable lpToken;
     StrategyRouter internal immutable strategyRouter;
 
-    ERC20 internal constant bsw = ERC20(0xFa60D973F7642B748046464e165A65B7323b0DEE);
-        IBiswapFarm internal constant farm = IBiswapFarm(0xB4A466911556e39210a6bB2FaECBB59E4eB7E43d);
-    IUniswapV2Router02 internal constant biswapRouter = IUniswapV2Router02(0xD99D1c33F9fC3444f8101754aBC46c52416550D1);
+    ERC20 internal constant bsw = ERC20(0x965F527D9159dCe6288a2219DB51fc6Eef120dD1);
+    IBiswapFarm internal constant farm = IBiswapFarm(0xDbc1A13490deeF9c3C12b44FE77b503c1B061739);
+    IUniswapV2Router02 internal constant biswapRouter = IUniswapV2Router02(0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8);
 
     uint256 internal immutable poolId;
 
@@ -300,10 +300,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     }
 
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {
-        console.log("before getReserves");
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
-        console.log("after getReserves: %s %s", reserve0, reserve1);
-
         uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
         uint256 amountB = (tokenAmount * halfWithFee) / 1e18;
         return amountB;

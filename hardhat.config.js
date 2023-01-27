@@ -38,11 +38,10 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.BNB_TEST_URL,
+        url: process.env.BNB_URL,
         // blockNumber: 22455358, // use this only with archival node
-        enabled: true,
-      },
-      chainId: 97
+        enabled: true
+      }
       // allowUnlimitedContractSize: true,
       // loggingEnabled: false,
       // accounts: [{privateKey: process.env.PRIVATE_KEY, balance: parseEther("10000").toString()}],
