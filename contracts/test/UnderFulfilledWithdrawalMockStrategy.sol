@@ -16,11 +16,13 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
     address private strategyDepositToken;
     uint256 private balanceInToken;
     uint256 private rewardPerCompoundPeriodInBps;
+    bool private tvlGrow;
 
-    constructor(uint16 _underFulfilledWithdrawalInBps, address _depositToken, uint256 _rewardPerCompoundPeriodInBps) {
+    constructor(uint16 _underFulfilledWithdrawalInBps, address _depositToken, uint256 _rewardPerCompoundPeriodInBps, bool _tvlGrow) {
         underFulfilledWithdrawalInBps = _underFulfilledWithdrawalInBps;
         strategyDepositToken = _depositToken;
         rewardPerCompoundPeriodInBps = _rewardPerCompoundPeriodInBps;
+        tvlGrow = _tvlGrow;
     }
 
     function depositToken() external view override returns (address) {
@@ -42,7 +44,8 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
     }
 
     function compound() external override {
-        balanceInToken = (balanceInToken * (10000 + rewardPerCompoundPeriodInBps)) / 10000;
+        if (tvlGrow) balanceInToken = (balanceInToken * (10000 + rewardPerCompoundPeriodInBps )) / 10000;
+        else balanceInToken = (balanceInToken * (10000 - rewardPerCompoundPeriodInBps )) / 10000;
     }
 
     function totalTokens() external view override returns (uint256) {

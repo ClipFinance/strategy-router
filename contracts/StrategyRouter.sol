@@ -32,9 +32,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
     /// @notice Fires when compound process is finished.
     /// @param currentCycle Index of the current cycle.
-    /// @param currentTvl Current TVL in USD.
+    /// @param currentTvlInUsd Current TVL in USD.
     /// @param totalShares Current amount of shares.
-    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvl, uint256 totalShares);
+    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvlInUsd, uint256 totalShares);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.

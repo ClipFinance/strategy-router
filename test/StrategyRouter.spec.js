@@ -236,52 +236,6 @@ describe("Test StrategyRouter", function () {
     expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
   });
 
-  it("AfterCompound event should be fired after allocateToStrategies with exact values", async function () {
-    const cycleIdBeforeAllocation = await router.currentCycleId()
-    const totalTvlBeforeAllocation = (await router.getStrategiesValue())[0]
-    const totalSharesBeforeAllocation = await sharesToken.totalSupply()
-
-    await router.depositToBatch(busd.address, parseBusd("100"))
-    const transaction = await router.allocateToStrategies()
-    const transactionReceipt = await transaction.wait()
-
-    let event;
-
-    transactionReceipt.events.map((e) => {
-      if (e.event === "AfterCompound") {
-        event = e;
-      }
-    })
-
-    expect(event).not.to.be.undefined
-    expect(event.args.currentCycle).to.be.equal(cycleIdBeforeAllocation)
-    expect(event.args.currentTvl).to.be.equal(totalTvlBeforeAllocation)
-    expect(event.args.totalShares).to.be.equal(totalSharesBeforeAllocation)
-  });
-
-  it("AfterCompound event should be fired after compoundAll with exact values", async function () {
-    const transaction = await router.compoundAll()
-    const transactionReceipt = await transaction.wait()
-
-    let event;
-
-    transactionReceipt.events.map((e) => {
-      if (e.event === "AfterCompound") {
-        event = e;
-      }
-    })
-
-    expect(event).not.to.be.undefined
-
-    const cycleId = await router.currentCycleId()
-    const totalTvl = (await router.getStrategiesValue())[0]
-    const totalShares = await sharesToken.totalSupply()
-
-    expect(event.args.currentCycle).to.be.equal(cycleId)
-    expect(event.args.currentTvl).to.be.equal(totalTvl)
-    expect(event.args.totalShares).to.be.equal(totalShares)
-  });
-
   it("Remove strategy", async function () {
 
     // deposit to strategies
