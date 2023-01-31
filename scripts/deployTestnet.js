@@ -92,28 +92,20 @@ async function main() {
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.busd, hre.networkVariables.usdc, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.busd, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.cake, hre.networkVariables.usdc, true)).wait();
 
   // setup Exchange routes
   console.log("exchange routes setup...");
   await (await exchange.setRouteEx(
     [
       hre.networkVariables.busd,
-      hre.networkVariables.cake,
-      hre.networkVariables.cake,
 
     ],
     [
-      hre.networkVariables.usdc,
-      hre.networkVariables.busd,
       hre.networkVariables.usdc,
 
     ],
     [
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
     ]
   )).wait();
 

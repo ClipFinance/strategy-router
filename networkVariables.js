@@ -31,22 +31,20 @@ function bnbChain() {
   return bnb;
 }
 
+
 function bnbTestChain() {
 
+  // Binance Smartchain Testnet explorer
+  // https://testnet.bscscan.com/
   const bnb = {
     busd: "0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7",
     usdc: "0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D",
-    wbnb: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
-
-    cake: "0xFa60D973F7642B748046464e165A65B7323b0DEE",
   };
 
   bnb.uniswapRouter = "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 
   bnb.BusdUsdPriceFeed = "0x9331b55D9830EF609A2aBCfAc0FBCE050A52fdEa";
   bnb.UsdcUsdPriceFeed = "0x90c069C4538adAc136E051052E14c1cD799C41B7";
-  bnb.BnbUsdPriceFeed = "0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526";
-  bnb.CakeUsdPriceFeed = "0x81faeDDfeBc2F8Ac524327d70Cf913001732224C";
 
   return bnb;
 }
