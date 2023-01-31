@@ -44,8 +44,12 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
     }
 
     function compound() external override {
-        if (tvlGrow) balanceInToken = (balanceInToken * (10000 + rewardPerCompoundPeriodInBps )) / 10000;
-        else balanceInToken = (balanceInToken * (10000 - rewardPerCompoundPeriodInBps )) / 10000;
+        if (tvlGrow) {
+            balanceInToken = (balanceInToken * (10000 + rewardPerCompoundPeriodInBps )) / 10000;
+        }
+        else {
+            balanceInToken = (balanceInToken * (10000 - rewardPerCompoundPeriodInBps )) / 10000;
+        }
     }
 
     function totalTokens() external view override returns (uint256) {

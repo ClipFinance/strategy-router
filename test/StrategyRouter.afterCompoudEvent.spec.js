@@ -2,44 +2,33 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const {
   setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy,
-  deployFakeUnderFulfilledWithdrawalStrategy
+  deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken
 } = require("./shared/commonSetup");
 const { BLOCKS_MONTH, skipTimeAndBlocks, MONTH_SECONDS } = require("./utils");
+const { loadFixture } = require("ethereum-waffle");
 
-describe("Test AfterCompound event", function() {
 
-  let owner;
-  // mock tokens with different decimals
-  let usdc, usdt, busd;
-  // helper functions to parse amounts of mock tokens
-  let parseUsdc, parseBusd, parseUsdt;
-  // core contracts
-  let router, oracle, exchange;
-  // revert to test-ready state
-  let snapshotId;
-  // revert to fresh fork state
-  let initialSnapshot;
+function loadState(strategyDeploymentFn) {
+  return (async function() {
+    [owner, nonReceiptOwner] = await ethers.getSigners();
 
-  before(async function() {
-
-    [owner] = await ethers.getSigners();
-    initialSnapshot = await provider.send("evm_snapshot");
-
-    // deploy core contracts`
-    ({ router, oracle, exchange, sharesToken } = await setupCore());
+    // deploy core contracts
+    ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
 
     // deploy mock tokens
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
 
-    // setup fake token liquidity
-    let amount = (1_000_000).toString();
-    await setupTokensLiquidityOnPancake(usdc, busd, amount);
-    await setupTokensLiquidityOnPancake(busd, usdt, amount);
-    await setupTokensLiquidityOnPancake(usdc, usdt, amount);
+    const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
+      oracle,
+      0, // X% slippage,
+      25 // fee %0.25
+    );
+    mintFakeToken(fakeExchangePlugin.address, usdc, parseUsdc("10000000"));
+    mintFakeToken(fakeExchangePlugin.address, usdt, parseUsdt("10000000"));
+    mintFakeToken(fakeExchangePlugin.address, busd, parseBusd("10000000"));
 
     // setup params for testing
-    await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
-    await router.setAllocationWindowTime(1);
+    await setupTestParams(router, oracle, exchange, usdc, usdt, busd, fakeExchangePlugin);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));
@@ -50,46 +39,41 @@ describe("Test AfterCompound event", function() {
     await router.setSupportedToken(usdc.address, true);
     await router.setSupportedToken(busd.address, true);
     await router.setSupportedToken(usdt.address, true);
-  });
 
-  beforeEach(async () => {
-    snapshotId = await provider.send("evm_snapshot");
-  });
+    // add fake strategies
+    await strategyDeploymentFn({ router, busd, usdc, usdt });
 
-  afterEach(async () => {
-    await provider.send("evm_revert", [snapshotId]);
-  });
+    // admin initial deposit to set initial shares and pps
+    await router.depositToBatch(busd.address, parseBusd("1000"));
+    await router.allocateToStrategies();
 
-  after(async () => {
-    await provider.send("evm_revert", [initialSnapshot]);
+    return {
+      owner, nonReceiptOwner,
+      router, oracle, exchange, batch, receiptContract, sharesToken,
+      usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
+      fakeExchangePlugin
+    };
   });
+}
 
+describe("Test AfterCompound event", function() {
 
   describe("Test AfterCompound event emitting", function() {
-    let snapshot;
-
-    before(async () => {
-      snapshot = await provider.send("evm_snapshot");
-      await deployFakeStrategy({ router, token: usdc });
-      await deployFakeStrategy({ router, token: busd });
-      await deployFakeStrategy({ router, token: usdt });
-
-      // admin initial deposit to set initial shares and pps
-      await router.depositToBatch(busd.address, parseBusd("1"));
-      await router.allocateToStrategies();
-    });
-
-    after(async () => {
-      await provider.send("evm_revert", [snapshot]);
-    })
 
     it("should fire AfterCompound event after allocateToStrategies with exact values", async function() {
+      const {
+        router, sharesToken, busd, parseBusd
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(0)
+        )
+      );
+
       const cycleIdBeforeAllocation = await router.currentCycleId();
-      const totalTvlBeforeAllocation = (await router.getStrategiesValue())[0];
+      const totalTvlBeforeAllocation = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeAllocation = await sharesToken.totalSupply();
 
       await router.depositToBatch(busd.address, parseBusd("100"));
-
       await expect(router.allocateToStrategies())
         .to
         .emit(router, "AfterCompound")
@@ -101,6 +85,14 @@ describe("Test AfterCompound event", function() {
     });
 
     it("should fire AfterCompound event after compoundAll with exact values", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(0)
+        )
+      );
+
       const cycleId = await router.currentCycleId();
       const totalTvl = (await router.getStrategiesValue()).totalBalance;
       const totalShares = await sharesToken.totalSupply();
@@ -118,173 +110,137 @@ describe("Test AfterCompound event", function() {
 
   describe("Check if the actual compound happened", function() {
 
-    it("TVL didnt grow", async function() {
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdc,
-        profitPercent: 0,
-        underFulfilledWithdrawalBps: 0
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: busd,
-        profitPercent: 0,
-        underFulfilledWithdrawalBps: 0
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdt,
-        profitPercent: 0,
-        underFulfilledWithdrawalBps: 0
-      });
+    it("TVL didnt grow with compoundAll", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(0)
+        )
+      );
 
-      await router.depositToBatch(busd.address, parseBusd("10000"));
-      await router.allocateToStrategies();
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      const events = [];
+      await router.compoundAll();
 
-      const firstCompound = await router.compoundAll();
-      const firstCompoundReceipt = await firstCompound.wait();
-      events.push(firstCompoundReceipt.events[0]);
+      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesAfterCompound = await sharesToken.totalSupply();
 
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
-
-      const secondCompound = await router.compoundAll();
-      const secondCompoundReceipt = await secondCompound.wait();
-      events.push(secondCompoundReceipt.events[0]);
-
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
-
-      const thirdCompound = await router.compoundAll();
-      const thirdCompoundReceipt = await thirdCompound.wait();
-      events.push(thirdCompoundReceipt.events[0]);
-
-      const [firstPeriod, secondPeriod] = await calculateAprApyFromEvents(events);
-
-      expect(firstPeriod.apr).to.be.equal(secondPeriod.apr)
-      expect(firstPeriod.apy).to.be.equal(secondPeriod.apy)
+      expect(totalTvlBeforeCompound).to.be.eq(totalTvlAfterCompound);
+      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
     });
 
-    it("TVL reduced", async function() {
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdc,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0,
-        tvlGrow: false,
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: busd,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0,
-        tvlGrow: false,
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdt,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0,
-        tvlGrow: false,
-      });
+    it("TVL reduced with compoundAll", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(1000, false)
+        )
+      );
 
-      await router.depositToBatch(busd.address, parseBusd("10000"));
-      await router.allocateToStrategies();
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      const events = [];
+      await router.compoundAll();
 
-      const firstCompound = await router.compoundAll();
-      const firstCompoundReceipt = await firstCompound.wait();
-      events.push(firstCompoundReceipt.events[0]);
+      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesAfterCompound = await sharesToken.totalSupply();
 
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
-
-      const secondCompound = await router.compoundAll();
-      const secondCompoundReceipt = await secondCompound.wait();
-      events.push(secondCompoundReceipt.events[0]);
-
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
-
-      const thirdCompound = await router.compoundAll();
-      const thirdCompoundReceipt = await thirdCompound.wait();
-      events.push(thirdCompoundReceipt.events[0]);
-
-      const [firstPeriod, secondPeriod] = await calculateAprApyFromEvents(events);
-
-      expect(firstPeriod.apr).to.be.greaterThan(secondPeriod.apr)
-      expect(firstPeriod.apy).to.be.greaterThan(secondPeriod.apy)
+      expect(totalTvlBeforeCompound).to.be.gt(totalTvlAfterCompound);
+      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
     });
 
-    it("TVL grown", async function() {
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdc,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: busd,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0
-      });
-      await deployFakeUnderFulfilledWithdrawalStrategy({
-        router,
-        token: usdt,
-        profitPercent: 1000,
-        underFulfilledWithdrawalBps: 0
-      });
+    it("TVL reduced with allocateToStrategies", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(10000, false)
+        )
+      );
 
-      await router.depositToBatch(busd.address, parseBusd("10000"));
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
+
+      await router.depositToBatch(busd.address, parseBusd("0.01"));
       await router.allocateToStrategies();
 
-      const events = [];
+      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesAfterCompound = await sharesToken.totalSupply();
 
-      const firstCompound = await router.compoundAll();
-      const firstCompoundReceipt = await firstCompound.wait();
-      events.push(firstCompoundReceipt.events[0]);
+      expect(totalTvlBeforeCompound).to.be.gt(totalTvlAfterCompound);
+      expect(totalSharesBeforeCompound).to.be.lt(totalSharesAfterCompound);
+    });
 
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
+    it("TVL grown with compoundAll", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(1000)
+        )
+      );
 
-      const secondCompound = await router.compoundAll();
-      const secondCompoundReceipt = await secondCompound.wait();
-      events.push(secondCompoundReceipt.events[0]);
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      await skipTimeAndBlocks(MONTH_SECONDS, BLOCKS_MONTH);
+      await router.compoundAll();
 
-      const thirdCompound = await router.compoundAll();
-      const thirdCompoundReceipt = await thirdCompound.wait();
-      events.push(thirdCompoundReceipt.events[0]);
+      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesAfterCompound = await sharesToken.totalSupply();
 
-      const [firstPeriod, secondPeriod] = await calculateAprApyFromEvents(events);
+      expect(totalTvlBeforeCompound).to.be.lt(totalTvlAfterCompound);
+      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
+    });
 
-      expect(firstPeriod.apr).to.be.lessThan(secondPeriod.apr)
-      expect(firstPeriod.apy).to.be.lessThan(secondPeriod.apy)
+    it("TVL grown with allocateToStrategies", async function() {
+      const {
+        router, sharesToken,
+      } = await loadFixture(
+        loadState(
+          deployMultipleStrategies(1000)
+        )
+      );
+
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
+
+      await router.depositToBatch(busd.address, parseBusd("1"));
+      await router.allocateToStrategies();
+
+      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesAfterCompound = await sharesToken.totalSupply();
+
+      expect(totalTvlBeforeCompound).to.be.lt(totalTvlAfterCompound);
+      expect(totalSharesBeforeCompound).to.be.lt(totalSharesAfterCompound);
     });
   });
 });
 
-const calculateAprApyFromEvents = async (events) => {
-
-  const res = [];
-
-  for (let i = 0; i < events.length - 1; i++) {
-    const tvlInUsd = events[i].args.currentTvlInUsd;
-    const totalShares = events[i].args.totalShares;
-    const timestamp = (await provider.getBlock(events[i].blockNumber)).timestamp;
-
-    const nextTvlInUsd = events[i + 1].args.currentTvlInUsd;
-    const nextTotalShares = events[i + 1].args.totalShares;
-    const nextTimestamp = (await provider.getBlock(events[i + 1].blockNumber)).timestamp;
-
-    const pps = tvlInUsd.mul(100).div(totalShares).toNumber() / 100;
-    const nextPps = nextTvlInUsd.mul(100).div(nextTotalShares).toNumber() / 100;
-    const prf = Math.abs((nextPps - pps) / pps * 100);
-    const apr = prf * MONTH_SECONDS / (nextTimestamp - timestamp);
-    const apy = prf ** (MONTH_SECONDS  / (nextTimestamp - timestamp));
-
-    res.push({ apr, apy });
-  }
-
-  return res;
-};
+function deployMultipleStrategies(
+  profitPercent, tvlGrow = true
+) {
+  return async function({ router, usdc, usdt, busd }) {
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: busd,
+      profitPercent,
+      underFulfilledWithdrawalBps: 0,
+      tvlGrow
+    });
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: usdc,
+      underFulfilledWithdrawalBps: 0,
+      tvlGrow
+    });
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: usdt,
+      underFulfilledWithdrawalBps: 0,
+      tvlGrow
+    });
+  };
+}
