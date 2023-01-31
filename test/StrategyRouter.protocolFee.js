@@ -122,6 +122,8 @@ describe("Test StrategyRouter protocol fee collection", function () {
         let cycleData = await router.getCycle(currentCycleId-1);
 
         expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
+        // received less (9920 vs 9960) than on the previous test
+        // due to increased skew of stablecoin amounts in swap pools
         expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9920"), parseUniform("3"));
         expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("19980"), parseUniform("2"));
         expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.01"));

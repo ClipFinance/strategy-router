@@ -195,7 +195,9 @@ async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
     .mul(
       BigNumber.from(10).pow(pricePrecision)
     )
-    .div(price)
+    .div(
+      price
+    )
     .div(
       BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
     )
