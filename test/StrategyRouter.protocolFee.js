@@ -168,31 +168,31 @@ describe("Test StrategyRouter protocol fee collection", function () {
         beforeEach(async function () {
           let busdAmount = parseBusd("1.05");
           await oracle.setPrice(busd.address, busdAmount);
-
-          await router.depositToBatch(busd.address, parseBusd("10000"));
-          await router.allocateToStrategies();
         });
 
         it("should have shares if there was yield", async function () {
           // deposit to strategies
+          let protocolSharesBefore = await sharesToken.balanceOf(feeAddress.address);
           await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
 
           let totalShares = await sharesToken.totalSupply();
-          expect(totalShares.toString()).to.be.closeTo(parseUniform("29660"), parseUniform("3"));
+          expect(totalShares.toString()).to.be.closeTo(parseUniform("19875"), parseUniform("3"));
 
-          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-          expect(protocolShares.toString()).to.be.closeTo(parseUniform("85.40"), parseUniform("0.1"));
+          let protocolSharesAfter = await sharesToken.balanceOf(feeAddress.address);
+
+          let protocolSharesDiff = protocolSharesAfter.sub(protocolSharesBefore);
+          expect(protocolSharesDiff.toString()).to.be.closeTo(parseUniform("46"), parseUniform("0.1"));
 
           const currentCycleId = await router.currentCycleId();
-          expect(currentCycleId.toString()).to.be.equal("3");
+          expect(currentCycleId.toString()).to.be.equal("2");
 
           // get struct data and check TVL at the end of cycle
           let cycleData = await router.getCycle(currentCycleId-1);
 
           expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10500"));
-          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("10010"), parseUniform("2"));
-          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("30460"), parseUniform("4"));
+          expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("10050"), parseUniform("2"));
+          expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("20245"), parseUniform("2"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.01"));
         });
       });
@@ -335,14 +335,18 @@ describe("Test StrategyRouter protocol fee collection", function () {
           });
 
           it("should have shares if there was yield", async function () {
+            let protocolSharesBefore = await sharesToken.balanceOf(feeAddress.address);
+
             await router.depositToBatch(busd.address, parseBusd("10000"));
             await router.allocateToStrategies();
 
             let totalShares = await sharesToken.totalSupply();
             expect(totalShares.toString()).to.be.closeTo(parseUniform("19740"), parseUniform("2"));
 
-            let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-            expect(protocolShares.toString()).to.be.closeTo(parseUniform("39.5"), parseUniform("0.1"));
+            let protocolSharesAfter = await sharesToken.balanceOf(feeAddress.address);
+
+            let protocolSharesDiff = protocolSharesAfter.sub(protocolSharesBefore);
+            expect(protocolSharesDiff.toString()).to.be.closeTo(parseUniform("19.80"), parseUniform("0.1"));
 
             const currentCycleId = await router.currentCycleId();
             expect(currentCycleId.toString()).to.be.equal("3");
@@ -489,7 +493,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
         await router.allocateToStrategies();
       });
 
-      describe( "PPS not changed", function () {
+      describe( "Stablecoin rate not changed", function () {
         beforeEach(async function () {
           await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
@@ -528,7 +532,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
         });
       })
 
-      describe( "PPS decreased", function () {
+      describe( "Stablecoin rate decreased", function () {
         beforeEach(async function () {
           let busdAmount = parseBusd("0.95");
           await oracle.setPrice(busd.address, busdAmount);
@@ -570,10 +574,14 @@ describe("Test StrategyRouter protocol fee collection", function () {
         });
       })
 
-      describe( "PPS increased", function () {
+      describe( "Stablecoin rate increased", function () {
+        let protocolSharesBefore;
+
         beforeEach(async function () {
           let busdAmount = parseBusd("1.05"); // use to be 1.01
           await oracle.setPrice(busd.address, busdAmount);
+
+          protocolSharesBefore = await sharesToken.balanceOf(feeAddress.address);
 
           await router.depositToBatch(busd.address, parseBusd("10000"));
           await router.allocateToStrategies();
@@ -596,8 +604,10 @@ describe("Test StrategyRouter protocol fee collection", function () {
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("1"));
 
-          let protocolShares = await sharesToken.balanceOf(feeAddress.address);
-          expect(protocolShares.toString()).to.be.closeTo(parseUniform("52.4"), parseUniform("0.1"));
+          let protocolSharesAfter = await sharesToken.balanceOf(feeAddress.address);
+
+          let protocolSharesDiff = protocolSharesAfter.sub(protocolSharesBefore);
+          expect(protocolSharesDiff.toString()).to.be.closeTo(parseUniform("52.40"), parseUniform("0.1"));
 
           const currentCycleId = await router.currentCycleId();
           expect(currentCycleId.toString()).to.be.equal("2");

@@ -102,9 +102,7 @@ module.exports = function strategyTest(strategyName) {
 
       // compound, should incsrease totalTokens
       let oldBalance = await strategy.totalTokens();
-      let oldFeeBalance = await depositToken.balanceOf(feeAddress.address);
       await strategy.compound();
-      let newFeeBalance = await depositToken.balanceOf(feeAddress.address);
       let newBalance = await strategy.totalTokens();
 
       expect(newBalance).to.be.gt(oldBalance);

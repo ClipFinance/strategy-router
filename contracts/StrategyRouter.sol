@@ -471,8 +471,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // shares into usd using current PPS
-        // [TODO] We should calculate here how much each receipt is worth, based on the price per share at the time of the deposit
-        // (stored in cycle), and now (stored in latest cycle) and provide here final USD value that protocol should send to the user
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
 
