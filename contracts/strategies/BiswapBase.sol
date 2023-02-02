@@ -114,9 +114,6 @@ contract BiswapBase is
             address(this)
         );
 
-        tokenA.approve(address(biswapRouter), 0);
-        tokenB.approve(address(biswapRouter), 0);
-
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
         
@@ -169,7 +166,7 @@ contract BiswapBase is
 
             farm.withdraw(poolId, liquidityToRemove);
             uint256 bswAmount = bsw.balanceOf(address(this));
-            sellRewardToTokenA(bswAmount);
+            if (bswAmount != 0) sellRewardToTokenA(bswAmount);
 
             lpToken.approve(address(biswapRouter), liquidityToRemove);
             (amountA, amountB) = biswapRouter.removeLiquidity(
@@ -264,10 +261,11 @@ contract BiswapBase is
         returns (uint256 amountWithdrawn)
     {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
-        if (liquidity > 0) {
+        if (liquidity != 0) {
             farm.withdraw(poolId, liquidity);
             uint256 bswAmount = bsw.balanceOf(address(this));
-            sellRewardToTokenA(bswAmount);
+
+            if (bswAmount != 0) sellRewardToTokenA(bswAmount);
 
             uint256 lpAmount = lpToken.balanceOf(address(this));
             lpToken.approve(address(biswapRouter), lpAmount);

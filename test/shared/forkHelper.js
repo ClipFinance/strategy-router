@@ -11,7 +11,7 @@ async function impersonate(account) {
   return signer;
 }
 
-async function forkToken(addr) {
+async function getTokenContract(addr) {
   let token = await ethers.getContractAt("MockToken", addr);
   let decimals = Number((await token.decimals()).toString());
 
@@ -21,7 +21,7 @@ async function forkToken(addr) {
   return { token, parseToken };
 }
 
-async function forkContract(contractName, addr) {
+async function getContract(contractName, addr) {
   let contract = await ethers.getContractAt(contractName, addr);
 
   return contract;
@@ -108,7 +108,7 @@ async function mintForkedToken(token, account, amount) {
 
 module.exports = {
   impersonate,
-  forkToken,
-  forkContract,
+  getTokenContract,
+  getContract,
   mintForkedToken,
 };

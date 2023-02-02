@@ -3,9 +3,9 @@ const { ethers } = require("hardhat");
 const { utils, constants } = require("ethers");
 const { setupCore, deployBiswapStrategy } = require("../shared/commonSetup");
 const {
-  forkToken,
+  getTokenContract,
   mintForkedToken,
-  forkContract,
+  getContract,
   impersonate,
 } = require("../shared/forkHelper");
 const { provider, deploy } = require("../utils");
@@ -52,8 +52,10 @@ describe("Test BiswapBase", function () {
       receiptContract.address
     );
 
-    const token0 = await deploy("MockToken", utils.parseEther("100000000"), 18);
-    const token1 = await deploy("MockToken", utils.parseEther("100000000"), 18);
+    const initialSupply = 100_000_000;
+
+    const token0 = await deploy("MockToken", utils.parseEther(initialSupply.toString()), 18);
+    const token1 = await deploy("MockToken", utils.parseEther(initialSupply.toString()), 18);
     token0.decimals = 18;
     token1.decimals = 18;
 
@@ -65,7 +67,7 @@ describe("Test BiswapBase", function () {
       tokenA = token1;
     }
 
-    const bswInfo = await forkToken(hre.networkVariables.bsw);
+    const bswInfo = await getTokenContract(hre.networkVariables.bsw);
     bsw = bswInfo.token;
     parseBsw = bswInfo.parseToken;
 
@@ -77,9 +79,9 @@ describe("Test BiswapBase", function () {
 
     mockLpToken = await deploy("MockLPToken", tokenA.address, tokenB.address);
 
-    biswapFarm = await forkContract("IBiswapFarm", BISWAP_FARM_ADDR);
-    biswapRouter = await forkContract("IUniswapV2Router02", BISWAP_ROUTER_ADDR);
-    pancakeRouter = await forkContract(
+    biswapFarm = await getContract("IBiswapFarm", BISWAP_FARM_ADDR);
+    biswapRouter = await getContract("IUniswapV2Router02", BISWAP_ROUTER_ADDR);
+    pancakeRouter = await getContract(
       "IUniswapV2Router02",
       hre.networkVariables.uniswapRouter
     );
@@ -127,13 +129,13 @@ describe("Test BiswapBase", function () {
       7777777777
     );
 
-    const biswapFactory = await forkContract(
+    const biswapFactory = await getContract(
       "IUniswapV2Factory",
       await biswapRouter.factory()
     );
 
     const lpAddr = await biswapFactory.getPair(tokenA.address, tokenB.address);
-    lpToken = await forkContract("MockToken", lpAddr);
+    lpToken = await getContract("MockToken", lpAddr);
 
     biswapPoolId = await biswapFarm.poolLength();
 
