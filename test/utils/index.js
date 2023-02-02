@@ -18,7 +18,7 @@ module.exports = {
   convertFromUsdToTokenAmount, applySlippageInBps,
 }
 
-// helper to reduce code duplication, transforms 3 lines of deployment into 1
+// helper to reduce code duplication, transforms 3 lines of deployemnt into 1
 async function deploy(contractName, ...constructorArgs) {
   let factory = await ethers.getContractFactory(contractName);
   let contract = await factory.deploy(...constructorArgs);
@@ -146,59 +146,57 @@ function printStruct(struct) {
 
 // Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance
 async function saturateTokenBalancesInStrategies(router) {
-  const strategiesData = await router.getStrategies();
-  for( i = 0; i < strategiesData.length; i++) {
-    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
-    let depositTokenAddress = await strategyContract.depositToken();
-    let depositTokenContract = await ethers.getContractAt("ERC20", depositTokenAddress);
-    let depositTokenDecimals = await depositTokenContract.decimals();
-    let strategyBalance = parseUnits("1000000", depositTokenDecimals);
-    await matchTokenBalance(depositTokenAddress, strategiesData[i].strategyAddress, strategyBalance);
-  }
+ const strategiesData = await router.getStrategies();
+ for( i = 0; i < strategiesData.length; i++) {
+   let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
+   let depositTokenAddress = await strategyContract.depositToken();
+   let depositTokenContract = await ethers.getContractAt("ERC20", depositTokenAddress);
+   let depositTokenDecimals = await depositTokenContract.decimals();
+   let strategyBalance = parseUnits("1000000", depositTokenDecimals);
+   await matchTokenBalance(depositTokenAddress, strategiesData[i].strategyAddress, strategyBalance);
+ }
 }
 
 async function matchTokenBalance(tokenAddress, tokenHolder, matchAmount) {
 
-  const [owner] = await ethers.getSigners();
-  let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
-  let tokenBalance = await tokenContract.balanceOf(tokenHolder);
+ const [owner] = await ethers.getSigners();
+ let tokenContract = await ethers.getContractAt("ERC20", tokenAddress);
+ let tokenBalance = await tokenContract.balanceOf(tokenHolder);
 
-  let tokenMaster;
+ let tokenMaster;
 
-  switch(tokenAddress) {
-    case hre.networkVariables.busd:
-      tokenMaster = hre.networkVariables.busdHolder;
-      break;
-    case hre.networkVariables.usdc:
-      tokenMaster = hre.networkVariables.usdcHolder;
-      break;
-    case hre.networkVariables.usdt:
-      tokenMaster = hre.networkVariables.usdtHolder;
-      break;
-    default:
-    tokenMaster = owner;
-  }
+ switch(tokenAddress) {
+   case hre.networkVariables.busd:
+     tokenMaster = hre.networkVariables.busdHolder;
+     break;
+   case hre.networkVariables.usdc:
+     tokenMaster = hre.networkVariables.usdcHolder;
+     break;
+   case hre.networkVariables.usdt:
+     tokenMaster = hre.networkVariables.usdtHolder;
+     break;
+   default:
+   tokenMaster = owner;
+ }
 
-  if (tokenBalance < matchAmount) {
-    let diffAmount = BigNumber.from(matchAmount).sub(BigNumber.from(tokenBalance));
-    await tokenContract.connect(tokenMaster).transfer(
-      tokenHolder,
-      diffAmount
-    );
-  }
+ if (tokenBalance < matchAmount) {
+   let diffAmount = BigNumber.from(matchAmount).sub(BigNumber.from(tokenBalance));
+   await tokenContract.connect(tokenMaster).transfer(
+     tokenHolder,
+     diffAmount
+   );
+ }
 }
 
 async function convertFromUsdToTokenAmount(oracle, token, valueInUsd)
 {
-  let [priceInUsd, priceInUsdPrecision] = await oracle.getTokenUsdPrice(
-    token.address
-  );
+  let [price, pricePrecision] = await oracle.getTokenUsdPrice(token.address);
   let expectedWithdrawAmount = valueInUsd
     .mul(
-      BigNumber.from(10).pow(priceInUsdPrecision)
+      BigNumber.from(10).pow(pricePrecision)
     )
     .div(
-      priceInUsd
+      price
     )
     .div(
       BigNumber.from(10).pow(18 - (token.decimalNumber ?? 18))
