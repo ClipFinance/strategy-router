@@ -15,7 +15,7 @@ async function getTokenContract(addr) {
   let token = await ethers.getContractAt("MockToken", addr);
   let decimals = Number((await token.decimals()).toString());
 
-  token.decimals = decimals;
+  token.decimalNumber = decimals;
   let parseToken = (args) => utils.parseUnits(args, decimals);
 
   return { token, parseToken };
