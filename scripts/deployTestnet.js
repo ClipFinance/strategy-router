@@ -19,15 +19,13 @@ async function main() {
   // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~
   busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
   usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
-  cake = await ethers.getContractAt("ERC20", hre.networkVariables.cake);
-  wbnb = await ethers.getContractAt("ERC20", hre.networkVariables.wbnb);
   const usdcDecimals = await usdc.decimals();
   const parseUsdc = (amount) => parseUnits(amount, usdcDecimals);
   const parseExchangeLimit = (amount) => parseUnits(amount, 12);
 
   // ~~~~~~~~~~~~~~~ SETTINGS ~~~~~~~~~~~~~~~~
 
-  CYCLE_DURATION = 1;
+  CYCLE_DURATION = 3600;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
   MIN_DEPOSIT = parseUniform("0.0001");
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
