@@ -66,7 +66,8 @@ module.exports = {
   },
   etherscan: {
     apiKey: {
-      bsc: process.env.BSCSCAN_API_KEY
+      bsc: process.env.BSCSCAN_API_KEY,
+      bscTestnet: process.env.BSCSCAN_API_KEY
     }
   },
   docgen: {
@@ -76,6 +77,29 @@ module.exports = {
     compilers: [
       {
         version: "0.8.4",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "istanbul",
+          outputSelection: {
+            "*": {
+              "": ["ast"],
+              "*": [
+                "evm.bytecode.object",
+                "evm.deployedBytecode.object",
+                "abi",
+                "evm.bytecode.sourceMap",
+                "evm.deployedBytecode.sourceMap",
+                "metadata",
+              ],
+            },
+          },
+        },
+      },
+      {
+        version: "0.8.2",
         settings: {
           optimizer: {
             enabled: true,
