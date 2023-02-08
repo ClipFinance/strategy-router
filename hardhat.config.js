@@ -2,12 +2,14 @@ const { parseEther } = require("ethers/lib/utils");
 const { extendEnvironment } = require("hardhat/config");
 
 require("dotenv").config();
-require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
 require('@openzeppelin/hardhat-upgrades');
 require('solidity-docgen');
+
+require('@nomicfoundation/hardhat-chai-matchers');
+require('@nomiclabs/hardhat-ethers')
 
 const networkVariables = require('./networkVariables');
 
@@ -93,6 +95,7 @@ module.exports = {
                 "evm.bytecode.sourceMap",
                 "evm.deployedBytecode.sourceMap",
                 "metadata",
+                "storageLayout",
               ],
             },
           },
@@ -116,6 +119,7 @@ module.exports = {
                 "evm.bytecode.sourceMap",
                 "evm.deployedBytecode.sourceMap",
                 "metadata",
+                "storageLayout",
               ],
             },
           },
@@ -139,6 +143,7 @@ module.exports = {
                 "evm.bytecode.sourceMap",
                 "evm.deployedBytecode.sourceMap",
                 "metadata",
+                "storageLayout"
               ],
             },
           },

@@ -3,7 +3,8 @@ const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { MaxUint256, parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 const { BigNumber } = require("ethers");
-const { loadFixture } = require("ethereum-waffle");
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+
 
 describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   function deploySingleStrategy(underFulfilledWithdrawalBps) {
@@ -41,7 +42,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   }
 
   function loadState(strategyDeploymentFn, rateCoefBps = 0) {
-    return (async function () {
+    async function state () {
       [owner, nonReceiptOwner] = await ethers.getSigners();
 
       // deploy core contracts
@@ -85,7 +86,9 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
         fakeExchangePlugin
       }
-    });
+    }
+
+    return state;
   }
 
   describe("when withdraw from a single strategy", async function () {
@@ -124,7 +127,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to front-end and on-chain oracle different prices", async function () {
@@ -165,7 +168,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to exchange slippage", async function () {
@@ -204,7 +207,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
 
@@ -250,7 +253,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to front-end and on-chain oracle different prices", async function () {
@@ -296,7 +299,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to exchange slippage", async function () {
@@ -335,7 +338,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
 });
