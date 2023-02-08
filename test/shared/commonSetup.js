@@ -29,6 +29,8 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
   );
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, token.address, weight);
+
+  return strategy;
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'

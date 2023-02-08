@@ -36,13 +36,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
     await router.setSupportedToken(busd.address, true);
     await router.setSupportedToken(usdt.address, true);
 
-    // add fake strategies
-    // await deployFakeUnderFulfilledWithdrawalStrategy({
-    //   router,
-    //   token: usdc,
-    //   underFulfilledWithdrawalBps: 0,
-    // });
-
     return {
       owner, nonReceiptOwner,
       router, oracle, exchange, batch, receiptContract, sharesToken,
@@ -68,7 +61,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
 
       // to sell[busd] = 100
       // to buy[usdc] = 100
-      await router.allocateToStrategies();
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       const strategies = await router.getStrategies();
       const strategyBalanceUsdc = await usdc.balanceOf(strategies[0][0]);
@@ -104,9 +97,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       // BUT buy[usdc] MUST be 200-100 = 100 to avoid leftovers
       await router.allocateToStrategies();
 
-      console.log(await busd.balanceOf(batch.address));
-      console.log(await usdt.balanceOf(batch.address));
-
       expect(
         await busd.balanceOf(batch.address)
       ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
@@ -114,11 +104,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         await usdt.balanceOf(batch.address)
       ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
     });
-    it('test before audit fix failure');
-    it('test unoptimal orders of tokens and strategies');
-    it('ensure tokenBalanceUniform > desiredBalanceUniform branches is checked');
-    it('ensure all branches are tested');
-    it('check no remnants on batch more extensively');
     it('no remnants on strategy supported tokens', async function () {
       const {
         router, oracle, batch,
@@ -146,7 +131,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       await oracle.setPrice(busd.address, parseBusd("1"));
       await oracle.setPrice(usdc.address, parseUsdc("1"));
 
-      await router.allocateToStrategies();
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       expect(
         await busd.balanceOf(batch.address)
@@ -178,12 +163,187 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
 
       await router.depositToBatch(busd.address, parseBusd("10"));
 
-      await router.allocateToStrategies();
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       expect(
         await busd.balanceOf(batch.address)
       ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
     });
-    it('3 strategies, 3 deposit tokens, 1 strategy with super low weight');
+    it('3 strategies, 3 deposit tokens, 1 strategy with super low weight', async function() {
+      // order of tokens usdc -> busd -> usdt
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        fakeExchangePlugin,
+      } = await loadFixture(loadState);
+
+      const strategyUsdc = await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 4975,
+      });
+      const strategyBusd = await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 4975,
+      });
+      const strategyUsdt = await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 50,
+      });
+
+      await router.depositToBatch(usdt.address, parseUsdt("10"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      expect(
+        await usdt.balanceOf(batch.address)
+      ).to.be.equal(BigNumber.from(0));
+
+      expect(
+        await usdc.balanceOf(strategyUsdc.address)
+      ).to.be.closeTo(parseUsdc("5"), parseUsdc("0.1"));
+      expect(
+        await busd.balanceOf(strategyBusd.address)
+      ).to.be.closeTo(parseBusd("5"), parseBusd("0.1"));
+      expect(
+        await usdt.balanceOf(strategyUsdt.address)
+      ).to.be.closeTo(parseUsdt("0"), parseUsdt("0"));
+    });
+    it(
+      'add slight math overflow check when desired balance greater than token balance, token is the same',
+      async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router, oracle, batch,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          usdt, parseUsdt,
+          fakeExchangePlugin,
+        } = await loadFixture(loadState);
+
+        await deployFakeUnderFulfilledWithdrawalStrategy({
+          router,
+          token: usdt,
+          underFulfilledWithdrawalBps: 0,
+          weight: 50_000_000_100,
+        });
+        await deployFakeUnderFulfilledWithdrawalStrategy({
+          router,
+          token: usdt,
+          underFulfilledWithdrawalBps: 0,
+          weight: 49_999_999_900,
+        });
+
+        await router.depositToBatch(usdt.address, parseUsdt("10"));
+        await router.depositToBatch(busd.address, parseBusd("10"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        expect(
+          await usdt.balanceOf(batch.address)
+        ).to.be.equal(BigNumber.from(0));
+        expect(
+          await busd.balanceOf(batch.address)
+        ).to.be.equal(BigNumber.from(0));
+      }
+    );
+    it('2 small weight strategies, 1 normal weight, test for dust', async function () {
+      // order of tokens usdc -> busd -> usdt
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        fakeExchangePlugin,
+      } = await loadFixture(loadState);
+
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 50,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 50,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 9900,
+      });
+
+      await router.depositToBatch(busd.address, parseBusd("10"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      expect(
+        await busd.balanceOf(batch.address)
+      ).to.be.equal(BigNumber.from(0));
+    });
+    it('test no swap occurs', async function () {
+      // order of tokens usdc -> busd -> usdt
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        fakeExchangePlugin,
+      } = await loadFixture(loadState);
+
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 5000,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 5000,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: usdc,
+        underFulfilledWithdrawalBps: 0,
+        weight: 5000,
+      });
+      await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        underFulfilledWithdrawalBps: 0,
+        weight: 5000,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("100"));
+      await router.depositToBatch(busd.address, parseBusd("100"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      expect(
+        await usdc.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+      expect(
+        await busd.balanceOf(batch.address)
+      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+
+      expect(await fakeExchangePlugin.swapCallNumber()).to.be.equal(0);
+    });
+    it('test before audit fix failure');
+    it('test unoptimal orders of tokens and strategies');
+    it('ensure tokenBalanceUniform > desiredBalanceUniform branches is checked');
+    it('ensure all branches are tested');
+    it('check no remnants on batch more extensively');
   });
 });
