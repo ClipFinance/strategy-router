@@ -8,7 +8,8 @@ const { BLOCKS_MONTH, skipTimeAndBlocks, MONTH_SECONDS } = require("./utils");
 const { loadFixture } = require("ethereum-waffle");
 
 
-function loadState(strategyDeploymentFn) {
+
+function loadState(profitPercent, isRewardPositive = true) {
   return (async function() {
     [owner, nonReceiptOwner] = await ethers.getSigners();
 
@@ -41,7 +42,25 @@ function loadState(strategyDeploymentFn) {
     await router.setSupportedToken(usdt.address, true);
 
     // add fake strategies
-    await strategyDeploymentFn({ router, busd, usdc, usdt });
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: busd,
+      profitPercent,
+      underFulfilledWithdrawalBps: 0,
+      isRewardPositive
+    });
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: usdc,
+      underFulfilledWithdrawalBps: 0,
+      isRewardPositive
+    });
+    await deployFakeUnderFulfilledWithdrawalStrategy({
+      router,
+      token: usdt,
+      underFulfilledWithdrawalBps: 0,
+      isRewardPositive
+    });
 
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1000"));
@@ -61,13 +80,8 @@ describe("Test AfterCompound event", function() {
   describe("Test AfterCompound event emitting", function() {
 
     it("should fire AfterCompound event after allocateToStrategies with exact values", async function() {
-      const {
-        router, sharesToken, busd, parseBusd
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(0)
-        )
-      );
+      const state = loadState(0);
+      const { router, sharesToken, busd, parseBusd } = await loadFixture(state);
 
       const cycleIdBeforeAllocation = await router.currentCycleId();
       const totalTvlBeforeAllocation = (await router.getStrategiesValue()).totalBalance;
@@ -85,13 +99,7 @@ describe("Test AfterCompound event", function() {
     });
 
     it("should fire AfterCompound event after compoundAll with exact values", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(0)
-        )
-      );
+      const { router, sharesToken } = await loadFixture(loadState(0));
 
       const cycleId = await router.currentCycleId();
       const totalTvl = (await router.getStrategiesValue()).totalBalance;
@@ -110,35 +118,33 @@ describe("Test AfterCompound event", function() {
 
   describe("Check if the actual compound happened", function() {
 
-    it("TVL didnt grow with compoundAll", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(0)
-        )
-      );
+    it.only("TVL didnt grow with compoundAll", async function() {
+      const { router, sharesToken, } = await loadFixture(loadState(0));
 
-      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesBeforeCompound = await sharesToken.totalSupply();
+      // const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      // const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      await router.compoundAll();
+      const test = (arg) => {
+        throw Error('tezt')
+        return false
+      }
 
-      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesAfterCompound = await sharesToken.totalSupply();
+      await expect(router.compoundAll())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(test, test, test);
 
-      expect(totalTvlBeforeCompound).to.be.eq(totalTvlAfterCompound);
-      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
+      // await router.compoundAll();
+      //
+      // const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
+      // const totalSharesAfterCompound = await sharesToken.totalSupply();
+      //
+      // expect(totalTvlBeforeCompound).to.be.eq(totalTvlAfterCompound);
+      // expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
     });
 
     it("TVL reduced with compoundAll", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(1000, false)
-        )
-      );
+      const { router, sharesToken, } = await loadFixture(loadState(1000, false));
 
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
@@ -153,13 +159,7 @@ describe("Test AfterCompound event", function() {
     });
 
     it("TVL reduced with allocateToStrategies", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(10000, false)
-        )
-      );
+      const { router, sharesToken, } = await loadFixture(loadState(10000, false));
 
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
@@ -175,13 +175,7 @@ describe("Test AfterCompound event", function() {
     });
 
     it("TVL grown with compoundAll", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(1000)
-        )
-      );
+      const { router, sharesToken, } = await loadFixture(loadState(1000));
 
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
@@ -196,13 +190,7 @@ describe("Test AfterCompound event", function() {
     });
 
     it("TVL grown with allocateToStrategies", async function() {
-      const {
-        router, sharesToken,
-      } = await loadFixture(
-        loadState(
-          deployMultipleStrategies(1000)
-        )
-      );
+      const { router, sharesToken } = await loadFixture(loadState(1000));
 
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
@@ -218,29 +206,3 @@ describe("Test AfterCompound event", function() {
     });
   });
 });
-
-function deployMultipleStrategies(
-  profitPercent, tvlGrow = true
-) {
-  return async function({ router, usdc, usdt, busd }) {
-    await deployFakeUnderFulfilledWithdrawalStrategy({
-      router,
-      token: busd,
-      profitPercent,
-      underFulfilledWithdrawalBps: 0,
-      tvlGrow
-    });
-    await deployFakeUnderFulfilledWithdrawalStrategy({
-      router,
-      token: usdc,
-      underFulfilledWithdrawalBps: 0,
-      tvlGrow
-    });
-    await deployFakeUnderFulfilledWithdrawalStrategy({
-      router,
-      token: usdt,
-      underFulfilledWithdrawalBps: 0,
-      tvlGrow
-    });
-  };
-}

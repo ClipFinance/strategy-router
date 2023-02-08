@@ -18,8 +18,7 @@ async function deployFakeStrategy({ router, token, weight = 10_000, profitPercen
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({
   router, token, underFulfilledWithdrawalBps,
-  weight = 10_000, profitPercent = 0,
-  tvlGrow = true
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
 }) {
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy(
@@ -27,7 +26,7 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
     underFulfilledWithdrawalBps,
     token.address,
     profitPercent,
-    tvlGrow
+    isRewardPositive
   );
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, token.address, weight);
