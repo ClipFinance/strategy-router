@@ -1,11 +1,7 @@
-const { expect, assert } = require("chai");
-const { parseEther } = require("ethers/lib/utils");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { provider, deploy, MaxUint256, parseUniform, deployProxy } = require("./utils");
-const { FakeContract, smock } = require('@defi-wonderland/smock');
-const { mocha } = require("../hardhat.config");
-
-
+const { provider, deployProxy } = require("./utils");
+const { smock } = require('@defi-wonderland/smock');
 
 describe("Test ChainlinkOracle", function () {
 
