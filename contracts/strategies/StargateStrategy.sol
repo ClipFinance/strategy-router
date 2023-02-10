@@ -97,6 +97,8 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             }
 
             _withdrawFromFarm(lpToRemove);
+
+            _compoundStg();
         }
 
         currTokenBalance = token.balanceOf(address(this));
@@ -111,11 +113,7 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         // inside withdraw happens STG rewards collection
         stargateFarm.withdraw(farmId, 0);
 
-        uint256 swappedAmount = _sellReward();
-
-        if (swappedAmount != 0) {
-            _deposit(swappedAmount);
-        }
+        _compoundStg();
     }
 
     function totalTokens() external view override returns (uint256) {
@@ -141,7 +139,8 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
         _sellReward();
 
-        amountWithdrawn = token.balanceOf(address(this)) - currTokenBalance;
+        amountWithdrawn = token.balanceOf(address(this));
+        token.safeTransfer(msg.sender, amountWithdrawn);
     }
 
     function _withdrawFromFarm(uint256 _lpAmount) internal {
@@ -151,6 +150,14 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             _lpAmount,
             address(this)
         );
+    }
+
+    function _compoundStg() internal {
+        uint256 swappedAmount = _sellReward();
+
+        if (swappedAmount != 0 && _amountLDtoLP(swappedAmount) != 0) {
+            _deposit(swappedAmount);
+        }
     }
 
     function _sellReward() private returns (uint256 received) {
@@ -165,22 +172,7 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
                 address(token),
                 address(this)
             );
-
-            _collectProtocolCommission(received);
         }
-    }
-
-    function _collectProtocolCommission(uint256 amount)
-        private
-        returns (uint256 amountAfterFee)
-    {
-        uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
-        address feeAddress = StrategyRouter(strategyRouter).feeAddress();
-        uint256 feeAmount = (amount * feePercent) / PERCENT_DENOMINATOR;
-
-        token.transfer(feeAddress, feeAmount);
-
-        return (amount - feeAmount);
     }
 
     function _amountLDtoLP(uint256 _amountLD)
