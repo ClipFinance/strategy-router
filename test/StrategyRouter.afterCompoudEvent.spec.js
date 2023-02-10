@@ -4,13 +4,10 @@ const {
   setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken
 } = require("./shared/commonSetup");
-const { BLOCKS_MONTH, skipTimeAndBlocks, MONTH_SECONDS } = require("./utils");
-const { loadFixture } = require("ethereum-waffle");
-
-
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 
 function loadState(profitPercent, isRewardPositive = true) {
-  return (async function() {
+   async function state() {
     [owner, nonReceiptOwner] = await ethers.getSigners();
 
     // deploy core contracts
@@ -72,7 +69,8 @@ function loadState(profitPercent, isRewardPositive = true) {
       usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
       fakeExchangePlugin
     };
-  });
+  }
+  return state
 }
 
 describe("Test AfterCompound event", function() {
@@ -118,91 +116,104 @@ describe("Test AfterCompound event", function() {
 
   describe("Check if the actual compound happened", function() {
 
-    it.only("TVL didnt grow with compoundAll", async function() {
+    it("TVL didnt grow with compoundAll", async function() {
       const { router, sharesToken, } = await loadFixture(loadState(0));
 
-      // const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
-      // const totalSharesBeforeCompound = await sharesToken.totalSupply();
-
-      const test = (arg) => {
-        throw Error('tezt')
-        return false
-      }
+      const cycleId = await router.currentCycleId();
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
       await expect(router.compoundAll())
         .to
         .emit(router, "AfterCompound")
-        .withArgs(test, test, test);
+        .withArgs(cycleId, totalTvlBeforeCompound, totalSharesBeforeCompound);
+    });
 
-      // await router.compoundAll();
-      //
-      // const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      // const totalSharesAfterCompound = await sharesToken.totalSupply();
-      //
-      // expect(totalTvlBeforeCompound).to.be.eq(totalTvlAfterCompound);
-      // expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
+    it("TVL didnt grow with allocateToStrategies", async function() {
+      const { router, sharesToken, } = await loadFixture(loadState(0));
+
+      const cycleId = await router.currentCycleId();
+      const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
+      const totalSharesBeforeCompound = await sharesToken.totalSupply();
+
+      await router.depositToBatch(busd.address, parseBusd("0.01"));
+
+      await expect(router.allocateToStrategies())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(cycleId, totalTvlBeforeCompound, totalSharesBeforeCompound);
     });
 
     it("TVL reduced with compoundAll", async function() {
       const { router, sharesToken, } = await loadFixture(loadState(1000, false));
 
+      const cycleId = await router.currentCycleId();
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      await router.compoundAll();
+      const checkTvl = (tvl) => {
+        return tvl.lt(totalTvlBeforeCompound)
+      }
 
-      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesAfterCompound = await sharesToken.totalSupply();
-
-      expect(totalTvlBeforeCompound).to.be.gt(totalTvlAfterCompound);
-      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
+      await expect(router.compoundAll())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(cycleId, checkTvl, totalSharesBeforeCompound);
     });
 
     it("TVL reduced with allocateToStrategies", async function() {
       const { router, sharesToken, } = await loadFixture(loadState(10000, false));
 
+      const cycleId = await router.currentCycleId();
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
       await router.depositToBatch(busd.address, parseBusd("0.01"));
-      await router.allocateToStrategies();
 
-      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesAfterCompound = await sharesToken.totalSupply();
+      const checkTvl = (tvl) => {
+        return tvl.lt(totalTvlBeforeCompound)
+      }
 
-      expect(totalTvlBeforeCompound).to.be.gt(totalTvlAfterCompound);
-      expect(totalSharesBeforeCompound).to.be.lt(totalSharesAfterCompound);
+      await expect(router.allocateToStrategies())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(cycleId, checkTvl, totalSharesBeforeCompound);
     });
 
     it("TVL grown with compoundAll", async function() {
       const { router, sharesToken, } = await loadFixture(loadState(1000));
 
+      const cycleId = await router.currentCycleId();
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      await router.compoundAll();
+      const checkTvl = (tvl) => {
+        return tvl.gt(totalTvlBeforeCompound)
+      }
 
-      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesAfterCompound = await sharesToken.totalSupply();
-
-      expect(totalTvlBeforeCompound).to.be.lt(totalTvlAfterCompound);
-      expect(totalSharesBeforeCompound).to.be.eq(totalSharesAfterCompound);
+      await expect(router.compoundAll())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(cycleId, checkTvl, totalSharesBeforeCompound);
     });
 
     it("TVL grown with allocateToStrategies", async function() {
       const { router, sharesToken } = await loadFixture(loadState(1000));
 
+      const cycleId = await router.currentCycleId();
       const totalTvlBeforeCompound = (await router.getStrategiesValue()).totalBalance;
       const totalSharesBeforeCompound = await sharesToken.totalSupply();
 
-      await router.depositToBatch(busd.address, parseBusd("1"));
-      await router.allocateToStrategies();
+      await router.depositToBatch(busd.address, parseBusd("0.01"));
 
-      const totalTvlAfterCompound = (await router.getStrategiesValue()).totalBalance;
-      const totalSharesAfterCompound = await sharesToken.totalSupply();
+      const checkTvl = (tvl) => {
+        return tvl.gt(totalTvlBeforeCompound)
+      }
 
-      expect(totalTvlBeforeCompound).to.be.lt(totalTvlAfterCompound);
-      expect(totalSharesBeforeCompound).to.be.lt(totalSharesAfterCompound);
+      await expect(router.allocateToStrategies())
+        .to
+        .emit(router, "AfterCompound")
+        .withArgs(cycleId, checkTvl, totalSharesBeforeCompound);
     });
   });
 });
