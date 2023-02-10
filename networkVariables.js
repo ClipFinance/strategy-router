@@ -31,6 +31,27 @@ function bnbChain() {
   return bnb;
 }
 
-const config = { bnb: bnbChain(), bnbTest: bnbChain(), localhost: bnbChain(), };
+
+function bnbTestChain() {
+
+  const bnb = {
+    // https://testnet.bscscan.com/address/0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7
+    busd: "0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7",
+    // https://testnet.bscscan.com/address/0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D
+    usdc: "0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D",
+  };
+
+  // https://testnet.bscscan.com/address/0xD99D1c33F9fC3444f8101754aBC46c52416550D1
+  bnb.uniswapRouter = "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
+
+  // https://testnet.bscscan.com/address/0x9331b55D9830EF609A2aBCfAc0FBCE050A52fdEa
+  bnb.BusdUsdPriceFeed = "0x9331b55D9830EF609A2aBCfAc0FBCE050A52fdEa";
+  // https://testnet.bscscan.com/address/0x90c069C4538adAc136E051052E14c1cD799C41B7
+  bnb.UsdcUsdPriceFeed = "0x90c069C4538adAc136E051052E14c1cD799C41B7";
+
+  return bnb;
+}
+
+const config = { bnb: bnbChain(), bnbTest: bnbTestChain(), localhost: bnbChain(), };
 
 module.exports = config;
