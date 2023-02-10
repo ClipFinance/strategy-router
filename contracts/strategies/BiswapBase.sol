@@ -48,7 +48,7 @@ contract BiswapBase is
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
-    uint256 private constant PRICE_DELTA = 1e18;
+    uint256 private constant PRICE_DELTA = 5; // allow until 20%
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
@@ -408,10 +408,7 @@ contract BiswapBase is
                 (reserve0 * 1e18) / reserve1
             );
 
-        uint256 priceDiff = oraclePrice > ammPrice
-            ? oraclePrice - ammPrice
-            : ammPrice - oraclePrice;
-        if (priceDiff > PRICE_DELTA) revert PriceManipulation();
+        _checkPriceManipulation(oraclePrice, ammPrice);
         uint256 amountAToSell = (tokenAmount * reserve1 * 1e18) /
             ((oraclePrice * reserve0 * (1e18 - dexFee)) /
                 1e18 +
@@ -419,6 +416,15 @@ contract BiswapBase is
                 1e18);
         amountB = (amountAToSell * oraclePrice * (1e18 - dexFee)) / 1e36;
         amountA = tokenAmount - amountAToSell;
+    }
+
+    function _checkPriceManipulation(uint oraclePrice, uint ammPrice) internal virtual view {
+        if (oraclePrice != ammPrice) {
+            uint256 priceDiff = oraclePrice > ammPrice
+                ? oraclePrice / (oraclePrice - ammPrice)
+                : oraclePrice / (ammPrice - oraclePrice);
+            if (priceDiff < PRICE_DELTA) revert PriceManipulation();
+        }
     }
 
     // Return Price of token0 in token1 with 18 decimals

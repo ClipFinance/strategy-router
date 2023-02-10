@@ -54,8 +54,16 @@ describe("Test BiswapBase", function () {
 
     const initialSupply = 100_000_000;
 
-    const token0 = await deploy("MockToken", utils.parseEther(initialSupply.toString()), 18);
-    const token1 = await deploy("MockToken", utils.parseEther(initialSupply.toString()), 18);
+    const token0 = await deploy(
+      "MockToken",
+      utils.parseEther(initialSupply.toString()),
+      18
+    );
+    const token1 = await deploy(
+      "MockToken",
+      utils.parseEther(initialSupply.toString()),
+      18
+    );
     token0.decimals = 18;
     token1.decimals = 18;
 
@@ -298,6 +306,7 @@ describe("Test BiswapBase", function () {
         8
       );
 
+      await mockBiswapStrategyAB.setCheckPriceManipulation(true);
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWith("PriceManipulation()");
@@ -313,7 +322,7 @@ describe("Test BiswapBase", function () {
       ).to.revertedWith("PriceManipulation()");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1, PriceYinX: 1, TotalAmountInX: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInX: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
@@ -339,7 +348,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("998497746619929894841");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1, PriceYinX: 1, TotalAmountInY: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInY: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
@@ -365,7 +374,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("998497746619929894843");
     });
 
-    it("test scenario(X: 1200000, Y: 1000000, PriceXinY: 1.2, PriceYinX: 0.83, TotalAmountInX: 2000)", async function () {
+    it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.Oracle2, PriceYinX: 0.83, TotalAmountInX: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1200000"),
         utils.parseEther("1000000")
@@ -391,7 +400,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("832081455516608245534");
     });
 
-    it("test scenario(X: 1200000, Y: 1000000, PriceXinY: 1.2, PriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
+    it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.Oracle2, PriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1200000"),
         utils.parseEther("1000000")
@@ -417,7 +426,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("998497746619929894843");
     });
 
-    it("test scenario(X: 1000000, Y: 1200000, PriceXinY: 0.83, PriceYinX: 1.2, TotalAmountInX: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.Oracle83, PriceYinX: 1.2, TotalAmountInX: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1200000")
@@ -443,7 +452,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("1198197295943915873809");
     });
 
-    it("test scenario(X: 1000000, Y: 1200000, PriceXinY: 0.83, PriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.Oracle83, PriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1200000")
@@ -469,7 +478,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("998497746619929894643");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1.1, PriceYinX: 0.9, TotalAmountInX: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.Oracle1, PriceYinX: 0.9, TotalAmountInX: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
@@ -495,7 +504,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("950882212684787791584");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 1.1, PriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.Oracle1, PriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
@@ -521,7 +530,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("1046120093480230838938");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 0.9, PriceYinX: 1.1, TotalAmountInX: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.Oracle9, PriceYinX: 1.1, TotalAmountInX: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
@@ -547,7 +556,7 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("1051133368476541908225");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, PriceXinY: 0.9, PriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
+    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.Oracle9, PriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("1000000"),
         utils.parseEther("1000000")
