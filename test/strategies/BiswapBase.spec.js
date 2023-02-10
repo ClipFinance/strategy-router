@@ -348,238 +348,242 @@ describe("Test BiswapBase", function () {
       expect(amountY).to.be.equal("998497746619929894841");
     });
 
-    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInY: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-
-      const { amountA: amountY, amountB: amountX } =
-        await mockBiswapStrategyBA.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
+    describe("AMM and Oracle price match", function () {
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1", 8),
+          8
         );
 
-      expect(amountX).to.be.equal("998497746619929894841");
-      expect(amountY).to.be.equal("998497746619929894843");
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("998497746619929894841");
+        expect(amountY).to.be.equal("998497746619929894843");
+      });
+
+      it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.2, OraclePriceYinX: 0.83, TotalAmountInX: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1200000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1.2", 8),
+          8
+        );
+
+        const { amountA: amountX, amountB: amountY } =
+          await mockBiswapStrategyAB.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("998497746619929894643");
+        expect(amountY).to.be.equal("832081455516608245534");
+      });
+
+      it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.2, OraclePriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1200000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1.2", 8),
+          8
+        );
+
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("1198197295943915873809");
+        expect(amountY).to.be.equal("998497746619929894843");
+      });
+
+      it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.83, OraclePriceYinX: 1.2, TotalAmountInX: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1200000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1.2", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+
+        const { amountA: amountX, amountB: amountY } =
+          await mockBiswapStrategyAB.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("998497746619929894843");
+        expect(amountY).to.be.equal("1198197295943915873809");
+      });
+
+      it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.83, OraclePriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1200000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1.2", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("832081455516608245534");
+        expect(amountY).to.be.equal("998497746619929894643");
+      });
     });
 
-    it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.Oracle2, PriceYinX: 0.83, TotalAmountInX: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1200000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1.2", 8),
-        8
-      );
-
-      const { amountA: amountX, amountB: amountY } =
-        await mockBiswapStrategyAB.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
+    describe("AMM and Oracle price differ", function () {
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.1, OraclePriceYinX: 0.9, TotalAmountInX: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1.1", 8),
+          8
         );
 
-      expect(amountX).to.be.equal("998497746619929894643");
-      expect(amountY).to.be.equal("832081455516608245534");
-    });
+        const { amountA: amountX, amountB: amountY } =
+          await mockBiswapStrategyAB.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
 
-    it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.Oracle2, PriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1200000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1.2", 8),
-        8
-      );
+        expect(amountX).to.be.equal("950882212684787791586");
+        expect(amountY).to.be.equal("950882212684787791584");
+      });
 
-      const { amountA: amountY, amountB: amountX } =
-        await mockBiswapStrategyBA.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.1, OraclePriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1.1", 8),
+          8
         );
 
-      expect(amountX).to.be.equal("1198197295943915873809");
-      expect(amountY).to.be.equal("998497746619929894843");
-    });
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
 
-    it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.Oracle83, PriceYinX: 1.2, TotalAmountInX: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1200000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1.2", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1", 8),
-        8
-      );
+        expect(amountX).to.be.equal("1046120093480230838936");
+        expect(amountY).to.be.equal("1046120093480230838938");
+      });
 
-      const { amountA: amountX, amountB: amountY } =
-        await mockBiswapStrategyAB.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.9, OraclePriceYinX: 1.1, TotalAmountInX: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("0.9", 8),
+          8
         );
 
-      expect(amountX).to.be.equal("998497746619929894843");
-      expect(amountY).to.be.equal("1198197295943915873809");
-    });
+        const { amountA: amountX, amountB: amountY } =
+          await mockBiswapStrategyAB.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
 
-    it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.Oracle83, PriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1200000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1.2", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1", 8),
-        8
-      );
+        expect(amountX).to.be.equal("1051133368476541908227");
+        expect(amountY).to.be.equal("1051133368476541908225");
+      });
 
-      const { amountA: amountY, amountB: amountX } =
-        await mockBiswapStrategyBA.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.9, OraclePriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("0.9", 8),
+          8
         );
 
-      expect(amountX).to.be.equal("832081455516608245534");
-      expect(amountY).to.be.equal("998497746619929894643");
-    });
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
 
-    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.Oracle1, PriceYinX: 0.9, TotalAmountInX: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1.1", 8),
-        8
-      );
-
-      const { amountA: amountX, amountB: amountY } =
-        await mockBiswapStrategyAB.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
-        );
-
-      expect(amountX).to.be.equal("950882212684787791586");
-      expect(amountY).to.be.equal("950882212684787791584");
-    });
-
-    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.Oracle1, PriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("1.1", 8),
-        8
-      );
-
-      const { amountA: amountY, amountB: amountX } =
-        await mockBiswapStrategyBA.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
-        );
-
-      expect(amountX).to.be.equal("1046120093480230838936");
-      expect(amountY).to.be.equal("1046120093480230838938");
-    });
-
-    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.Oracle9, PriceYinX: 1.1, TotalAmountInX: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("0.9", 8),
-        8
-      );
-
-      const { amountA: amountX, amountB: amountY } =
-        await mockBiswapStrategyAB.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
-        );
-
-      expect(amountX).to.be.equal("1051133368476541908227");
-      expect(amountY).to.be.equal("1051133368476541908225");
-    });
-
-    it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.Oracle9, PriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
-      await mockLpToken.setReserves(
-        utils.parseEther("1000000"),
-        utils.parseEther("1000000")
-      );
-      await oracle.setPriceAndDecimals(
-        tokenA.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        tokenB.address,
-        utils.parseUnits("0.9", 8),
-        8
-      );
-
-      const { amountA: amountY, amountB: amountX } =
-        await mockBiswapStrategyBA.calculateSwapAmountPublic(
-          tokenAmount,
-          DEX_FEE
-        );
-
-      expect(amountX).to.be.equal("945870447477995045590");
-      expect(amountY).to.be.equal("945870447477995045592");
+        expect(amountX).to.be.equal("945870447477995045590");
+        expect(amountY).to.be.equal("945870447477995045592");
+      });
     });
   });
 });
