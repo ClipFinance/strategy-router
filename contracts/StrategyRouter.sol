@@ -261,8 +261,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (uint256 strategiesBalanceAfterDepositInUsd, ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();
-
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
             cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;

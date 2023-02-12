@@ -70,12 +70,12 @@ describe("Test StrategyRouter protocol fee collection", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-  describe("Strategy has zero commission, protocol fee is zero", function () {
+  describe("When protocol commission is set to zero, protocol should not collect fee", function () {
     beforeEach(async function () {
       await router.setFeesPercent(0);
     });
 
-    it("should have no shares if there was yield", async function () {
+    it("should have no shares after initial deposit", async function () {
       // deposit to strategies
       await router.depositToBatch(busd.address, parseBusd("10000"));
       await router.allocateToStrategies();
@@ -104,7 +104,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
         await router.allocateToStrategies();
       });
 
-      it("should have no shares if there was yield", async function () {
+      it("should have no shares after initial deposit", async function () {
         // deposit to strategies
         await router.depositToBatch(busd.address, parseBusd("10000"));
         await router.allocateToStrategies();
@@ -288,7 +288,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           await router.allocateToStrategies();
         });
 
-        it("should decrease previous cycle recorder balance on withdrawal", async function () {
+        it("should decrease previous cycle's strategies balance on withdrawal", async function () {
           let receiptIds = [1];
           let shares = await router.calculateSharesFromReceipts(receiptIds);
           let sharesValueUsd = await router.calculateSharesUsdValue(shares);
