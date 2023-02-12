@@ -2,12 +2,14 @@ const { parseEther } = require("ethers/lib/utils");
 const { extendEnvironment } = require("hardhat/config");
 
 require("dotenv").config();
-require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
 require('@openzeppelin/hardhat-upgrades');
 require('solidity-docgen');
+
+require('@nomicfoundation/hardhat-chai-matchers');
+require('@nomiclabs/hardhat-ethers')
 
 const networkVariables = require('./networkVariables');
 
@@ -66,7 +68,8 @@ module.exports = {
   },
   etherscan: {
     apiKey: {
-      bsc: process.env.BSCSCAN_API_KEY
+      bsc: process.env.BSCSCAN_API_KEY,
+      bscTestnet: process.env.BSCSCAN_API_KEY
     }
   },
   docgen: {
@@ -92,6 +95,31 @@ module.exports = {
                 "evm.bytecode.sourceMap",
                 "evm.deployedBytecode.sourceMap",
                 "metadata",
+                "storageLayout",
+              ],
+            },
+          },
+        },
+      },
+      {
+        version: "0.8.2",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+          evmVersion: "istanbul",
+          outputSelection: {
+            "*": {
+              "": ["ast"],
+              "*": [
+                "evm.bytecode.object",
+                "evm.deployedBytecode.object",
+                "abi",
+                "evm.bytecode.sourceMap",
+                "evm.deployedBytecode.sourceMap",
+                "metadata",
+                "storageLayout",
               ],
             },
           },
@@ -115,6 +143,7 @@ module.exports = {
                 "evm.bytecode.sourceMap",
                 "evm.deployedBytecode.sourceMap",
                 "metadata",
+                "storageLayout"
               ],
             },
           },

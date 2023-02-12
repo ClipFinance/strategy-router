@@ -291,7 +291,8 @@ describe("Test StrategyRouter", function () {
       [, nonModerator] = await ethers.getSigners();
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.allocateToStrategies();
-      await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1])).to.be.revertedWith("NotModerator()");
+      await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1]))
+        .to.be.revertedWithCustomError(router, "NotModerator");
     });
 
     it("should unlock list of 1 receipt", async function () {
