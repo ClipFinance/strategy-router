@@ -1,4 +1,4 @@
-const { parseUnits } = require("ethers/lib/utils");
+const { parseUnits, parseEther } = require("ethers/lib/utils");
 const { ethers, upgrades } = require("hardhat");
 const {
   getUSDC,
@@ -8,6 +8,10 @@ const {
   parseUniform,
   deployProxy,
 } = require("../utils");
+const {
+  getContract,
+  impersonate
+} = require("./forkHelper")
 
 module.exports = {
   setupTokens,
@@ -16,7 +20,11 @@ module.exports = {
   deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeToken,
   setupFakeTokens,
+  setupFakeTwoTokensByOrder,
   setupTokensLiquidityOnPancake,
+  setupTokensLiquidityOnBiswap,
+  getPairToken,
+  getPairTokenOnBiswap,
   setupParamsOnBNB,
   setupTestParams,
   setupRouterParams,
@@ -25,6 +33,7 @@ module.exports = {
   setupFakeExchangePlugin,
   mintFakeToken,
   deployBiswapStrategy,
+  addBiswapPool,
 };
 
 async function deployFakeStrategy({
@@ -93,6 +102,25 @@ async function setupFakeTokens() {
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 }
 
+async function setupFakeTwoTokensByOrder() {
+  // each test token's total supply, minted to owner
+  let totalSupply = (100_000_000).toString();
+
+  let token0 = await deploy("MockToken", parseUnits(totalSupply, 18), 18);
+  token0.decimalNumber = 18;
+
+  let token1 = await deploy("MockToken", parseUnits(totalSupply, 18), 18);
+  token1.decimalNumber = 18;
+
+  if (token0.address.toLowerCase() > token1.address.toLowerCase()) {
+    const token = token0;
+    token0 = token1;
+    token1 = token;
+  }
+
+  return { token0, token1 };
+}
+
 async function setupFakeToken(
   totalSupply = (100_000_000).toString(),
   decimals = 18
@@ -126,15 +154,15 @@ async function setupFakeExchangePlugin(oracle, slippageBps, feeBps) {
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
+async function setupTokensLiquidity(tokenA, tokenB, amount, amount1, routerAddr) {
   const [owner] = await ethers.getSigners();
   let uniswapRouter = await ethers.getContractAt(
     "IUniswapV2Router02",
-    hre.networkVariables.uniswapRouter
+    routerAddr
   );
 
-  let amountA = parseUnits(amount, await tokenA.decimals());
-  let amountB = parseUnits(amount1 ? amount1 : amount, await tokenB.decimals());
+  let amountA = parseUnits(amount.toString(), await tokenA.decimals());
+  let amountB = parseUnits(amount1 ? amount1.toString() : amount.toString(), await tokenB.decimals());
   await tokenA.approve(uniswapRouter.address, amountA);
   await tokenB.approve(uniswapRouter.address, amountB);
   await uniswapRouter.addLiquidity(
@@ -147,6 +175,59 @@ async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
     owner.address,
     Date.now()
   );
+}
+
+// Create liquidity on Pancake
+async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
+  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.uniswapRouter)
+}
+
+// Create liquidity on Biswap
+async function setupTokensLiquidityOnBiswap(tokenA, tokenB, amount, amount1) {
+  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.biswapRouter)
+}
+
+// Get lp pair token on uniswap-like router
+async function getPairToken(tokenA, tokenB, routerAddr) {
+  let uniswapRouter = await ethers.getContractAt(
+    "IUniswapV2Router02",
+    routerAddr
+  );
+
+  const factory = await getContract(
+    "IUniswapV2Factory",
+    await uniswapRouter.factory()
+  );
+
+  const lpAddr = await factory.getPair(tokenA.address, tokenB.address);
+  lpToken = await getContract("MockToken", lpAddr);
+
+  return lpToken;
+}
+
+// Get pair token on Biswap
+function getPairTokenOnBiswap(tokenA, tokenB) {
+  return getPairToken(tokenA, tokenB, hre.networkVariables.biswapRouter)
+}
+
+// Create liquidity on uniswap-like router with test tokens
+async function addBiswapPool(lpTokenAddress, alloc = 70) {
+  const biswapFarm = await getContract("IBiswapFarm", hre.networkVariables.biswapFarm);
+
+  biswapOwner = await impersonate(await biswapFarm.owner());
+
+  biswapPoolId = await biswapFarm.poolLength();
+
+  const [owner] = await ethers.getSigners();
+
+  await owner.sendTransaction({
+    from: owner.address,
+    to: biswapOwner.address,
+    value: parseEther("1"),
+  });
+  await biswapFarm.connect(biswapOwner).add(alloc, lpTokenAddress, false);
+
+  return biswapPoolId;
 }
 
 // Get tokens that actually exists on BNB for testing

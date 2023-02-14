@@ -1,38 +1,38 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { utils, constants } = require("ethers");
-const { setupCore, deployBiswapStrategy } = require("../shared/commonSetup");
+const { utils } = require("ethers");
+const {
+  setupCore,
+  setupFakeTwoTokensByOrder,
+  setupTokensLiquidityOnPancake,
+  setupTokensLiquidityOnBiswap,
+  deployBiswapStrategy,
+  getPairTokenOnBiswap,
+  addBiswapPool,
+} = require("../shared/commonSetup");
 const {
   getTokenContract,
   mintForkedToken,
   getContract,
-  impersonate,
 } = require("../shared/forkHelper");
 const { provider, deploy } = require("../utils");
 
 describe("Test BiswapBase", function () {
   let owner, nonReceiptOwner;
   // mainnet contracts
-  let biswapFarm, biswapRouter, pancakeRouter, biswapOwner, biswapPoolId;
+  let biswapFarm, biswapPoolId;
   // mock tokens with different decimals
   let tokenA, tokenB, bsw, lpToken;
-  // helper functions to parse amounts of mock tokens
-  let parseBsw;
   // Mock lp token
   let mockLpToken;
   // core contracts
   let router, oracle, mockExchange, batch, receiptContract, sharesToken;
   // biswap strategy
   let biswapStrategy;
-  // pancake plugin
-  let pancakePlugin;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
   let initialSnapshot;
-
-  const BISWAP_ROUTER_ADDR = "0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8";
-  const BISWAP_FARM_ADDR = "0xDbc1A13490deeF9c3C12b44FE77b503c1B061739";
 
   before(async function () {
     [owner, nonReceiptOwner] = await ethers.getSigners();
@@ -52,32 +52,12 @@ describe("Test BiswapBase", function () {
       receiptContract.address
     );
 
-    const initialSupply = 100_000_000;
-
-    const token0 = await deploy(
-      "MockToken",
-      utils.parseEther(initialSupply.toString()),
-      18
-    );
-    const token1 = await deploy(
-      "MockToken",
-      utils.parseEther(initialSupply.toString()),
-      18
-    );
-    token0.decimals = 18;
-    token1.decimals = 18;
-
-    if (token0.address.toLowerCase() < token1.address.toLowerCase()) {
-      tokenA = token0;
-      tokenB = token1;
-    } else {
-      tokenB = token0;
-      tokenA = token1;
-    }
+    const { token0, token1 } = await setupFakeTwoTokensByOrder();
+    tokenA = token0;
+    tokenB = token1;
 
     const bswInfo = await getTokenContract(hre.networkVariables.bsw);
     bsw = bswInfo.token;
-    parseBsw = bswInfo.parseToken;
 
     await mintForkedToken(
       bsw.address,
@@ -87,72 +67,19 @@ describe("Test BiswapBase", function () {
 
     mockLpToken = await deploy("MockLPToken", tokenA.address, tokenB.address);
 
-    biswapFarm = await getContract("IBiswapFarm", BISWAP_FARM_ADDR);
-    biswapRouter = await getContract("IUniswapV2Router02", BISWAP_ROUTER_ADDR);
-    pancakeRouter = await getContract(
-      "IUniswapV2Router02",
-      hre.networkVariables.uniswapRouter
+    biswapFarm = await getContract(
+      "IBiswapFarm",
+      hre.networkVariables.biswapFarm
     );
 
-    biswapOwner = await impersonate(await biswapFarm.owner());
-
-    await tokenA.approve(biswapRouter.address, constants.MaxUint256);
-    await tokenB.approve(biswapRouter.address, constants.MaxUint256);
-    await tokenA.approve(pancakeRouter.address, constants.MaxUint256);
-    await tokenB.approve(pancakeRouter.address, constants.MaxUint256);
-    await bsw.approve(pancakeRouter.address, constants.MaxUint256);
-
+    await setupTokensLiquidityOnPancake(tokenA, bsw, 1_000_000, 5_000_000);
+    await setupTokensLiquidityOnPancake(tokenB, bsw, 1_000_000, 5_000_000);
+    await setupTokensLiquidityOnBiswap(tokenA, tokenB, 1_000_000, 1_000_000);
     await tokenA.transfer(mockExchange.address, utils.parseEther("10000"));
     await tokenB.transfer(mockExchange.address, utils.parseEther("10000"));
 
-    await biswapRouter.addLiquidity(
-      tokenA.address,
-      tokenB.address,
-      utils.parseEther("1000000"),
-      utils.parseEther("1000000"),
-      0,
-      0,
-      owner.address,
-      7777777777
-    );
-
-    await pancakeRouter.addLiquidity(
-      tokenA.address,
-      bsw.address,
-      utils.parseEther("1000000"),
-      utils.parseEther("5000000"),
-      0,
-      0,
-      owner.address,
-      7777777777
-    );
-    await pancakeRouter.addLiquidity(
-      tokenB.address,
-      bsw.address,
-      utils.parseEther("1000000"),
-      utils.parseEther("5000000"),
-      0,
-      0,
-      owner.address,
-      7777777777
-    );
-
-    const biswapFactory = await getContract(
-      "IUniswapV2Factory",
-      await biswapRouter.factory()
-    );
-
-    const lpAddr = await biswapFactory.getPair(tokenA.address, tokenB.address);
-    lpToken = await getContract("MockToken", lpAddr);
-
-    biswapPoolId = await biswapFarm.poolLength();
-
-    await owner.sendTransaction({
-      from: owner.address,
-      to: biswapOwner.address,
-      value: utils.parseEther("1"),
-    });
-    await biswapFarm.connect(biswapOwner).add(70, lpToken.address, false);
+    lpToken = await getPairTokenOnBiswap(tokenA, tokenB);
+    biswapPoolId = await addBiswapPool(lpToken.address);
 
     biswapStrategy = await deployBiswapStrategy({
       router: router.address,
