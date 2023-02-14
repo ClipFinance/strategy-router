@@ -293,14 +293,14 @@ describe("Test BiswapBase", function () {
       });
     });
 
-    it.only("it reverts if oracle price too bigger than biswap price(oracle: $10, ammPrice: $1)", async function () {
+    it("it reverts if oracle price too bigger than biswap price(oracle: $2, ammPrice: $1)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("10000"),
         utils.parseEther("10000")
       );
       await oracle.setPriceAndDecimals(
         tokenA.address,
-        utils.parseUnits("10", 8),
+        utils.parseUnits("2", 8),
         8
       );
       await oracle.setPriceAndDecimals(
@@ -315,10 +315,10 @@ describe("Test BiswapBase", function () {
       ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
     });
 
-    it.only("it reverts if oracle price too lower than biswap price(oracle: $1, ammPrice: $10)", async function () {
+    it("it reverts if oracle price too lower than biswap price(oracle: $1, ammPrice: $2)", async function () {
       await mockLpToken.setReserves(
-        utils.parseEther("1000"),
-        utils.parseEther("10000")
+        utils.parseEther("10000"),
+        utils.parseEther("20000")
       );
       await oracle.setPriceAndDecimals(
         tokenA.address,
