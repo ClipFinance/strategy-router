@@ -166,7 +166,10 @@ contract BiswapBase is
 
             farm.withdraw(poolId, liquidityToRemove);
             uint256 bswAmount = bsw.balanceOf(address(this));
-            if (bswAmount != 0) sellRewardToTokenA(bswAmount);
+            if (bswAmount != 0) {
+                sellRewardToTokenA(bswAmount);
+                _compoundBsw();
+            }
 
             lpToken.approve(address(biswapRouter), liquidityToRemove);
             (amountA, amountB) = biswapRouter.removeLiquidity(
@@ -198,32 +201,7 @@ contract BiswapBase is
         // inside withdraw happens BSW rewards collection
         farm.withdraw(poolId, 0);
         // use balance because BSW is harvested on deposit and withdraw calls
-        uint256 bswAmount = bsw.balanceOf(address(this));
-
-        if (bswAmount > 0) {
-            fix_leftover(0);
-            sellReward(bswAmount);
-            uint256 balanceA = tokenA.balanceOf(address(this));
-            uint256 balanceB = tokenB.balanceOf(address(this));
-
-            tokenA.approve(address(biswapRouter), balanceA);
-            tokenB.approve(address(biswapRouter), balanceB);
-
-            biswapRouter.addLiquidity(
-                address(tokenA),
-                address(tokenB),
-                balanceA,
-                balanceB,
-                0,
-                0,
-                address(this),
-                block.timestamp
-            );
-
-            uint256 lpAmount = lpToken.balanceOf(address(this));
-            lpToken.approve(address(farm), lpAmount);
-            farm.deposit(poolId, lpAmount);
-        }
+        _compoundBsw();
     }
 
     function totalTokens() external view override returns (uint256) {
@@ -442,5 +420,34 @@ contract BiswapBase is
         price =
             (price1 * 1e18 * (10**price0Decimals)) /
             (price0 * (10**price1Decimals));
+    }
+
+    function _compoundBsw() internal {
+        uint256 bswAmount = bsw.balanceOf(address(this));
+
+        if (bswAmount != 0) {
+            fix_leftover(0);
+            sellReward(bswAmount);
+            uint256 balanceA = tokenA.balanceOf(address(this));
+            uint256 balanceB = tokenB.balanceOf(address(this));
+
+            tokenA.approve(address(biswapRouter), balanceA);
+            tokenB.approve(address(biswapRouter), balanceB);
+
+            biswapRouter.addLiquidity(
+                address(tokenA),
+                address(tokenB),
+                balanceA,
+                balanceB,
+                0,
+                0,
+                address(this),
+                block.timestamp
+            );
+
+            uint256 lpAmount = lpToken.balanceOf(address(this));
+            lpToken.approve(address(farm), lpAmount);
+            farm.deposit(poolId, lpAmount);
+        }
     }
 }
