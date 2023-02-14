@@ -293,7 +293,7 @@ describe("Test BiswapBase", function () {
       });
     });
 
-    it("it reverts if oracle price and biswap price has too much difference", async function () {
+    it.only("it reverts if oracle price too bigger than biswap price(oracle: $10, ammPrice: $1)", async function () {
       await mockLpToken.setReserves(
         utils.parseEther("10000"),
         utils.parseEther("10000")
@@ -305,7 +305,7 @@ describe("Test BiswapBase", function () {
       );
       await oracle.setPriceAndDecimals(
         tokenB.address,
-        utils.parseUnits("0.1", 8),
+        utils.parseUnits("1", 8),
         8
       );
 
@@ -313,13 +313,25 @@ describe("Test BiswapBase", function () {
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
+    });
 
+    it.only("it reverts if oracle price too lower than biswap price(oracle: $1, ammPrice: $10)", async function () {
+      await mockLpToken.setReserves(
+        utils.parseEther("1000"),
+        utils.parseEther("10000")
+      );
       await oracle.setPriceAndDecimals(
         tokenA.address,
-        utils.parseUnits("0.5", 8),
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        tokenB.address,
+        utils.parseUnits("1", 8),
         8
       );
 
+      await mockBiswapStrategyAB.setCheckPriceManipulation(true);
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
