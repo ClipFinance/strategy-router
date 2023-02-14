@@ -234,20 +234,25 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         balances = new uint256[](strategies.length);
-        uint256[] memory desiredBalancesUniform = new uint256[](strategies.length);
+//        uint256[] memory desiredBalancesUniform = new uint256[](strategies.length);
         uint256[] memory strategySupportedTokenIndexes = new uint256[](strategies.length);
         for (uint256 i; i < strategies.length; i++) {
+            if (totalStrategyWeight == 0) {
+                break;
+            }
             address strategyToken = strategies[i].depositToken;
-            desiredBalancesUniform[i] = totalInBatch * strategies[i].weight / totalStrategyWeight;
-            totalStrategyWeight -= strategies[i].weight;
+            uint256 desiredBalanceUniform = totalInBatch * strategies[i].weight / totalStrategyWeight;
 
+            console.log('===========');
             console.log('totalInBatch', totalInBatch);
-            console.log('desiredBalanceUniform', desiredBalancesUniform[i]);
+            console.log('strategies[i].weight', i, strategies[i].weight);
+            console.log('totalStrategyWeight', totalStrategyWeight);
+            console.log('desiredBalanceUniform', desiredBalanceUniform);
             console.log('router.getStrategyPercentWeight(i)', i, router.getStrategyPercentWeight(i));
-            if (desiredBalancesUniform[i] <= REBALANCE_SWAP_THRESHOLD) {
+            if (desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                 continue;
             }
-            uint256 desiredBalance = fromUniform(desiredBalancesUniform[i], strategyToken);
+            uint256 desiredBalance = fromUniform(desiredBalanceUniform, strategyToken);
             for (uint256 j; j < tokenInfos.length; j++) {
                 if (strategyToken == tokenInfos[j].tokenAddress) {
                     strategySupportedTokenIndexes[i] = j;
@@ -258,82 +263,102 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 tokenBalanceUniform = toUniform(tokenInfos[strategySupportedTokenIndexes[i]].balance, strategyToken);
             if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                 console.log('tokenBalanceUniform', tokenBalanceUniform);
-                console.log('desiredBalancesUniform[i]', i, desiredBalancesUniform[i]);
+                console.log('desiredBalanceUniform', i, desiredBalanceUniform);
                 console.log('tokenInfos[strategySupportedTokenIndexes[i]].balance', i, strategySupportedTokenIndexes[i], tokenInfos[strategySupportedTokenIndexes[i]].balance);
                 console.log('desiredBalance', desiredBalance);
-                if (tokenBalanceUniform >= desiredBalancesUniform[i]) {
+                if (tokenBalanceUniform >= desiredBalanceUniform) {
+                    totalStrategyWeight -= strategies[i].weight;
+                    strategies[i].weight = 0;
                     // manipulation to avoid leaving dust
-                    if (tokenBalanceUniform - desiredBalancesUniform[i] <= REBALANCE_SWAP_THRESHOLD) {
+                    if (tokenBalanceUniform - desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                         totalInBatch -= tokenBalanceUniform;
                         balances[i] += tokenInfos[strategySupportedTokenIndexes[i]].balance;
                         desiredBalance = 0;
-                        desiredBalancesUniform[i] = 0;
+                        desiredBalanceUniform = 0;
                         tokenInfos[strategySupportedTokenIndexes[i]].balance = 0;
                     } else {
                         totalInBatch -= toUniform(desiredBalance, strategyToken);
                         tokenInfos[strategySupportedTokenIndexes[i]].balance -= desiredBalance;
                         balances[i] += desiredBalance;
                         desiredBalance = 0;
-                        desiredBalancesUniform[i] = 0;
+                        desiredBalanceUniform = 0;
                     }
                 } else {
+                    uint256 strategyWeightFulfillment = strategies[i].weight * tokenBalanceUniform / desiredBalanceUniform;
+                    totalStrategyWeight -= strategyWeightFulfillment;
+                    strategies[i].weight -= strategyWeightFulfillment;
+
                     totalInBatch -= tokenBalanceUniform;
                     balances[i] += tokenInfos[strategySupportedTokenIndexes[i]].balance;
                     desiredBalance -= tokenInfos[strategySupportedTokenIndexes[i]].balance;
-                    desiredBalancesUniform[i] -= tokenBalanceUniform;
+                    desiredBalanceUniform -= tokenBalanceUniform;
                     tokenInfos[strategySupportedTokenIndexes[i]].balance = 0;
                 }
             }
             console.log('totalInBatch after manipulation', totalInBatch);
             console.log('desiredBalance', desiredBalance);
-            console.log('desiredBalanceUniform', desiredBalancesUniform[i]);
+            console.log('desiredBalanceUniform', desiredBalanceUniform);
 
             console.log('balances[i]', i, balances[i]);
         }
 
-        for (uint256 i; i < strategies.length; i++) {
-            if (desiredBalancesUniform[i] > REBALANCE_SWAP_THRESHOLD) {
-                address strategyToken = strategies[i].depositToken;
-                uint256 desiredBalance = fromUniform(desiredBalancesUniform[i], strategyToken);
-                for (uint256 j; j < tokenInfos.length; j++) {
-                    if (j == strategySupportedTokenIndexes[i]) {
-                        continue;
-                    }
+        if (totalStrategyWeight > 0) {
+            for (uint256 i; i < strategies.length; i++) {
+                if (totalStrategyWeight == 0) {
+                    break;
+                }
+                uint256 desiredBalanceUniform = totalInBatch * strategies[i].weight / totalStrategyWeight;
+                console.log('===========');
+                console.log('desiredBalanceUniform', desiredBalanceUniform);
+                console.log('totalInBatch', totalInBatch);
+                console.log('strategies[i].weight', i, strategies[i].weight);
+                console.log('totalStrategyWeight', totalStrategyWeight);
 
-                    uint256 tokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
-                    if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
-                        uint256 toSell;
-                        if (tokenBalanceUniform >= desiredBalancesUniform[i]) {
-                            // manipulation to avoid leaving dust
-                            if (tokenBalanceUniform - desiredBalancesUniform[i] <= REBALANCE_SWAP_THRESHOLD) {
+                totalStrategyWeight -= strategies[i].weight;
+
+                if (desiredBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
+                    address strategyToken = strategies[i].depositToken;
+                    uint256 desiredBalance = fromUniform(desiredBalanceUniform, strategyToken);
+                    for (uint256 j; j < tokenInfos.length; j++) {
+                        if (j == strategySupportedTokenIndexes[i]) {
+                            continue;
+                        }
+
+                        uint256 tokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
+                        if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
+                            uint256 toSell;
+                            if (tokenBalanceUniform >= desiredBalanceUniform) {
+                                // manipulation to avoid leaving dust
+                                if (tokenBalanceUniform - desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                                    totalInBatch -= tokenBalanceUniform;
+                                    toSell = tokenInfos[j].balance;
+                                    desiredBalance = 0;
+                                    desiredBalanceUniform = 0;
+                                    tokenInfos[j].balance = 0;
+                                } else {
+                                    toSell = fromUniform(desiredBalanceUniform, tokenInfos[j].tokenAddress);
+                                    totalInBatch -= toUniform(toSell, tokenInfos[j].tokenAddress);
+                                    desiredBalance = 0;
+                                    desiredBalanceUniform = 0;
+                                    tokenInfos[j].balance -= toSell;
+                                }
+                            } else {
                                 totalInBatch -= tokenBalanceUniform;
                                 toSell = tokenInfos[j].balance;
-                                desiredBalance = 0;
-                                desiredBalancesUniform[i] = 0;
+                                desiredBalance -= fromUniform(tokenBalanceUniform, strategyToken);
+                                desiredBalanceUniform -= tokenBalanceUniform;
                                 tokenInfos[j].balance = 0;
-                            } else {
-                                toSell = fromUniform(desiredBalancesUniform[i], tokenInfos[j].tokenAddress);
-                                totalInBatch -= toUniform(toSell, tokenInfos[j].tokenAddress);
-                                desiredBalance = 0;
-                                desiredBalancesUniform[i] = 0;
-                                tokenInfos[j].balance -= toSell;
                             }
-                        } else {
-                            totalInBatch -= tokenBalanceUniform;
-                            toSell = tokenInfos[j].balance;
-                            desiredBalance -= fromUniform(tokenBalanceUniform, strategyToken);
-                            desiredBalancesUniform[i] -= tokenBalanceUniform;
-                            tokenInfos[j].balance = 0;
-                        }
-                        console.log('totalInBatch after manipulation', totalInBatch);
-                        console.log('tokenBalanceUniform', tokenBalanceUniform);
-                        console.log('desiredBalanceUniform', desiredBalancesUniform[i]);
-                        console.log('toSell', toSell);
+                            console.log('totalInBatch after manipulation', totalInBatch);
+                            console.log('tokenBalanceUniform', tokenBalanceUniform);
+                            console.log('desiredBalanceUniform', desiredBalanceUniform);
+                            console.log('toSell', toSell);
 
-                        balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
+                            balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
 
-                        if (desiredBalancesUniform[i] <= REBALANCE_SWAP_THRESHOLD) {
-                            break;
+                            if (desiredBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                                break;
+                            }
                         }
                     }
                 }
