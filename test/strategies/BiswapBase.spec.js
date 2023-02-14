@@ -241,7 +241,10 @@ describe("Test BiswapBase", function () {
     it("it reverts if msg.sender is not owner", async function () {
       await expect(
         biswapStrategy.connect(nonReceiptOwner).deposit(10)
-      ).to.revertedWith("Ownable__CallerIsNotTheOwner()");
+      ).to.revertedWithCustomError(
+        biswapStrategy,
+        "Ownable__CallerIsNotTheOwner"
+      );
     });
 
     it("deposit", async function () {
@@ -309,7 +312,7 @@ describe("Test BiswapBase", function () {
       await mockBiswapStrategyAB.setCheckPriceManipulation(true);
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
-      ).to.revertedWith("PriceManipulation()");
+      ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
 
       await oracle.setPriceAndDecimals(
         tokenA.address,
@@ -319,7 +322,7 @@ describe("Test BiswapBase", function () {
 
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
-      ).to.revertedWith("PriceManipulation()");
+      ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
     });
 
     it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInX: 2000)", async function () {
@@ -583,6 +586,36 @@ describe("Test BiswapBase", function () {
 
         expect(amountX).to.be.equal("945870447477995045590");
         expect(amountY).to.be.equal("945870447477995045592");
+      });
+    });
+
+    describe("Test with 0% DEX FEE", function () {
+      const DEX_FEE = 0;
+
+      it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1, OraclePriceYinX: 1, TotalAmountInY: 2000)", async function () {
+        await mockLpToken.setReserves(
+          utils.parseEther("1000000"),
+          utils.parseEther("1000000")
+        );
+        await oracle.setPriceAndDecimals(
+          tokenA.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+        await oracle.setPriceAndDecimals(
+          tokenB.address,
+          utils.parseUnits("1", 8),
+          8
+        );
+
+        const { amountA: amountY, amountB: amountX } =
+          await mockBiswapStrategyBA.calculateSwapAmountPublic(
+            tokenAmount,
+            DEX_FEE
+          );
+
+        expect(amountX).to.be.equal("1000000000000000000000");
+        expect(amountY).to.be.equal("1000000000000000000000");
       });
     });
   });
