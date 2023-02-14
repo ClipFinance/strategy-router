@@ -3,7 +3,7 @@ const { parseUnits, parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
-const { BigNumber } = require("ethers");
+const { BigNumber, utils } = require("ethers");
 
 module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
@@ -32,7 +32,22 @@ module.exports = function strategyTest(strategyName) {
       await setupParamsOnBNB(router, oracle, exchange);
 
       // get tokens on bnb chain for testing
-      await setupTokens();
+      const { usdc, busd, usdt } = await setupTokens();
+      await oracle.setPriceAndDecimals(
+        usdc.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        busd.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        usdt.address,
+        utils.parseUnits("1", 8),
+        8
+      );
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
