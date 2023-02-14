@@ -309,7 +309,6 @@ describe("Test BiswapBase", function () {
         8
       );
 
-      await mockBiswapStrategyAB.setCheckPriceManipulation(true);
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
@@ -331,7 +330,6 @@ describe("Test BiswapBase", function () {
         8
       );
 
-      await mockBiswapStrategyAB.setCheckPriceManipulation(true);
       await expect(
         mockBiswapStrategyAB.calculateSwapAmountPublic(tokenAmount, DEX_FEE)
       ).to.revertedWithCustomError(mockBiswapStrategyAB, "PriceManipulation");
