@@ -81,17 +81,19 @@ describe("Test ReceiptNFT", function () {
         it("Non manager is not able to mint", async function () {
             // non-manager fails to mint to himself
             await expect(receiptContractNonManager.mint(0, 0, fakeTokenAddress, nonManager.address))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWithCustomError(receiptContractNonManager,"NotManager");
             // non-manager fails to mint to 3rd-party nft recipient
             await expect(receiptContractNonManager.mint(0, 0, fakeTokenAddress, nftRecipient.address))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWithCustomError(receiptContractNonManager, "NotManager");
 
             // manager mint token id 0
             await receiptContractStrategyRouter.mint(0, 0, fakeTokenAddress, fakeStrategyRouter.address);
 
             // non-manager fails to burn or setAmount
-            await expect(receiptContractNonManager.burn(0)).to.be.revertedWith("NotManager()");
-            await expect(receiptContractNonManager.setAmount(0, 0)).to.be.revertedWith("NotManager()");
+            await expect(receiptContractNonManager.burn(0))
+              .to.be.revertedWithCustomError(receiptContractNonManager, "NotManager");
+            await expect(receiptContractNonManager.setAmount(0, 0))
+              .to.be.revertedWithCustomError(receiptContractNonManager, "NotManager");
 
         });
 
@@ -123,12 +125,13 @@ describe("Test ReceiptNFT", function () {
             let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(1);
 
-            await expect(receiptContractNonManager.burn(1)).to.be.revertedWith("NotManager");
+            await expect(receiptContractNonManager.burn(1))
+              .to.be.revertedWithCustomError(receiptContractNonManager, "NotManager");
         });
 
         it("Non-existing receipt can not be burned", async function () {
             await expect(receiptContractBatch.burn(0))
-                .to.be.revertedWith("NonExistingToken()");
+                .to.be.revertedWithCustomError(receiptContractBatch, "NonExistingToken");
         });
 
         it("Manager can burn receipt created by himself", async function () {
@@ -138,7 +141,7 @@ describe("Test ReceiptNFT", function () {
             await expect(receiptContractStrategyRouter.ownerOf(0))
                 .to.be.revertedWith("ERC721: invalid token ID");
             await expect(receiptContractStrategyRouter.getReceipt(0))
-                .to.be.revertedWith("NonExistingToken()");
+                .to.be.revertedWithCustomError(receiptContractStrategyRouter, "NonExistingToken");
 
             let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(0);
@@ -151,7 +154,7 @@ describe("Test ReceiptNFT", function () {
             await expect(receiptContractStrategyRouter.ownerOf(0))
                 .to.be.revertedWith("ERC721: invalid token ID");
             await expect(receiptContractStrategyRouter.getReceipt(0))
-                .to.be.revertedWith("NonExistingToken()");
+                .to.be.revertedWithCustomError(receiptContractStrategyRouter, "NonExistingToken");
 
             let balanceOfNonManager = await receiptContractBatch.balanceOf(nonManager.address);
             expect(balanceOfNonManager).to.be.eq(0);
@@ -196,19 +199,19 @@ describe("Test ReceiptNFT", function () {
             await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("1");
             await expect(receiptContractNonManager.setAmount(0, amount))
-                .to.be.revertedWith("NotManager()");
+                .to.be.revertedWithCustomError(receiptContractNonManager, "NotManager");
         });
 
         it("Can't change amount non-existing receipt", async function () {
             let amount = parseEther("1");
             await expect(receiptContractBatch.setAmount(0, amount))
-                .to.be.revertedWith("NonExistingToken()");
+                .to.be.revertedWithCustomError(receiptContractNonManager, "NonExistingToken");
         });
 
         it("Can't change amount non-existing receipt", async function () {
             let amount = parseEther("1");
             await expect(receiptContractBatch.setAmount(0, amount))
-                .to.be.revertedWith("NonExistingToken()");
+                .to.be.revertedWithCustomError(receiptContractBatch, "NonExistingToken");
         });
 
         it("We can't increase amount and can only decrease (logic in StrategyRouter.sol and Batch.sol)", async function () {
@@ -216,7 +219,7 @@ describe("Test ReceiptNFT", function () {
             await receiptContractBatch.mint(cycleId, amount, fakeTokenAddress, nonManager.address);
             amount = parseEther("3");
             await expect(receiptContractStrategyRouter.setAmount(0, amount))
-                .to.be.revertedWith("ReceiptAmountCanOnlyDecrease()");
+                .to.be.revertedWithCustomError(receiptContractStrategyRouter ,"ReceiptAmountCanOnlyDecrease");
         });
     });
 
@@ -266,10 +269,10 @@ describe("Test ReceiptNFT", function () {
         it("Should revert on wrong range", async function () {
             // start > stop is error!
             await expect(receiptContractStrategyRouter.getTokensOfOwnerIn(fakeStrategyRouter.address, 1, 0))
-                .to.be.revertedWith("InvalidQueryRange()");
+                .to.be.revertedWithCustomError(receiptContractStrategyRouter, "InvalidQueryRange");
             // start == stop is error!
             await expect(receiptContractStrategyRouter.getTokensOfOwnerIn(fakeStrategyRouter.address, 0, 0))
-                .to.be.revertedWith("InvalidQueryRange()");
+                .to.be.revertedWithCustomError(receiptContractStrategyRouter, "InvalidQueryRange");
         });
 
         it("Wallet with 0 tokens", async function () {

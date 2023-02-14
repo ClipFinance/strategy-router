@@ -58,18 +58,16 @@ async function deployBiswapStrategy({
 }
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({
-  router,
-  token,
-  underFulfilledWithdrawalBps,
-  weight = 10_000,
-  profitPercent = 0,
+  router, token, underFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
 }) {
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy(
     "UnderFulfilledWithdrawalMockStrategy",
     underFulfilledWithdrawalBps,
     token.address,
-    profitPercent
+    profitPercent,
+    isRewardPositive
   );
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, token.address, weight);

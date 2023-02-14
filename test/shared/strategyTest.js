@@ -7,7 +7,7 @@ const { BigNumber } = require("ethers");
 
 module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
-    let owner, feeAddress;
+    let owner;
     // core contracts
     let router, oracle, exchange;
     let strategy;
@@ -21,7 +21,7 @@ module.exports = function strategyTest(strategyName) {
     let snapshotId;
 
     before(async function () {
-      [owner, , , , , , , , , , feeAddress] = await ethers.getSigners();
+      [owner] = await ethers.getSigners();
 
       snapshotId = await provider.send("evm_snapshot");
 
