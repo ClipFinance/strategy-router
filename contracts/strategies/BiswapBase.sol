@@ -100,14 +100,15 @@ contract BiswapBase is
             address(tokenA),
             address(tokenB)
         );
-        (uint256 amountA, uint256 amountB) = calculateSwapAmount(
-            amount,
-            dexFee
-        );
+        (
+            uint256 amountA,
+            uint256 amountB,
+            uint256 amountAToSell
+        ) = calculateSwapAmount(amount, dexFee);
 
-        tokenA.transfer(address(exchange), amountB);
+        tokenA.transfer(address(exchange), amountAToSell);
         amountB = exchange.swap(
-            amountB,
+            amountAToSell,
             address(tokenA),
             address(tokenB),
             address(this)
@@ -115,7 +116,7 @@ contract BiswapBase is
 
         tokenA.approve(address(biswapRouter), amountA);
         tokenB.approve(address(biswapRouter), amountB);
-        
+
         (, , uint256 liquidity) = biswapRouter.addLiquidity(
             address(tokenA),
             address(tokenB),
@@ -292,7 +293,7 @@ contract BiswapBase is
                 address(tokenB)
             );
             // TODO: looks wrong
-            (toSwap, ) = calculateSwapAmount(toSwap, dexFee);
+            (, , toSwap) = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -309,7 +310,7 @@ contract BiswapBase is
                 address(tokenA),
                 address(tokenB)
             );
-            (toSwap, ) = calculateSwapAmount(toSwap, dexFee);
+            (, , toSwap) = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -365,7 +366,11 @@ contract BiswapBase is
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee)
         internal
         view
-        returns (uint256 amountA, uint256 amountB)
+        returns (
+            uint256 amountA,
+            uint256 amountB,
+            uint256 amountAToSell
+        )
     {
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(
             address(lpToken)
@@ -373,20 +378,13 @@ contract BiswapBase is
         address token0 = IUniswapV2Pair(address(lpToken)).token0();
         uint256 oraclePrice = getOraclePrice(address(tokenB), address(tokenA));
         uint256 ammPrice;
-        (reserve0, reserve1,  ammPrice) = address(tokenA) == token0
-            ? (
-                reserve0,
-                reserve1,
-                (reserve1 * 1e18) / reserve0
-            )
-            : (
-                reserve1,
-                reserve0,
-                (reserve0 * 1e18) / reserve1
-            );
+        (reserve0, reserve1, ammPrice) = address(tokenA) == token0
+            ? (reserve0, reserve1, (reserve1 * 1e18) / reserve0)
+            : (reserve1, reserve0, (reserve0 * 1e18) / reserve1);
 
         _checkPriceManipulation(oraclePrice, ammPrice);
-        uint256 amountAToSell = (tokenAmount * reserve1 * 1e18) /
+        amountAToSell =
+            (tokenAmount * reserve1 * 1e18) /
             ((oraclePrice * reserve0 * (1e18 - dexFee)) /
                 1e18 +
                 reserve1 *
@@ -395,11 +393,14 @@ contract BiswapBase is
         amountA = tokenAmount - amountAToSell;
     }
 
-    function _checkPriceManipulation(uint oraclePrice, uint ammPrice) internal pure {
+    function _checkPriceManipulation(uint256 oraclePrice, uint256 ammPrice)
+        internal
+        pure
+    {
         if (oraclePrice != ammPrice) {
             uint256 priceDiff = oraclePrice > ammPrice
-                ? (oraclePrice - ammPrice) * 10000 / ammPrice
-                : (ammPrice - oraclePrice) * 10000 / oraclePrice;
+                ? ((oraclePrice - ammPrice) * 10000) / ammPrice
+                : ((ammPrice - oraclePrice) * 10000) / oraclePrice;
             if (priceDiff > 2000) revert PriceManipulation();
         }
     }
