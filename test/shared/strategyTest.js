@@ -9,7 +9,7 @@ const { BigNumber } = require("ethers");
 module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
 
-    let owner, feeAddress;
+    let owner;
     // core contracts
     let router, oracle, exchange;
     let strategy;
@@ -23,7 +23,7 @@ module.exports = function strategyTest(strategyName) {
     let snapshotId;
 
     before(async function () {
-      [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
+      [owner] = await ethers.getSigners();
 
       snapshotId = await provider.send("evm_snapshot");
 
@@ -102,12 +102,9 @@ module.exports = function strategyTest(strategyName) {
 
       // compound, should incsrease totalTokens
       let oldBalance = await strategy.totalTokens();
-      let oldFeeBalance = await depositToken.balanceOf(feeAddress.address);
       await strategy.compound();
-      let newFeeBalance = await depositToken.balanceOf(feeAddress.address);
       let newBalance = await strategy.totalTokens();
 
-      expect(newFeeBalance).to.be.gt(oldFeeBalance);
       expect(newBalance).to.be.gt(oldBalance);
 
       // withdraw all

@@ -91,7 +91,7 @@ describe("Test Batch", function () {
 
         it("should revert depositToBatch if token unsupported", async function () {
             await expect(router.depositToBatch(router.address, parseBusd("100")))
-                .to.be.revertedWith("UnsupportedToken");
+                .to.be.revertedWithCustomError(router, "UnsupportedToken");
         });
 
         it("should depositToBatch create receipt with correct values", async function () {
@@ -109,7 +109,7 @@ describe("Test Batch", function () {
             await router.setMinDepositUsd(parseUniform("1.0"));
             await oracle.setPrice(busd.address, parseBusd("0.1"));
             await expect(router.depositToBatch(busd.address, parseBusd("2.0")))
-                .to.be.revertedWith("DepositUnderMinimum");
+                .to.be.revertedWithCustomError(batch,"DepositUnderMinimum");
         });
     });
 
@@ -226,7 +226,7 @@ describe("Test Batch", function () {
         it("shouldn't be able to withdraw receipt that doesn't belong to you", async function () {
             await router.depositToBatch(usdc.address, parseUsdc("100"))
             await expect(router.connect(nonReceiptOwner).withdrawFromBatch([1]))
-                .to.be.revertedWith("NotReceiptOwner()");
+                .to.be.revertedWithCustomError(batch, "NotReceiptOwner");
         });
 
         it("should burn receipts when withdraw whole amount noted in it", async function () {

@@ -114,7 +114,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       it("2 users did multiple deposits and 1 user withdraws everything from current cycle", async function () {
 
         // was withdrawn in last previous test
-        await expect(receiptContract.getReceipt(USER_1_RECEIPT_2)).revertedWith("NonExistingToken");
+        await expect(receiptContract.getReceipt(USER_1_RECEIPT_2))
+          .to.be.revertedWithCustomError(receiptContract, "NonExistingToken");
 
         await usdc.transfer(user2.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
         await usdc.connect(user2).approve(router.address, parseUsdc(USER_2_DEPOSIT_AMOUNT));
@@ -403,4 +404,3 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     });
   });
 });
-

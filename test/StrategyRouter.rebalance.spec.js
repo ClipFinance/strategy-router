@@ -260,7 +260,7 @@ describe("Test rebalance functions", function () {
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
-      await expect(router.rebalanceStrategies()).to.be.revertedWith("NothingToRebalance()");
+      await expect(router.rebalanceStrategies()).to.be.revertedWithCustomError(router, "NothingToRebalance");
     });
 
     it("two usdt strategies", async function () {

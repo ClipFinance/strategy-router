@@ -257,46 +257,6 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
 
         bsw.transfer(address(exchange), amountB);
         receivedB = exchange.swap(amountB, address(bsw), address(tokenB), address(this));
-
-        (receivedA, receivedB) = collectProtocolCommission(receivedA, receivedB);
-    }
-
-    function collectProtocolCommission(uint256 amountA, uint256 amountB)
-        private
-        returns (uint256 amountAfterFeeA, uint256 amountAfterFeeB)
-    {
-        uint256 feePercent = StrategyRouter(strategyRouter).feePercent();
-        address feeAddress = StrategyRouter(strategyRouter).feeAddress();
-        uint256 ratioUint;
-        uint256 feeAmount = ((amountA + amountB) * feePercent) / PERCENT_DENOMINATOR;
-        {
-            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(address(lpToken)).getReserves();
-
-            // equation: (a - (c*v))/(b - (c-c*v)) = z/x
-            // solution for v = (a*x - b*z + c*z) / (c * (z+x))
-            // a,b is current token amounts, z,x is pair reserves, c is total fee amount to take from a+b
-            // v is ratio to apply to feeAmount and take fee from a and b
-            // a and z should be converted to same decimals as token b (TODO for cases when decimals are different)
-            int256 numerator = int256(amountA * r1 + feeAmount * r0) - int256(amountB * r0);
-            int256 denominator = int256(feeAmount * (r0 + r1));
-            int256 ratio = (numerator * 1e18) / denominator;
-            // ratio here could be negative or greater than 1.0
-            // only need to be between 0 and 1
-            if (ratio < 0) ratio = 0;
-            if (ratio > 1e18) ratio = 1e18;
-
-            ratioUint = uint256(ratio);
-        }
-
-        // these two have same decimals, should adjust A to have A decimals,
-        // this is TODO for cases when tokenA and tokenB has different decimals
-        uint256 comissionA = (feeAmount * ratioUint) / 1e18;
-        uint256 comissionB = feeAmount - comissionA;
-
-        tokenA.transfer(feeAddress, comissionA);
-        tokenB.transfer(feeAddress, comissionB);
-
-        return (amountA - comissionA, amountB - comissionB);
     }
 
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee) private view returns (uint256 amountAfterFee) {

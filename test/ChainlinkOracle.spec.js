@@ -1,9 +1,7 @@
-const { expect, assert } = require("chai");
-const { deployMockContract } = require("ethereum-waffle");
-const { parseEther } = require("ethers/lib/utils");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { provider, deploy, MaxUint256, parseUniform, deployProxy } = require("./utils");
-
+const { provider, deployProxy } = require("./utils");
+const { smock } = require('@defi-wonderland/smock');
 
 describe("Test ChainlinkOracle", function () {
 
@@ -45,8 +43,9 @@ describe("Test ChainlinkOracle", function () {
         await oracle.setPriceFeeds(tokens, feeds);
 
         // roundId = 0, answer = 0, startedAt = 0, updatedAt = 0, answeredInRound = 0
-        await mockFeed.mock.latestRoundData.returns(0, 0, 0, 0, 0);
-        await expect(oracle.getTokenUsdPrice(fakeToken1.address)).to.be.revertedWith("StaleChainlinkPrice()");
+        await mockFeed.latestRoundData.returns([0, 0, 0, 0, 0]);
+        await expect(oracle.getTokenUsdPrice(fakeToken1.address))
+          .to.be.revertedWithCustomError(oracle, "StaleChainlinkPrice");
     });
 
     it("should getAssetUsdPrice revert on 0 price", async function () {
@@ -58,9 +57,10 @@ describe("Test ChainlinkOracle", function () {
 
         // roundId = 0, answer = 0, startedAt = 0, updatedAt = 0, answeredInRound = 0
         let timestamp = (await provider.getBlock()).timestamp;
-        await mockFeed.mock.latestRoundData.returns(0, 0, 0, timestamp, 0);
+        await mockFeed.latestRoundData.returns([0, 0, 0, timestamp, 0]);
 
-        await expect(oracle.getTokenUsdPrice(fakeToken1.address)).to.be.revertedWith("BadPrice()");
+        await expect(oracle.getTokenUsdPrice(fakeToken1.address))
+          .to.be.revertedWithCustomError(oracle, "BadPrice");
     });
 
     it("should getAssetUsdPrice return price and price decimals", async function () {
@@ -74,8 +74,8 @@ describe("Test ChainlinkOracle", function () {
         let timestamp = (await provider.getBlock()).timestamp;
         let price = 1337;
         let decimals = 18;
-        await mockFeed.mock.latestRoundData.returns(0, price, 0, timestamp, 0);
-        await mockFeed.mock.decimals.returns(decimals);
+        await mockFeed.latestRoundData.returns([0, price, 0, timestamp, 0]);
+        await mockFeed.decimals.returns(decimals);
 
         let returnData = await oracle.getTokenUsdPrice(fakeToken1.address);
         expect(returnData.price).to.be.equal(price);
@@ -84,7 +84,7 @@ describe("Test ChainlinkOracle", function () {
 
     async function getMockFeed() {
         const abi = (await artifacts.readArtifact("AggregatorV3Interface")).abi;
-        const mock = await deployMockContract(owner, abi);
+        const mock = await smock.fake(abi);
         return mock;
     }
 });
