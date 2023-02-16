@@ -302,6 +302,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             console.log('balances[i]', i, balances[i]);
         }
 
+        console.log('===========');
+        console.log('SWAP SECTION');
+        console.log('===========');
         if (totalStrategyWeight > 0) {
             for (uint256 i; i < strategies.length; i++) {
                 if (totalStrategyWeight == 0) {
@@ -325,6 +328,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         }
 
                         uint256 tokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
+                        console.log('tokenBalanceUniform', tokenBalanceUniform);
                         if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
                             uint256 toSell;
                             if (tokenBalanceUniform >= desiredBalanceUniform) {
@@ -365,174 +369,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
     }
-
-//    /// @notice Rebalance batch, so that token balances will match strategies weight.
-//    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-//    function rebalance() public onlyStrategyRouter returns (uint256[] memory balances) {
-//        /*
-//        1 store supported-tokens (set of unique addresses)
-//            [a,b,c]
-//        2 store their balances
-//            [10, 6, 8]
-//        3 store their sum with uniform decimals
-//            24
-//        4 create array of length = supported_tokens + strategies_tokens (e.g. [a])
-//            [a, b, c] + [a] = 4
-//        5 store in that array balances from step 2, duplicated tokens should be ignored
-//            [10, 0, 6, 8] (instead of [10,10...] we got [10,0...] because first two are both token a)
-//        6a get desired balance for every strategy using their weights
-//            [12, 0, 4.8, 7.2] (our 1st strategy will get 50%, 2nd and 3rd will get 20% and 30% respectively)
-//        6b store amounts that we need to sell or buy for each balance in order to match desired balances
-//            toSell [0, 0, 1.2, 0.8]
-//            toBuy  [2, 0, 0, 0]
-//            these arrays contain amounts with tokens' original decimals
-//        7 now sell 'toSell' amounts of respective tokens for 'toBuy' tokens
-//            (token to amount connection is derived by index in the array)
-//            (also track new strategies balances for cases where 1 token is shared by multiple strategies)
-//        */
-//        uint256 totalInBatch;
-//
-//        // point 1
-//        uint256 supportedTokensCount = supportedTokens.length();
-//        address[] memory _tokens = new address[](supportedTokensCount);
-//        uint256[] memory _balances = new uint256[](supportedTokensCount);
-//
-//        // point 2
-//        for (uint256 i; i < supportedTokensCount; i++) {
-//            _tokens[i] = supportedTokens.at(i);
-//            _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
-//
-//            // point 3
-//            totalInBatch += toUniform(_balances[i], _tokens[i]);
-//        }
-//
-//        // point 4
-//        uint256 strategiesCount = router.getStrategiesCount();
-//
-//        uint256[] memory _strategiesAndSupportedTokensBalances = new uint256[](strategiesCount + supportedTokensCount);
-//
-//        // point 5
-//        // We fill in strategies balances with tokens that strategies are accepting and ignoring duplicates
-//        for (uint256 i; i < strategiesCount; i++) {
-//            address depositToken = router.getStrategyDepositToken(i);
-//            for (uint256 j; j < supportedTokensCount; j++) {
-//                if (depositToken == _tokens[j] && _balances[j] > 0) {
-//                    _strategiesAndSupportedTokensBalances[i] = _balances[j];
-//                    _balances[j] = 0;
-//                    break;
-//                }
-//            }
-//        }
-//
-//        // we fill in strategies balances with balances of remaining tokens that are supported as deposits but are not
-//        // accepted in strategies
-//        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
-//            _strategiesAndSupportedTokensBalances[i] = _balances[i - strategiesCount];
-//        }
-//
-//        // point 6a
-//        uint256[] memory toBuy = new uint256[](strategiesCount);
-//        uint256[] memory toSell = new uint256[](_strategiesAndSupportedTokensBalances.length);
-//        for (uint256 i; i < strategiesCount; i++) {
-//            uint256 desiredBalance = (totalInBatch * router.getStrategyPercentWeight(i)) / 1e18;
-//            desiredBalance = fromUniform(desiredBalance, router.getStrategyDepositToken(i));
-//            // we skip safemath check since we already do comparison in if clauses
-//            unchecked {
-//                // point 6b
-//                if (desiredBalance > _strategiesAndSupportedTokensBalances[i]) {
-//                    toBuy[i] = desiredBalance - _strategiesAndSupportedTokensBalances[i];
-//                } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
-//                    toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
-//                }
-//                console.log('toBuy[i]', i, toBuy[i]);
-//                console.log('toSell[i]', i, toSell[i]);
-//            }
-//        }
-//
-//        // point 7
-//        // all tokens we accept to deposit but are not part of strategies therefore we are going to swap them
-//        // to tokens that strategies are accepting
-//        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
-//            toSell[i] = _strategiesAndSupportedTokensBalances[i];
-//        }
-//
-//        for (uint256 i; i < _strategiesAndSupportedTokensBalances.length; i++) {
-//            address sellToken = i > strategiesCount - 1
-//                ? _tokens[i - strategiesCount]
-//                : router.getStrategyDepositToken(i);
-//            uint256 toSellUniform = toUniform(toSell[i], sellToken);
-//            if (toSellUniform > REBALANCE_SWAP_THRESHOLD) {
-//                for (uint256 j; j < strategiesCount; j++) {
-//                    // if we are not going to buy this token (nothing to sell), we simply skip to the next one
-//                    // if we can sell this token we go into swap routine
-//                    // we proceed to swap routine if there is some tokens to buy and some tokens sell
-//                    // if found which token to buy and which token to sell we proceed to swap routine
-//
-//                    // if toSell's 'i' greater than strategies - 1 (e.g. strategies 2, tokens 2, i = 2, 2 > 2 - 1 == true)
-//                    // then take supported_token[2 - 2 = 0]
-//                    // otherwise take strategy_token[0 or 1]
-//                    address buyToken = router.getStrategyDepositToken(j);
-//
-//                    uint256 toBuyUniform = toUniform(toBuy[j], buyToken);
-//
-//                    if (toBuyUniform > REBALANCE_SWAP_THRESHOLD) {
-//                        /*
-//                            Weight of strategies is in token amount not usd equivalent
-//                            In case of stablecoin depeg an administrative decision will be made to move out of the strategy
-//                            that has exposure to depegged stablecoin.
-//                            curSell should have sellToken decimals
-//                        */
-//                        uint256 curSell;
-//                        if (toSellUniform > toBuyUniform) {
-//                            curSell = changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals());
-//                            toBuy[j] = 0;
-//                            unchecked {
-//                                toSellUniform -= toBuyUniform;
-//                            }
-//                        } else {
-//                            curSell = toSell[i];
-//                            toBuy[j] -= fromUniform(toSellUniform, buyToken);
-//                            toSellUniform = 0;
-//                        }
-//                        console.log('curSell', curSell);
-//                        console.log('toSell', i, toSell[i]);
-//                        console.log('toBuy', j, toBuy[j]);
-//
-//                        // is there any protocols that could take less sell token amount than we provide them
-//                        uint256 received = _trySwap(curSell, sellToken, buyToken);
-//                        console.log('received', i, j, received);
-//
-//                        _strategiesAndSupportedTokensBalances[i] -= curSell;
-//                        _strategiesAndSupportedTokensBalances[j] += received;
-//                        toSell[i] -= curSell;
-//                        // we are able to receive more tokens then we sold,
-//                        // i.e. we have 1000 BUSD to sell, 1000 USDT to buy, 1 BUSD = 1.05 USDT,
-//                        // we sell 1000 BUSD and get 1050 USDT
-////                        if (received < toBuy[j]) {
-////                            unchecked {
-////                                toBuy[j] -= received;
-////                            }
-////                        } else {
-////                            unchecked {
-////                                toBuy[j] = 0;
-////                            }
-////                        }
-//
-//                        if (toSellUniform <= REBALANCE_SWAP_THRESHOLD) {
-//                            break; // nothing to sell in this iteration, continue with the next selling item
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        _balances = new uint256[](strategiesCount);
-//        for (uint256 i; i < strategiesCount; i++) {
-//            _balances[i] = _strategiesAndSupportedTokensBalances[i];
-//        }
-//
-//        return _balances;
-//    }
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
