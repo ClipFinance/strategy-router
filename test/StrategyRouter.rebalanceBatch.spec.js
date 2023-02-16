@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
-const { BigNumber } = require("ethers");
+const { BigNumber, FixedNumber } = require("ethers");
 
 async function expectNoRemnantsFn(contract, busd, usdc, usdt) {
   expect(
@@ -14,6 +14,75 @@ async function expectNoRemnantsFn(contract, busd, usdc, usdt) {
   expect(
     await usdt.balanceOf(contract.address)
   ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+}
+
+async function expectStrategiesHoldCorrectBalances(depositAmount, ...strategies) {
+  const totalValueUsd = BigNumber
+    .from(depositAmount)
+    .mul(BigNumber.from(10).pow(18));
+
+  const totalStrategyWeight = strategies
+      .reduce((totalWeight, strategy) => totalWeight + strategy.weight, 0)
+  ;
+  for (const strategyIndex of strategies.keys()) {
+    const strategy = strategies[strategyIndex];
+
+    const expectedBalanceUniform = totalValueUsd
+      .mul(strategy.weight)
+      .div(totalStrategyWeight);
+    const expectedBalance = expectedBalanceUniform
+      .div(BigNumber.from(10).pow(18 - strategy.token.decimalNumber));
+
+    // 2%
+    const expectedBalanceDeviation = expectedBalance
+      .mul(2)
+      .div(100);
+
+    const strategyTokenBalance = await strategy.token.balanceOf(strategy.address);
+
+    expect(
+      strategyTokenBalance,
+      `Strategy${strategyIndex + 1} has balance ${strategyTokenBalance}`
+      + ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`,
+    ).to.be.closeTo(
+      expectedBalance,
+      expectedBalanceDeviation,
+    )
+  }
+}
+
+async function expectStrategyHoldsExactBalances(
+  strategy,
+  expectedBalanceFullUnits,
+  deviationPercent = 1
+) {
+  const expectedBalance = BigNumber
+    .from(
+      FixedNumber
+        .from(expectedBalanceFullUnits)
+        .mulUnsafe(
+          FixedNumber.from(
+            BigNumber.from(10).pow(strategy.token.decimalNumber)
+          )
+        )
+        .toFormat({decimals: 0})
+        .toString()
+    );
+
+  const expectedBalanceDeviation = expectedBalance
+    .mul(deviationPercent)
+    .div(100);
+
+  const strategyTokenBalance = await strategy.token.balanceOf(strategy.address);
+
+  expect(
+    strategyTokenBalance,
+    `Strategy has balance ${strategyTokenBalance}`
+    + ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`,
+  ).to.be.closeTo(
+    expectedBalance,
+    expectedBalanceDeviation,
+  );
 }
 
 describe("Test Batch.rebalance in algorithm-specific manner", function () {
@@ -53,12 +122,16 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     };
 
     const deployStrategy = async function ({token, weight = 10_000}) {
-      return await deployFakeUnderFulfilledWithdrawalStrategy({
+      const strategy = await deployFakeUnderFulfilledWithdrawalStrategy({
         router,
         token,
         underFulfilledWithdrawalBps: 0,
         weight,
       });
+      strategy.token = token;
+      strategy.weight = weight;
+
+      return strategy;
     };
 
     return {
@@ -93,10 +166,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdc.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdc('105'), parseUsdc('0.5'));
+      await expectStrategyHoldsExactBalances(strategy1, 105);
     });
     it('when deposit token rate > strategy token rate then receive more tokens than sold', async function() {
       const {
@@ -120,10 +190,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdc.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdc('95'), parseUsdc('0.5'));
+      await expectStrategyHoldsExactBalances(strategy1, 95);
     });
   });
   describe('no remnants in Batch verification', async function () {
@@ -157,7 +224,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         // BUT buy[usdc] MUST be 200-100 = 100 to avoid leftovers
         await router.allocateToStrategies();
 
-        expectNoRemnants(batch);
+        await expectNoRemnants(batch);
+        await expectStrategyHoldsExactBalances(strategy1, 210);
       });
       it('strategy token rate < deposit token rates', async function() {
         const {
@@ -188,7 +256,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         // BUT buy[usdc] MUST be 200-100 = 100 to avoid leftovers
         await router.allocateToStrategies();
 
-        expectNoRemnants(batch);
+        await expectNoRemnants(batch);
+        await expectStrategyHoldsExactBalances(strategy1, 190);
       });
     });
     describe('strategy desired balance below swap threshold', async function () {
@@ -215,14 +284,10 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expect(router.allocateToStrategies()).not.to.be.reverted;
 
-          expectNoRemnants(batch);
+          await expectNoRemnants(batch);
 
-          expect(
-            await busd.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseBusd("10"), parseBusd("0.1"));
-          expect(
-            await busd.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseBusd("0"), parseBusd("0"));
+          await expectStrategyHoldsExactBalances(strategy1, 10);
+          await expectStrategyHoldsExactBalances(strategy2, 0);
         });
         it('strategy tokens and deposit tokens are different', async function () {
           const {
@@ -252,12 +317,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expectNoRemnants(batch);
 
-          expect(
-            await usdc.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-          expect(
-            await usdc.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
+          await expectStrategyHoldsExactBalances(strategy1, 10);
+          await expectStrategyHoldsExactBalances(strategy2, 0);
         });
       });
       describe('2 strategies, strategy in question goes first', async function () {
@@ -285,12 +346,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expectNoRemnants(batch);
 
-          expect(
-            await busd.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseBusd("0"), parseBusd("0"));
-          expect(
-            await busd.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseBusd("10"), parseBusd("0.1"));
+          await expectStrategyHoldsExactBalances(strategy1, 0);
+          await expectStrategyHoldsExactBalances(strategy2, 10);
         });
         it('strategy tokens and deposit tokens are different', async function () {
           const {
@@ -320,12 +377,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expectNoRemnants(batch);
 
-          expect(
-            await usdc.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-          expect(
-            await usdc.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
+          await expectStrategyHoldsExactBalances(strategy1, 0);
+          await expectStrategyHoldsExactBalances(strategy2, 10);
         });
       });
       describe('3 strategies, strategy in question goes in between', async function () {
@@ -359,15 +412,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expectNoRemnants(batch);
 
-          expect(
-            await busd.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseBusd("5"), parseBusd("0.1"));
-          expect(
-            await busd.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseBusd("0"), parseBusd("0"));
-          expect(
-            await busd.balanceOf(strategy3.address)
-          ).to.be.closeTo(parseBusd("5"), parseBusd("0.1"));
+          await expectStrategyHoldsExactBalances(strategy1, 5, 2);
+          await expectStrategyHoldsExactBalances(strategy2, 0);
+          await expectStrategyHoldsExactBalances(strategy3, 5, 2);
         });
         it('different tokens', async function() {
           // order of tokens usdc -> busd -> usdt
@@ -399,15 +446,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
           await expectNoRemnants(batch);
 
-          expect(
-            await usdc.balanceOf(strategy1.address)
-          ).to.be.closeTo(parseUsdc("5"), parseUsdc("0.1"));
-          expect(
-            await busd.balanceOf(strategy2.address)
-          ).to.be.closeTo(parseBusd("0"), parseBusd("0"));
-          expect(
-            await busd.balanceOf(strategy3.address)
-          ).to.be.closeTo(parseBusd("5"), parseBusd("0.1"));
+          await expectStrategyHoldsExactBalances(strategy1, 5, 2);
+          await expectStrategyHoldsExactBalances(strategy2, 0);
+          await expectStrategyHoldsExactBalances(strategy3, 5, 2);
         });
       });
       describe('2 of 3 strategies desired balances below swap threshold', async function () {
@@ -442,15 +483,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
+            await expectStrategyHoldsExactBalances(strategy1, 0);
+            await expectStrategyHoldsExactBalances(strategy2, 0);
+            await expectStrategyHoldsExactBalances(strategy3, 10);
           });
           it('below, above, below', async function () {
             // order of tokens usdc -> busd -> usdt
@@ -482,15 +517,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
+            await expectStrategyHoldsExactBalances(strategy1, 0);
+            await expectStrategyHoldsExactBalances(strategy2, 10);
+            await expectStrategyHoldsExactBalances(strategy3, 0);
           });
           it('above, below, below', async function () {
             // order of tokens usdc -> busd -> usdt
@@ -522,15 +551,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
+            await expectStrategyHoldsExactBalances(strategy1, 10);
+            await expectStrategyHoldsExactBalances(strategy2, 0);
+            await expectStrategyHoldsExactBalances(strategy3, 0);
           });
         });
         describe('strategy tokens and deposit tokens are different', async function () {
@@ -564,15 +587,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
+            await expectStrategyHoldsExactBalances(strategy1, 0);
+            await expectStrategyHoldsExactBalances(strategy2, 0);
+            await expectStrategyHoldsExactBalances(strategy3, 10);
           });
           it('below, above, below', async function () {
             // order of tokens usdc -> busd -> usdt
@@ -604,15 +621,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
+            await expectStrategyHoldsExactBalances(strategy1, 0);
+            await expectStrategyHoldsExactBalances(strategy2, 10);
+            await expectStrategyHoldsExactBalances(strategy3, 0);
           });
           it('above, below, below', async function () {
             // order of tokens usdc -> busd -> usdt
@@ -644,15 +655,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
             await expectNoRemnants(batch);
 
-            expect(
-              await usdc.balanceOf(strategy1.address)
-            ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-            expect(
-              await usdc.balanceOf(strategy2.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
-            expect(
-              await usdc.balanceOf(strategy3.address)
-            ).to.be.closeTo(parseUsdc("0"), parseUsdc("0"));
+            await expectStrategyHoldsExactBalances(strategy1, 10);
+            await expectStrategyHoldsExactBalances(strategy2, 0);
+            await expectStrategyHoldsExactBalances(strategy3, 0);
           });
         });
       });
@@ -690,6 +695,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
           }
         );
         it(
@@ -724,6 +731,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+
+            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
           }
         );
       });
@@ -756,6 +766,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+
+            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
           }
         );
         it(
@@ -790,6 +803,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+            await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
           }
         );
       });
@@ -822,6 +836,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+            await expectStrategyHoldsExactBalances(strategy1, '10.2', 2);
+            await expectStrategyHoldsExactBalances(strategy2, '9.8', 2);
           }
         );
         it(
@@ -856,6 +872,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
             await expectNoRemnants(batch);
+            await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
           }
         );
       });
@@ -898,19 +915,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectNoRemnants(batch);
 
       expect(await fakeExchangePlugin.swapCallNumber()).to.be.equal(0);
-
-      expect(
-        await busd.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseBusd("50"), parseBusd("0.5"));
-      expect(
-        await usdc.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdc("50"), parseUsdc("0.5"));
-      expect(
-        await usdc.balanceOf(strategy3.address)
-      ).to.be.closeTo(parseUsdc("50"), parseUsdc("0.5"));
-      expect(
-        await busd.balanceOf(strategy4.address)
-      ).to.be.closeTo(parseBusd("50"), parseBusd("0.5"));
+      await expectStrategiesHoldCorrectBalances(200, strategy1, strategy2, strategy3, strategy4);
     });
     it('test exactly 1 swap occurs', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -948,19 +953,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectNoRemnants(batch);
 
       expect(await fakeExchangePlugin.swapCallNumber()).to.be.equal(1);
-
-      expect(
-        await busd.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseBusd("50"), parseBusd("0.5"));
-      expect(
-        await usdc.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdc("50"), parseUsdc("0.5"));
-      expect(
-        await usdc.balanceOf(strategy3.address)
-      ).to.be.closeTo(parseUsdc("50"), parseUsdc("0.5"));
-      expect(
-        await busd.balanceOf(strategy4.address)
-      ).to.be.closeTo(parseBusd("50"), parseBusd("0.5"));
+      await expectStrategiesHoldCorrectBalances(200, strategy1, strategy2, strategy3, strategy4);
     });
   });
   describe('audit issue', async function () {
@@ -1004,6 +997,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
+      await expectStrategyHoldsExactBalances(strategy1, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 10, 2);
     });
     it('test before audit fix failure - same deposit / strategy coins', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1035,15 +1030,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
       await expectNoRemnants(batch);
 
-      expect(
-        await busd.balanceOf(strategy1.address)
-      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
-      expect(
-        await busd.balanceOf(strategy2.address)
-      ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
-      expect(
-        await busd.balanceOf(strategy3.address)
-      ).to.be.closeTo(parseBusd("10"), BigNumber.from(0));
+      await expectStrategyHoldsExactBalances(strategy1, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 10);
     });
   });
   describe('test unoptimal orders of tokens and strategies', async function() {
@@ -1095,24 +1084,12 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
       await expectNoRemnants(batch);
 
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("1"), parseUsdt("0.03"));
-      expect(
-        await usdc.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdc("5"), parseUsdc("0.15"));
-      expect(
-        await usdc.balanceOf(strategy3.address)
-      ).to.be.closeTo(parseUsdc("4"), parseUsdc("0.12"));
-      expect(
-        await usdt.balanceOf(strategy4.address)
-      ).to.be.closeTo(parseUsdt("3"), parseUsdt("0.09"));
-      expect(
-        await usdc.balanceOf(strategy5.address)
-      ).to.be.closeTo(parseUsdc("11"), parseUsdc("0.33"));
-      expect(
-        await usdt.balanceOf(strategy6.address)
-      ).to.be.closeTo(parseUsdt("1"), parseUsdt("0.03"));
+      await expectStrategyHoldsExactBalances(strategy1, 1, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 5, 3);
+      await expectStrategyHoldsExactBalances(strategy3, 4, 3);
+      await expectStrategyHoldsExactBalances(strategy4, 3, 3);
+      await expectStrategyHoldsExactBalances(strategy5, 11, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 1, 3);
     });
     it('very large deposits', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1162,42 +1139,12 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
       await expectNoRemnants(batch);
 
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(
-        parseUsdt((100_000).toString()),
-        parseUsdt((3_000).toString())
-      );
-      expect(
-        await usdc.balanceOf(strategy2.address)
-      ).to.be.closeTo(
-        parseUsdc((500_000).toString()),
-        parseUsdc((15_000).toString())
-      );
-      expect(
-        await usdc.balanceOf(strategy3.address)
-      ).to.be.closeTo(
-        parseUsdc((400_000).toString()),
-        parseUsdc((12_000).toString())
-      );
-      expect(
-        await usdt.balanceOf(strategy4.address)
-      ).to.be.closeTo(
-        parseUsdt((300_000).toString()),
-        parseUsdt((9_000).toString())
-      );
-      expect(
-        await usdc.balanceOf(strategy5.address)
-      ).to.be.closeTo(
-        parseUsdc((1_100_000).toString()),
-        parseUsdc((33_000).toString())
-      );
-      expect(
-        await usdt.balanceOf(strategy6.address)
-      ).to.be.closeTo(
-        parseUsdt((100_000).toString()),
-        parseUsdt((3_000).toString())
-      );
+      await expectStrategyHoldsExactBalances(strategy1, 100_000, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 500_000, 3);
+      await expectStrategyHoldsExactBalances(strategy3, 400_000, 3);
+      await expectStrategyHoldsExactBalances(strategy4, 300_000, 3);
+      await expectStrategyHoldsExactBalances(strategy5, 1_100_000, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 100_000, 3);
     });
   });
   describe('strategy weight manipulation works as intended', async function () {
@@ -1227,13 +1174,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
-      expect(
-        await usdt.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
     it('saturate strategy1 desired balance in native token, strategy2 desired balance in native and in swap tokens', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1261,13 +1202,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
-      expect(
-        await usdt.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
     it('saturate strategy1 desired balance in native token, strategy2 desired balance in swap tokens', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1295,13 +1230,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
-      expect(
-        await usdt.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
     it('saturate strategy1 desired balance in native token, strategy2 desired balance in native token', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1328,13 +1257,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
-      expect(
-        await usdt.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
     it('saturate strategy1 desired balance in swap tokens, strategy2 desired balance in swap tokens', async function () {
       // order of tokens usdc -> busd -> usdt
@@ -1361,13 +1284,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
-
-      expect(
-        await usdt.balanceOf(strategy1.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
-      expect(
-        await usdt.balanceOf(strategy2.address)
-      ).to.be.closeTo(parseUsdt("5"), parseUsdt("0.1"));
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
   });
   it('test where old algo would execute good', async function () {
@@ -1401,15 +1318,6 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     await expect(router.allocateToStrategies()).not.to.be.reverted;
 
     await expectNoRemnants(batch);
-
-    expect(
-      await busd.balanceOf(strategy1.address)
-    ).to.be.closeTo(parseBusd("10"), parseBusd("0.1"));
-    expect(
-      await usdc.balanceOf(strategy2.address)
-    ).to.be.closeTo(parseUsdc("10"), parseUsdc("0.1"));
-    expect(
-      await usdt.balanceOf(strategy3.address)
-    ).to.be.closeTo(parseUsdt("10"), parseUsdt("0.1"));
+    await expectStrategiesHoldCorrectBalances(30, strategy1, strategy2, strategy3);
   });
 });
