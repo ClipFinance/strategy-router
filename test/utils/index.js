@@ -146,7 +146,7 @@ function printStruct(struct) {
 
 // Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance
 async function saturateTokenBalancesInStrategies(router) {
- const strategiesData = await router.getStrategies();
+ const [strategiesData] = await router.getStrategies();
  for( i = 0; i < strategiesData.length; i++) {
    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
    let depositTokenAddress = await strategyContract.depositToken();
