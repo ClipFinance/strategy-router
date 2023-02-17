@@ -222,11 +222,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         // temporal solution, rework in a separate PR
-        StrategyRouter.StrategyInfo[] memory strategies = router.getStrategies();
-        uint totalStrategyWeight;
-        for (uint i; i < strategies.length; i++) {
-            totalStrategyWeight += strategies[i].weight;
-        }
+        (StrategyRouter.StrategyInfo[] memory strategies, uint256 totalStrategyWeight) = router.getStrategies();
 
         balances = new uint256[](strategies.length);
         uint256[] memory strategyToSupportedTokenIndexMap = new uint256[](strategies.length);

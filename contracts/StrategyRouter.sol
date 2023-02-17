@@ -130,6 +130,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     address public feeAddress;
 
     StrategyInfo[] public strategies;
+    uint256 public totalStrategyWeight;
+
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
 
@@ -320,7 +322,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @dev Returns strategy weight as percent of total weight.
     function getStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation) {
-        return StrategyRouterLib.getStrategyPercentWeight(_strategyId, strategies);
+        strategyPercentAllocation = (strategies[_strategyId].weight * PRECISION) / totalStrategyWeight;
     }
 
     /// @notice Returns count of strategies.
@@ -329,8 +331,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     /// @notice Returns array of strategies.
-    function getStrategies() public view returns (StrategyInfo[] memory) {
-        return strategies;
+    function getStrategies() public view returns (StrategyInfo[] memory, uint256) {
+        return (strategies, totalStrategyWeight);
     }
 
     /// @notice Returns deposit token of the strategy.
@@ -590,6 +592,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 weight: _weight
             })
         );
+        totalStrategyWeight += _weight;
     }
 
     /// @notice Update strategy weight.
@@ -597,6 +600,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _weight New weight of the strategy.
     /// @dev Admin function.
     function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
+        totalStrategyWeight -= strategies[_strategyId].weight;
+        totalStrategyWeight += _weight;
+
         strategies[_strategyId].weight = _weight;
     }
 
@@ -613,6 +619,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 len = strategies.length - 1;
         strategies[_strategyId] = strategies[len];
         strategies.pop();
+        totalStrategyWeight -= removedStrategyInfo.weight;
 
         // compound removed strategy
         removedStrategy.compound();
@@ -653,7 +660,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
+        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, totalStrategyWeight);
     }
 
     /// @notice Checkes weither upkeep method is ready to be called.
