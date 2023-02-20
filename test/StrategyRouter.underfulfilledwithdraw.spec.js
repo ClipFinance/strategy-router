@@ -3,7 +3,8 @@ const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { MaxUint256, parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 const { BigNumber } = require("ethers");
-const { loadFixture } = require("ethereum-waffle");
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+
 
 describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   function deploySingleStrategy(underFulfilledWithdrawalBps) {
@@ -41,7 +42,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
   }
 
   function loadState(strategyDeploymentFn, rateCoefBps = 0) {
-    return (async function () {
+    async function state () {
       [owner, nonReceiptOwner] = await ethers.getSigners();
 
       // deploy core contracts
@@ -85,7 +86,9 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
         fakeExchangePlugin
       }
-    });
+    }
+
+    return state;
   }
 
   describe("when withdraw from a single strategy", async function () {
@@ -124,13 +127,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to front-end and on-chain oracle different prices", async function () {
@@ -163,7 +160,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       );
 
       // set up oracle price different from a client to get less BUSD than expected
-      await oracle.setPrice(busd.address, 9_000_000_000); // $0.9
+      await oracle.setPrice(busd.address, parseBusd("1.1")); // $1.1
 
       // let oldBalance = await usdc.balanceOf(owner.address);
       await expect(router.withdrawFromStrategies(
@@ -171,13 +168,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from a strategy than requested due to exchange slippage", async function () {
@@ -216,7 +207,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
 
@@ -262,13 +253,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         usdc.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to front-end and on-chain oracle different prices", async function () {
@@ -278,7 +263,6 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       } = await loadFixture(
         loadState(
           // deploy funds equally to 3 strategies
-          // 5% slippage on busd strategy
           deployMultipleStrategies(
             0,
             0,
@@ -315,13 +299,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
-
-      // let newBalance = await usdc.balanceOf(owner.address);
-      // expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
-      // // if this not revert, means receipt still exists and not burned
-      // let receipt = await receiptContract.getReceipt(1);
-      // expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
     it("verify that less amount was withdrawn from strategies than requested due to exchange slippage", async function () {
@@ -360,7 +338,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         busd.address,
         withdrawShares,
         expectedWithdrawAmount
-      )).to.be.revertedWith("WithdrawnAmountLowerThanExpectedAmount()");
+      )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
 });

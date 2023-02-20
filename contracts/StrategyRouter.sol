@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 
-//import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -30,6 +30,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
     event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    /// @notice Fires when compound process is finished.
+    /// @param currentCycle Index of the current cycle.
+    /// @param currentTvlInUsd Current TVL in USD.
+    /// @param totalShares Current amount of shares.
+    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvlInUsd, uint256 totalShares);
     /// @notice Fires when user withdraw from strategies.
     /// @param token Supported token that user requested to receive after withdraw.
     /// @param amount Amount of `token` received by user.
@@ -88,10 +93,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 startAt;
         // batch USD value before deposited into strategies
         uint256 totalDepositedInUsd;
+        // USD value received by strategies after all swaps necessary to ape into strategies
+        uint256 receivedByStrategiesInUsd;
+        // Protocol TVL after compound idle strategy and actual deposit to strategies
+        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd;
         // price per share in USD
         uint256 pricePerShare;
-        // USD value received by strategies
-        uint256 receivedByStrategiesInUsd;
         // tokens price at time of the deposit to strategies
         mapping(address => uint256) prices;
     }
@@ -99,6 +106,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
+    uint256 private constant FEE_PERCENT_PRECISION = 100;
     // we do not try to withdraw amount below this threshold
     // cause gas spendings are high compared to this amount
     uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17; // 10 cents / 0.1 USD
@@ -109,7 +117,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     uint256 public allocationWindowTime;
     /// @notice Current cycle counter. Incremented at the end of the cycle
     uint256 public currentCycleId;
-    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.  
+    /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.
     uint256 public currentCycleDepositsCount;
     /// @notice Protocol comission in percents taken from yield. One percent is 100.
     uint256 public feePercent;
@@ -122,6 +130,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     address public feeAddress;
 
     StrategyInfo[] public strategies;
+    uint256 public totalStrategyWeight;
+
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
 
@@ -177,7 +187,28 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 5 - rebalance token in batch to match our desired strategies ratio
         step 6 - batch transfers funds to strategies and strategies deposit tokens to their respective farms
         step 7 - we calculate share price for the current cycle and calculate a new amount of shares to issue
-        step 8 - store remaining information for the current cycle
+
+            Description:
+
+                step 7.1 - Get previous TVL from previous cycle and calculate compounded profit: current TVL
+                           minus previous cycle TVL. if current cycle = 0, then TVL = 0
+                step 7.2 - Save corrected current TVL in Cycle[strategiesBalanceWithCompoundAndBatchDepositsInUsd] for the next cycle
+                step 7.3 - Calculate price per share
+                step 7.4 - Mint shares for the new protocol's deposits
+                step 7.5 - Mint CLT for Clip's treasure address. CLT amount = fee / price per share
+
+            Case example:
+
+                Previous cycle strategies TVL = 1000 USD and total shares count is 1000 CLT
+                Compound yield is 10 USD, hence protocol commission (protocolCommissionInUsd) is 10 USD * 20% = 2 USD
+                TLV after compound is 1010 USD. TVL excluding platform's commission is 1008 USD
+
+                Hence protocol commission in shares (protocolCommissionInShares) will be
+
+                (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
+
+        step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
+        step 9 - store remaining information for the current cycle
         */
         // step 1
         uint256 _currentCycleId = currentCycleId;
@@ -209,8 +240,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
+        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        uint256 totalShares = sharesToken.totalSupply();
+        emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
+
         // step 5
-        (uint256 balanceAfterCompoundInUsd, ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterCompoundInUsd, ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
@@ -225,18 +260,32 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-        (uint256 balanceAfterDepositInUsd, ) = getStrategiesValue();
-        uint256 receivedByStrategiesInUsd = balanceAfterDepositInUsd - balanceAfterCompoundInUsd;
+        (uint256 strategiesBalanceAfterDepositInUsd, ) = getStrategiesValue();
+        uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
-        uint256 totalShares = sharesToken.totalSupply();
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
-            cycles[_currentCycleId].pricePerShare = (balanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
+            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
         } else {
-            cycles[_currentCycleId].pricePerShare = (balanceAfterCompoundInUsd * PRECISION) / totalShares;
+            // step 7.1
+            uint256 protocolCommissionInUsd = 0;
+            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) {
+                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            }
 
+            // step 7.2
+            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            // step 7.3
+            cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
+
+            // step 7.4
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
+
+            // step 7.5
+            uint256 protocolCommissionInShares = (protocolCommissionInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
+            sharesToken.mint(feeAddress, protocolCommissionInShares);
         }
 
         // step 8
@@ -244,7 +293,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         cycles[_currentCycleId].totalDepositedInUsd = batchValueInUsd;
 
         emit AllocateToStrategies(_currentCycleId, receivedByStrategiesInUsd);
-        // Cycle cleaning up routine
+
+        // step 9
         ++currentCycleId;
         currentCycleDepositsCount = 0;
         cycles[_currentCycleId].startAt = block.timestamp;
@@ -259,6 +309,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         for (uint256 i; i < len; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
+
+        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        uint256 totalShares = sharesToken.totalSupply();
+        emit AfterCompound(currentCycleId, balanceAfterCompoundInUsd, totalShares);
     }
 
     /// @dev Returns list of supported tokens.
@@ -268,7 +322,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @dev Returns strategy weight as percent of total weight.
     function getStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation) {
-        return StrategyRouterLib.getStrategyPercentWeight(_strategyId, strategies);
+        strategyPercentAllocation = (strategies[_strategyId].weight * PRECISION) / totalStrategyWeight;
     }
 
     /// @notice Returns count of strategies.
@@ -277,8 +331,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     /// @notice Returns array of strategies.
-    function getStrategies() public view returns (StrategyInfo[] memory) {
-        return strategies;
+    function getStrategies() public view returns (StrategyInfo[] memory, uint256) {
+        return (strategies, totalStrategyWeight);
     }
 
     /// @notice Returns deposit token of the strategy.
@@ -343,6 +397,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 totalShares = sharesToken.totalSupply();
         if (amountShares > totalShares) revert AmountExceedTotalSupply();
         (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / totalShares;
 
         return (amountShares * currentPricePerShare) / PRECISION;
@@ -431,6 +486,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // shares into usd using current PPS
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
+
+        // Withhold withdrawen amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
+        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare / PRECISION;
+        cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
+
         withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minTokenAmountToWithdraw);
     }
 
@@ -532,6 +592,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 weight: _weight
             })
         );
+        totalStrategyWeight += _weight;
     }
 
     /// @notice Update strategy weight.
@@ -539,6 +600,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _weight New weight of the strategy.
     /// @dev Admin function.
     function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
+        totalStrategyWeight -= strategies[_strategyId].weight;
+        totalStrategyWeight += _weight;
+
         strategies[_strategyId].weight = _weight;
     }
 
@@ -555,6 +619,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 len = strategies.length - 1;
         strategies[_strategyId] = strategies[len];
         strategies.pop();
+        totalStrategyWeight -= removedStrategyInfo.weight;
 
         // compound removed strategy
         removedStrategy.compound();
@@ -595,10 +660,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, getSupportedTokens());
+        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, totalStrategyWeight, getSupportedTokens());
     }
 
-    /// @notice Checkes weither upkeep method is ready to be called. 
+    /// @notice Checkes weither upkeep method is ready to be called.
     /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
@@ -617,6 +682,22 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         this.allocateToStrategies();
     }
 
+    // @dev Returns cycle data
+    function getCycle(uint256 _cycleId) public view returns (
+        uint256 startAt,
+        uint256 totalDepositedInUsd,
+        uint256 receivedByStrategiesInUsd,
+        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd,
+        uint256 pricePerShare
+    ) {
+        Cycle storage requestedCycle = cycles[_cycleId];
+
+        startAt = requestedCycle.startAt;
+        totalDepositedInUsd = requestedCycle.totalDepositedInUsd;
+        receivedByStrategiesInUsd = requestedCycle.receivedByStrategiesInUsd;
+        strategiesBalanceWithCompoundAndBatchDepositsInUsd = requestedCycle.strategiesBalanceWithCompoundAndBatchDepositsInUsd;
+        pricePerShare = requestedCycle.pricePerShare;
+    }
 
     // Internals
 

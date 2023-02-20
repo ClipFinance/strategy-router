@@ -35,9 +35,12 @@ contract MockStrategy is Ownable, IStrategy {
         return amount;
     }
 
-    function compound() external override {
+    function setMockProfitPercent(uint256 _mockProfitPercent) external {
+        mockProfitPercent = _mockProfitPercent;
+    }
 
-        balance = (balance * mockProfitPercent) / 10000;
+    function compound() external override {
+        balance = balance * (1000000 + mockProfitPercent) / 1000000;
     }
 
     function totalTokens() external view override returns (uint256) {
