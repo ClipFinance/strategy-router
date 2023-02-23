@@ -176,174 +176,191 @@ library StrategyRouterLib {
         public
         returns (uint256[] memory balances)
     {
-        uint256 totalBalance;
-
-//        uint256 len = strategies.length;
         if (strategies.length < 2) revert StrategyRouter.NothingToRebalance();
-        StrategyData[] memory strategyDatas = new StrategyData[](strategies.length);
-//        uint256[] memory _strategiesBalances = new uint256[](strategies.length);
-//        address[] memory _strategiesTokens = new address[](strategies.length);
-//        address[] memory _strategies = new address[](strategies.length);
+
+        uint256 totalBalanceUniform;
+        uint256 totalUnallocatedBalanceUniform;
+        balances = new uint256(strategies.length);
+
+        StrategyData[] strategyDatas = new StrategyData[](strategies.length);
         for (uint256 i; i < strategies.length; i++) {
-//        for (uint256 i; i < len; i++) {
+            //        for (uint256 i; i < len; i++) {
             strategyDatas[i] = StrategyData({
                 strategyAddress: strategies[i].strategyAddress,
                 tokenAddress: strategies[i].depositToken,
+                weight: strategies[i].weight,
                 balance: IStrategy(strategies[i].strategyAddress).totalTokens()
             });
-            totalBalance += toUniform(strategyDatas[i].balance, strategyDatas[i].tokenAddress);
+            balances[i] = strategyDatas[i].balance;
+            totalBalanceUniform += toUniform(strategyDatas[i].balance, strategyDatas[i].tokenAddress);
         }
 
-//        uint256 supportedTokensLen = supportedTokens.length;
-//        uint256[] memory supportedTokenBalances = new uint256[](supportedTokens.length);
-        SupportedTokenData[] memory supportedTokenDatas = new SupportedTokenData[](supportedTokens.length);
         for (uint256 i; i < supportedTokens.length; i++) {
-//        for (uint256 i; i < supportedTokensLen; i++) {
-//            supportedTokenBalances[i] = IERC20(supportedTokens[i]).balanceOf(address(this));
-            supportedTokenDatas[i] = SupportedTokenData({
-                tokenAddress: supportedTokens[i],
-                balance: IERC20(supportedTokens[i]).balanceOf(address(this))
-            });
-//            uint256 supportedTokenBalance = IERC20(supportedTokens[i]).balanceOf(address(this));
-            totalBalance += toUniform(supportedTokenDatas[i].balance, supportedTokens[i]);
+            uint256 tokenBalanceUniform = toUniform(
+                IERC20(supportedTokens[i]).balanceOf(address(this)),
+                supportedTokens[i]
+            );
+            totalBalanceUniform += tokenBalanceUniform;
+            totalUnallocatedBalanceUniform += tokenBalanceUniform;
         }
 
-        uint256[] memory underflows = new uint256[](strategies.length);
-        uint256[] memory overflows = new uint256[](strategies.length);
-        console.log('totalBalance', totalBalance);
+        bool[] excludedStrategies = new bool[](strategies.length);
+        uint256[] underflowedStrategyWeights = new uint256[](strategies.length);
+        uint256 totalUnderflowStrategyWeights;
         for (uint256 i; i < strategies.length; i++) {
-            uint256 desiredBalance = (totalBalance * getStrategyPercentWeight(i, strategies)) / PRECISION;
+            uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / totalStrategyWeight;
             desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
-            unchecked {
-                if (desiredBalance > strategyDatas[i].balance) {
-                    underflows[i] = desiredBalance - strategyDatas[i].balance;
-                } else if (desiredBalance < strategyDatas[i].balance) {
-                    overflows[i] = strategyDatas[i].balance - desiredBalance;
+            if (desiredBalance < strategyDatas[i].balance) {
+                excludedStrategies[i] = true;
+                uint256 balanceToWithdraw = strategyDatas[i].balance - desiredBalance;
+                if (toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress) >= REBALANCE_SWAP_THRESHOLD) {
+                    // test underflow on withdrawal case
+                    // mark test skipped for current impl
+                    // when idle will be deployed such remnant will disappear
+                    uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
+                        .withdraw(balanceToWithdraw);
+                    balances[i] -= withdrawnBalance;
+                    totalUnallocatedBalanceUniform += toUniform(
+                        withdrawnBalance,
+                        strategyDatas[i].tokenAddress
+                    );
+                }
+            } else {
+                uint256 balanceToAddUniform = toUniform(
+                    desiredBalance - strategyDatas[i].balance,
+                    strategyDatas[i].tokenAddress
+                );
+                totalUnderflowStrategyWeights += balanceToAddUniform;
+                underflowedStrategyWeights[i] = balanceToAddUniform;
+            }
+        }
+
+        uint256[] supportedTokensIndexes = new uint256[](strategies.length);
+        for (uint256 i; i < strategies.length; i++) {
+            if (excludedStrategies[i]) {
+                continue;
+            }
+
+            uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
+                / totalUnderflowStrategyWeights;
+
+            if (desiredAllocationUniform < REBALANCE_SWAP_THRESHOLD) {
+                excludedStrategies[i] = true;
+                totalUnderflowStrategyWeights -= underflowedStrategyWeights[i];
+                underflowedStrategyWeights[i] = 0;
+                continue;
+            }
+
+            for (uint256 j; j < supportedTokens.length; j++) {
+                if (strategyDatas[i].tokenAddress == supportedTokens[j]) {
+                    supportedTokensIndexes[i] = j;
+                    break;
                 }
             }
-            console.log('overflows', i, overflows[i]);
-            console.log('underflows', i, underflows[i]);
-            console.log('strategyDatas[i].balance', i, strategyDatas[i].balance);
+
+            uint256 currentTokenBalance = IERC20(strategyDatas[i].tokenAddress).balanceOf(address(this));
+            uint256 currentTokenBalanceUniform = toUniform(currentTokenBalance, strategyDatas[i].tokenAddress);
+            if (currentTokenBalanceUniform < REBALANCE_SWAP_THRESHOLD) {
+                continue;
+            }
+
+            if (currentTokenBalanceUniform >= desiredAllocationUniform) {
+                excludedStrategies[i] = true;
+                if (currentTokenBalanceUniform < desiredAllocationUniform + REBALANCE_SWAP_THRESHOLD) {
+                    IERC20(strategyDatas[i].tokenAddress)
+                        .transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
+                    balances[i] += currentTokenBalance;
+                    totalUnderflowStrategyWeights -= underflowedStrategyWeights[i];
+                    underflowedStrategyWeights[i] = 0;
+                    totalUnallocatedBalanceUniform -= currentTokenBalance;
+                } else {
+                    desiredAllocationUniform = fromUniform(desiredAllocationUniform, strategyDatas[i].tokenAddress);
+                    IERC20(strategyDatas[i].tokenAddress).transfer(
+                        strategyDatas[i].strategyAddress,
+                        desiredAllocationUniform
+                    );
+                    balances[i] += desiredAllocationUniform;
+                    totalUnderflowStrategyWeights -= underflowedStrategyWeights[i];
+                    underflowedStrategyWeights[i] = 0;
+                    totalUnallocatedBalanceUniform -= toUniform(
+                        desiredAllocationUniform,
+                        strategyDatas[i].tokenAddress
+                    );
+                }
+            } else {
+                uint256 saturatedWeightPoints = underflowedStrategyWeights[i] * currentTokenBalance
+                    / fromUniform(desiredAllocationUniform, strategyDatas[i].tokenAddress);
+                underflowedStrategyWeights[i] -= saturatedWeightPoints;
+                totalUnderflowStrategyWeights -= saturatedWeightPoints;
+                totalUnallocatedBalanceUniform -= currentTokenBalance;
+
+                IERC20(strategyDatas[i].tokenAddress).transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
+                balances[i] += currentTokenBalance;
+            }
         }
 
-        _rebalanceStrategies(
-            strategies.length,
-            exchange,
-            overflows,
-            underflows,
-            strategyDatas,
-            supportedTokens.length,
-            supportedTokenDatas
-//            supportedTokenBalances
-        );
-
-        uint256[] memory _strategiesBalances = new uint256[](strategies.length);
         for (uint256 i; i < strategies.length; i++) {
-            _strategiesBalances[i] = IStrategy(strategyDatas[i].strategyAddress).totalTokens();
-            totalBalance += toUniform(_strategiesBalances[i], strategyDatas[i].tokenAddress);
-        }
+            if (excludedStrategies[i]) {
+                continue;
+            }
 
-        return _strategiesBalances;
-    }
+            uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
+                / totalUnderflowStrategyWeights;
+            totalUnderflowStrategyWeights -= underflowedStrategyWeights[i];
+            underflowedStrategyWeights[i] = 0;
 
-    function _rebalanceStrategies(
-        uint256 len,
-        Exchange exchange,
-        uint256[] memory overflows,
-        uint256[] memory underflows,
-        StrategyData[] memory strategyDatas,
-        uint256 supportedTokensLen,
-        SupportedTokenData[] memory supportedTokenDatas
-//        uint256[] memory supportedTokenBalances
-    ) internal {
-        for (uint256 i; i < len; i++) {
-            if (overflows[i] > 0) {
-                uint256 overflowUniform = toUniform(overflows[i], strategyDatas[i].tokenAddress);
-                if (overflowUniform < REBALANCE_SWAP_THRESHOLD) {
+            if (desiredAllocationUniform < REBALANCE_SWAP_THRESHOLD) {
+                continue;
+            }
+
+            for (uint256 j; j < supportedTokens.length; j++) {
+                if (supportedTokensIndexes[i] == j) {
                     continue;
                 }
-                IStrategy(strategyDatas[i].strategyAddress).withdraw(overflows[i]);
-//                console.log('balance', i, IStrategy(strategyDatas[i].tokenAddress).)
-            }
-        }
 
-//        uint256[] memory supportedTokenBalances = new uint256[](supportedTokensLen);
-        for (uint256 i; i < supportedTokensLen; i++) {
-            //        for (uint256 i; i < supportedTokensLen; i++) {
-//            supportedTokenBalances[i] = IERC20(supportedTokens[i]).balanceOf(address(this));
-            supportedTokenDatas[i].balance = IERC20(supportedTokenDatas[i].tokenAddress).balanceOf(address(this));
-//            totalBalance += toUniform(supportedTokenBalances[i], supportedTokens[i]);
-        }
+                uint256 currentTokenBalance = IERC20(supportedTokens[j]).balanceOf(address(this));
+                uint256 currentTokenBalanceUniform = toUniform(currentTokenBalance, supportedTokens[j]);
+                if (currentTokenBalanceUniform < REBALANCE_SWAP_THRESHOLD) {
+                    continue;
+                }
 
-        for (uint256 i; i < len; i++) {
-            if (underflows[i] > 0) {
-                uint256 desiredDeposit = underflows[i];
-                address underflowToken = strategyDatas[i].tokenAddress;
-                uint256 underflowTokenBalance = IERC20(underflowToken).balanceOf(address(this));
-                uint256 underflowUniform = toUniform(underflows[i], strategyDatas[i].tokenAddress);
-                if (underflowTokenBalance < underflows[i]) {
-                    for (uint256 j; j < supportedTokensLen; j++) {
-                        if (underflowToken == supportedTokenDatas[j].tokenAddress) {
-                            continue;
-                        }
-                        uint256 tokenBalanceUniform = toUniform(
-                            supportedTokenDatas[j].balance,
-                            supportedTokenDatas[j].tokenAddress
+                uint256 received;
+                if (currentTokenBalanceUniform >= desiredAllocationUniform) {
+                    if (currentTokenBalanceUniform < desiredAllocationUniform + REBALANCE_SWAP_THRESHOLD) {
+                        totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
+                        IERC20(supportedTokens[j]).transfer(exchange, currentTokenBalance);
+                        received = Exchange(exchange).swap(
+                            currentTokenBalance,
+                            supportedTokens[j],
+                            strategyDatas[i].tokenAddress
                         );
-                        if (tokenBalanceUniform < REBALANCE_SWAP_THRESHOLD) {
-                            continue;
-                        }
-                        uint256 received = tokenBalanceUniform > underflowUniform
-                            ? fromUniform(underflowUniform, supportedTokenDatas[j].tokenAddress)
-                            : supportedTokenDatas[j].balance;
-
-                        console.log('underflowUniform', underflowUniform);
-                        console.log('tokenBalanceUniform', tokenBalanceUniform);
-                        console.log('supportedTokenDatas[j].balance', j, supportedTokenDatas[j].balance);
-                        console.log('received', received);
-                        console.log('true balance', IERC20(supportedTokenDatas[j].tokenAddress).balanceOf(address(this)));
-                        supportedTokenDatas[j].balance -= received;
-                        received = trySwap(exchange, received, supportedTokenDatas[j].tokenAddress, underflowToken);
-                        underflows[i] -= received;
-                        underflowTokenBalance += received;
-
-                        if (underflowUniform < REBALANCE_SWAP_THRESHOLD) {
-                            break;
-                        }
+                    } else {
+                        uint256 desiredAllocation = fromUniform(desiredAllocationUniform, supportedTokens[j]);
+                        totalUnallocatedBalanceUniform -= toUniform(desiredAllocation, supportedTokens[j]);
+                        IERC20(supportedTokens[j]).transfer(
+                            exchange,
+                            desiredAllocation
+                        );
+                        received = Exchange(exchange).swap(
+                            desiredAllocation,
+                            supportedTokens[j],
+                            strategyDatas[i].tokenAddress
+                        );
                     }
-                }
-
-                if (desiredDeposit > underflowTokenBalance) {
-                    desiredDeposit = underflowTokenBalance;
-                }
-
-                IERC20(underflowToken).transfer(strategyDatas[i].strategyAddress, desiredDeposit);
-                IStrategy(strategyDatas[i].strategyAddress).deposit(desiredDeposit);
-            }
-        }
-
-        // @dev temporal solution until idle strategies arrive, then leftovers will be deposited there
-        for (uint256 j; j < supportedTokensLen; j++) {
-            uint256 tokenBalance = IERC20(supportedTokenDatas[j].tokenAddress).balanceOf(address(this));
-            if (tokenBalance > 0) {
-                for (uint256 i; i < len; i++) {
-                    if (supportedTokenDatas[j].tokenAddress == strategyDatas[i].tokenAddress) {
-                        tokenBalance = 0;
-                        IERC20(supportedTokenDatas[j].tokenAddress)
-                            .transfer(strategyDatas[i].strategyAddress, tokenBalance);
-                        IStrategy(strategyDatas[i].strategyAddress).deposit(tokenBalance);
-                        break;
-                    }
-                }
-                if (tokenBalance > 0) {
-                    tokenBalance = trySwap(
-                        exchange,
-                        tokenBalance,
-                        strategyDatas[0].tokenAddress,
-                        supportedTokenDatas[j].tokenAddress
+                } else {
+                    desiredAllocationUniform -= currentTokenBalanceUniform;
+                    totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
+                    IERC20(supportedTokens[j]).transfer(exchange, currentTokenBalance);
+                    received = Exchange(exchange).swap(
+                        currentTokenBalance,
+                        supportedTokens[j],
+                        strategyDatas[i].tokenAddress
                     );
-                    IERC20(strategyDatas[0].tokenAddress).transfer(strategyDatas[0].strategyAddress, tokenBalance);
-                    IStrategy(strategyDatas[0].strategyAddress).deposit(tokenBalance);
+                }
+                IERC20(supportedTokens[j]).transfer(strategyDatas[i].strategyAddress, received);
+                balances[i] += received;
+                if (desiredAllocationUniform < REBALANCE_SWAP_THRESHOLD) {
+                    break;
                 }
             }
         }
