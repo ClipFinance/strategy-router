@@ -433,6 +433,7 @@ describe("Test rebalance functions", function () {
     assert((await router.getStrategiesCount()) == weights.length);
     const ERROR_THRESHOLD = 0.5;
     const { total, balances } = await getStrategiesBalances();
+    console.log('balances', balances);
     let totalWeight = weights.reduce((e, acc) => acc + e);
     for (let i = 0; i < weights.length; i++) {
       const percentWeight = weights[i] * 100 / totalWeight;

@@ -28,8 +28,8 @@ library StrategyRouterLib {
         address tokenAddress;
         uint256 tokenIndexInSupportedTokens;
         uint256 weight;
-        uint256 balance;
         bool saturated;
+        uint256 toDeposit;
     }
 
     struct SupportedTokenData {
@@ -192,16 +192,16 @@ library StrategyRouterLib {
             uint256 totalBalanceUniform;
 
             for (uint256 i; i < strategies.length; i++) {
+                balances[i] = IStrategy(strategies[i].strategyAddress).totalTokens();
                 strategyDatas[i] = StrategyData({
                     strategyAddress: strategies[i].strategyAddress,
                     tokenAddress: strategies[i].depositToken,
                     tokenIndexInSupportedTokens: 0,
                     weight: strategies[i].weight,
-                    balance: IStrategy(strategies[i].strategyAddress).totalTokens(),
-                    saturated: false
+                    saturated: false,
+                    toDeposit: 0
                 });
-                balances[i] = strategyDatas[i].balance;
-                totalBalanceUniform += toUniform(strategyDatas[i].balance, strategyDatas[i].tokenAddress);
+                totalBalanceUniform += toUniform(balances[i], strategyDatas[i].tokenAddress);
             }
 
             for (uint256 i; i < supportedTokens.length; i++) {
@@ -228,9 +228,9 @@ library StrategyRouterLib {
                         break;
                     }
                 }
-                if (desiredBalance < strategyDatas[i].balance) {
+                if (desiredBalance < balances[i]) {
                     strategyDatas[i].saturated = true;
-                    uint256 balanceToWithdraw = strategyDatas[i].balance - desiredBalance;
+                    uint256 balanceToWithdraw = balances[i] - desiredBalance;
 //                    console.log('balanceToWithdraw', i, balanceToWithdraw);
 //                    console.log('toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress)', i, toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress));
                     if (toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress) >= REBALANCE_SWAP_THRESHOLD) {
@@ -250,7 +250,7 @@ library StrategyRouterLib {
                     }
                 } else {
                     uint256 balanceToAddUniform = toUniform(
-                        desiredBalance - strategyDatas[i].balance,
+                        desiredBalance - balances[i],
                         strategyDatas[i].tokenAddress
                     );
                     if (balanceToAddUniform >= REBALANCE_SWAP_THRESHOLD) {
@@ -303,7 +303,7 @@ library StrategyRouterLib {
                 if (currentTokenBalanceUniform < desiredAllocationUniform + REBALANCE_SWAP_THRESHOLD) {
                     IERC20(strategyTokenAddress)
                         .transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
-                    IStrategy(strategyDatas[i].strategyAddress).deposit(currentTokenBalance);
+                    strategyDatas[i].toDeposit += currentTokenBalance;
                     balances[i] += currentTokenBalance;
                     currentTokenBalances[strategyDatas[i].tokenIndexInSupportedTokens] -= currentTokenBalance;
                     totalUnderflowStrategyWeight -= underflowedStrategyWeights[i];
@@ -319,7 +319,7 @@ library StrategyRouterLib {
                         strategyDatas[i].strategyAddress,
                         desiredAllocationUniform
                     );
-                    IStrategy(strategyDatas[i].strategyAddress).deposit(desiredAllocationUniform);
+                    strategyDatas[i].toDeposit += desiredAllocationUniform;
                     balances[i] += desiredAllocationUniform;
                     currentTokenBalances[strategyDatas[i].tokenIndexInSupportedTokens] -= desiredAllocationUniform;
                     totalUnderflowStrategyWeight -= underflowedStrategyWeights[i];
@@ -337,7 +337,7 @@ library StrategyRouterLib {
                 totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
                 IERC20(strategyTokenAddress).transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
-                IStrategy(strategyDatas[i].strategyAddress).deposit(currentTokenBalance);
+                strategyDatas[i].toDeposit += currentTokenBalance;
                 balances[i] += currentTokenBalance;
                 currentTokenBalances[strategyDatas[i].tokenIndexInSupportedTokens] -= currentTokenBalance;
             }
@@ -345,6 +345,9 @@ library StrategyRouterLib {
 
         for (uint256 i; i < strategies.length; i++) {
             if (strategyDatas[i].saturated) {
+                if (strategyDatas[i].toDeposit > 0) {
+                    IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
+                }
                 continue;
             }
 //            console.log('never here');
@@ -360,6 +363,7 @@ library StrategyRouterLib {
 
             for (uint256 j; j < supportedTokens.length; j++) {
                 if (strategyDatas[i].tokenIndexInSupportedTokens == j) {
+                    IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
                     continue;
                 }
 
@@ -387,7 +391,9 @@ library StrategyRouterLib {
                             strategyDatas[i].tokenAddress,
                             strategyDatas[i].strategyAddress
                         );
-                        IStrategy(strategyDatas[i].strategyAddress).deposit(received);
+                        // TODO Move to a single deposit call per strategy
+                        strategyDatas[i].toDeposit = received;
+//                        IStrategy(strategyDatas[i].strategyAddress).deposit(received);
 
                         balances[i] += received;
                         currentTokenBalances[j] = 0;
@@ -405,7 +411,9 @@ library StrategyRouterLib {
                             strategyDatas[i].tokenAddress,
                             strategyDatas[i].strategyAddress
                         );
-                        IStrategy(strategyDatas[i].strategyAddress).deposit(received);
+                        strategyDatas[i].toDeposit = received;
+                        // TODO Move to a single deposit call per strategy
+//                        IStrategy(strategyDatas[i].strategyAddress).deposit(received);
 
                         balances[i] += received;
                         currentTokenBalances[j] -= desiredAllocationUniform;
@@ -425,7 +433,9 @@ library StrategyRouterLib {
                         strategyDatas[i].tokenAddress,
                         strategyDatas[i].strategyAddress
                     );
-                    IStrategy(strategyDatas[i].strategyAddress).deposit(received);
+                    strategyDatas[i].toDeposit = received;
+                    // TODO Move to a single deposit call per strategy
+//                    IStrategy(strategyDatas[i].strategyAddress).deposit(received);
 
                     balances[i] += received;
                     currentTokenBalances[j] = 0;
@@ -435,6 +445,8 @@ library StrategyRouterLib {
                     break;
                 }
             }
+
+            IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
         }
 
 //        console.log('=====FINAL BALANCES=====');
