@@ -305,6 +305,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
                 }
+            } else {
+                totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
             }
         }
 
@@ -373,6 +375,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                             break;
                         }
+                    } else {
+                        totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     }
                 }
             }
