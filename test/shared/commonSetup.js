@@ -13,7 +13,7 @@ async function deployFakeStrategy({ router, token, weight = 10_000, profitPercen
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 }
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({
@@ -29,7 +29,7 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
     isRewardPositive
   );
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
