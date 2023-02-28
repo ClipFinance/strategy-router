@@ -243,7 +243,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 continue;
             }
 
-            uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
             // figure out corresponding token index in supported tokens list
             // TODO corresponding token index in supported tokens list should be known upfront
             for (uint256 j; j < tokenInfos.length; j++) {
@@ -269,8 +268,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                         totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                         balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                        desiredStrategyBalance = 0;
-                        desiredStrategyBalanceUniform = 0;
                         tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
                     } else {
                         // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
@@ -280,11 +277,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
                         // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
                         // we should subtract 333333330000000000
+                        uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
                         totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
                         tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
                         balances[i] += desiredStrategyBalance;
-                        desiredStrategyBalance = 0;
-                        desiredStrategyBalanceUniform = 0;
                     }
                 } else {
                     // reduce strategy weight in the current rebalance iteration proportionally to the degree
@@ -301,8 +297,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                    desiredStrategyBalance -= tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                    desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
                 }
             } else {
@@ -327,7 +321,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 }
 
                 address strategyToken = strategies[i].depositToken;
-                uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
                 for (uint256 j; j < tokenInfos.length; j++) {
                     if (j == strategyToSupportedTokenIndexMap[i]) {
                         continue;
@@ -344,7 +337,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                                 totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                                 toSell = tokenInfos[j].balance;
-                                desiredStrategyBalance = 0;
                                 desiredStrategyBalanceUniform = 0;
                                 tokenInfos[j].balance = 0;
                             } else {
@@ -357,14 +349,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                                 // we should subtract 333333330000000000
                                 toSell = fromUniform(desiredStrategyBalanceUniform, tokenInfos[j].tokenAddress);
                                 totalBatchUnallocatedTokens -= toUniform(toSell, tokenInfos[j].tokenAddress);
-                                desiredStrategyBalance = 0;
                                 desiredStrategyBalanceUniform = 0;
                                 tokenInfos[j].balance -= toSell;
                             }
                         } else {
                             totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                             toSell = tokenInfos[j].balance;
-                            desiredStrategyBalance -= fromUniform(batchTokenBalanceUniform, strategyToken);
                             desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
                             tokenInfos[j].balance = 0;
                         }
