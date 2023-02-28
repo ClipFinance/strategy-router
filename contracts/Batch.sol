@@ -52,6 +52,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     struct TokenInfo {
         address tokenAddress;
         uint256 balance;
+        bool insufficientBalance;
     }
 
     modifier onlyStrategyRouter() {
@@ -214,11 +215,17 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             tokenInfos[i].tokenAddress = supportedTokens.at(i);
             tokenInfos[i].balance = ERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
 
-            // point 3
-            totalBatchUnallocatedTokens += toUniform(
+            uint tokenBalanceUniform = toUniform(
                 tokenInfos[i].balance,
                 tokenInfos[i].tokenAddress
             );
+
+            // point 3
+            if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
+                totalBatchUnallocatedTokens += tokenBalanceUniform;
+            } else {
+                tokenInfos[i].insufficientBalance = true;
+            }
         }
 
         // temporal solution, rework in a separate PR
@@ -252,6 +259,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 }
             }
 
+            if (tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance) {
+                continue;
+            }
+
             uint256 batchTokenBalanceUniform = toUniform(
                 tokenInfos[strategyToSupportedTokenIndexMap[i]].balance,
                 strategyToken
@@ -269,6 +280,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                         balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
                         tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
+                        tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
                     } else {
                         // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
                         // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
@@ -298,9 +310,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
+                    tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
                 }
-            } else {
-                totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
             }
         }
 
@@ -326,6 +337,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         continue;
                     }
 
+                    if (tokenInfos[j].insufficientBalance) {
+                        continue;
+                    }
+
                     uint256 batchTokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
                     // is there anything to allocate to a strategy
                     if (batchTokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
@@ -339,6 +354,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                                 toSell = tokenInfos[j].balance;
                                 desiredStrategyBalanceUniform = 0;
                                 tokenInfos[j].balance = 0;
+                                tokenInfos[j].insufficientBalance = true;
                             } else {
                                 // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
                                 // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
@@ -357,6 +373,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             toSell = tokenInfos[j].balance;
                             desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
                             tokenInfos[j].balance = 0;
+                            tokenInfos[j].insufficientBalance = true;
                         }
 
                         balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
@@ -365,8 +382,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                             break;
                         }
-                    } else {
-                        totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     }
                 }
             }
