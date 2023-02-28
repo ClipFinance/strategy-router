@@ -86,7 +86,7 @@ async function expectStrategyHoldsExactBalances(
 }
 
 describe("Test Batch.rebalance in algorithm-specific manner", function () {
-  async function loadState(rateCoefBps = 0) {
+  async function loadState(feeBps = 25) {
     const [owner, nonReceiptOwner] = await ethers.getSigners();
 
     // deploy core contracts
@@ -98,7 +98,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
       oracle,
       0, // 0% slippage,
-      25 // fee %0.25
+      feeBps // fee %0.25
     );
     mintFakeToken(fakeExchangePlugin.address, usdc, parseUsdc('10000000'));
     mintFakeToken(fakeExchangePlugin.address, usdt, parseUsdt('10000000'));
@@ -141,6 +141,10 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       fakeExchangePlugin,
       expectNoRemnants, deployStrategy
     }
+  }
+
+  async function loadStateWithZeroBps() {
+    return await loadState(0);
   }
 
   describe('token amounts allocated to strategies follow exchange rates correctly', async function () {
@@ -1285,6 +1289,82 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
 
       await expectNoRemnants(batch);
       await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
+    });
+  });
+  describe('strategy unallocated balance manipulation works as intended', async function () {
+    it('deposit has matching native strategies', async function () {
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        fakeExchangePlugin,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroBps);
+
+      // 1 BUSD = 1 USDT
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const strategy1 = await deployStrategy({
+        token: busd,
+        weight: 5000,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+        weight: 5000,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+
+      // 0.05 BUSD deposit will not be included into unallocated amount
+      await router.depositToBatch(busd.address, parseBusd("0.05"));
+      await router.depositToBatch(usdt.address, parseUsdt("15"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 5, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 5, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 5, 0);
+    });
+    it('deposit doesnt have matching native strategies', async function () {
+      const {
+        router, oracle, batch,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        fakeExchangePlugin,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroBps);
+
+      // 1 BUSD = 1 USDT
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+      const strategy2 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+
+      // 0.05 BUSD deposit will not be included into unallocated amount
+      await router.depositToBatch(busd.address, parseBusd("0.05"));
+      await router.depositToBatch(usdt.address, parseUsdt("15"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 5, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 5, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 5, 0);
     });
   });
   it('test where old algo would execute good', async function () {

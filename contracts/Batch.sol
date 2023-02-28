@@ -282,7 +282,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-//                        tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                    // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
                 } else {
                     // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
@@ -312,7 +312,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
                 totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                 balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-//                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                 tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
             }
         }
@@ -344,6 +344,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     }
 
                     uint256 batchTokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
+
                     // is there anything to allocate to a strategy
                     uint256 toSell;
                     if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
@@ -354,7 +355,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                             toSell = tokenInfos[j].balance;
                             desiredStrategyBalanceUniform = 0;
-//                                tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                            // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                             tokenInfos[j].insufficientBalance = true;
                         } else {
                             // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
@@ -373,7 +374,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                         toSell = tokenInfos[j].balance;
                         desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
-//                            tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                        // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                         tokenInfos[j].insufficientBalance = true;
                     }
 
