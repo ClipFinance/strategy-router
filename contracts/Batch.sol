@@ -272,50 +272,48 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 strategyToken
             );
             // if there anything to allocate to a strategy
-            if (batchTokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
-                if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
-                    // reduce weight of the current strategy in this iteration of rebalance to 0
-                    totalStrategyWeight -= strategies[i].weight;
-                    strategies[i].weight = 0;
-                    // manipulation to avoid dust:
-                    // if the case remaining balance of token is below allocation threshold –
-                    // send it to the current strategy
-                    if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
-                        totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                        balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                        tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
-                        tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
-                    } else {
-                        // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
-                        // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
-                        // because desiredStrategyBalanceUniform is a virtual value
-                        // that could mismatch the real token number
-                        // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
-                        // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
-                        // we should subtract 333333330000000000
-                        uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
-                        totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
-                        tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
-                        balances[i] += desiredStrategyBalance;
-                    }
-                } else {
-                    // reduce strategy weight in the current rebalance iteration proportionally to the degree
-                    // at which the strategy's desired balance was saturated
-                    // For example: if a strategy's weight is 10,000 and the total weight is 100,000
-                    // and the strategy's desired balance was saturated by 80%
-                    // we reduce the strategy weight by 80%
-                    // strategy weight = 10,000 - 80% * 10,000 = 2,000
-                    // total strategy weight = 100,000 - 80% * 10,000 = 92,000
-                    uint256 strategyWeightFulfilled = strategies[i].weight * batchTokenBalanceUniform
-                        / desiredStrategyBalanceUniform;
-                    totalStrategyWeight -= strategyWeightFulfilled;
-                    strategies[i].weight -= strategyWeightFulfilled;
-
+            if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
+                // reduce weight of the current strategy in this iteration of rebalance to 0
+                totalStrategyWeight -= strategies[i].weight;
+                strategies[i].weight = 0;
+                // manipulation to avoid dust:
+                // if the case remaining balance of token is below allocation threshold –
+                // send it to the current strategy
+                if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                     balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0;
+//                        tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
+                } else {
+                    // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
+                    // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
+                    // because desiredStrategyBalanceUniform is a virtual value
+                    // that could mismatch the real token number
+                    // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
+                    // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
+                    // we should subtract 333333330000000000
+                    uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
+                    totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
+                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
+                    balances[i] += desiredStrategyBalance;
                 }
+            } else {
+                // reduce strategy weight in the current rebalance iteration proportionally to the degree
+                // at which the strategy's desired balance was saturated
+                // For example: if a strategy's weight is 10,000 and the total weight is 100,000
+                // and the strategy's desired balance was saturated by 80%
+                // we reduce the strategy weight by 80%
+                // strategy weight = 10,000 - 80% * 10,000 = 2,000
+                // total strategy weight = 100,000 - 80% * 10,000 = 92,000
+                uint256 strategyWeightFulfilled = strategies[i].weight * batchTokenBalanceUniform
+                    / desiredStrategyBalanceUniform;
+                totalStrategyWeight -= strategyWeightFulfilled;
+                strategies[i].weight -= strategyWeightFulfilled;
+
+                totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
+//                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
             }
         }
 
@@ -347,45 +345,43 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
                     uint256 batchTokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
                     // is there anything to allocate to a strategy
-                    if (batchTokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
-                        uint256 toSell;
-                        if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
-                            // manipulation to avoid leaving dust
-                            // if the case remaining balance of token is below allocation threshold –
-                            // send it to the current strategy
-                            if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
-                                totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                                toSell = tokenInfos[j].balance;
-                                desiredStrategyBalanceUniform = 0;
-                                tokenInfos[j].balance = 0;
-                                tokenInfos[j].insufficientBalance = true;
-                            } else {
-                                // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
-                                // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
-                                // because desiredStrategyBalanceUniform is a virtual value
-                                // that could mismatch the real token number
-                                // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
-                                // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
-                                // we should subtract 333333330000000000
-                                toSell = fromUniform(desiredStrategyBalanceUniform, tokenInfos[j].tokenAddress);
-                                totalBatchUnallocatedTokens -= toUniform(toSell, tokenInfos[j].tokenAddress);
-                                desiredStrategyBalanceUniform = 0;
-                                tokenInfos[j].balance -= toSell;
-                            }
-                        } else {
+                    uint256 toSell;
+                    if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
+                        // manipulation to avoid leaving dust
+                        // if the case remaining balance of token is below allocation threshold –
+                        // send it to the current strategy
+                        if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                             totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                             toSell = tokenInfos[j].balance;
-                            desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
-                            tokenInfos[j].balance = 0;
+                            desiredStrategyBalanceUniform = 0;
+//                                tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                             tokenInfos[j].insufficientBalance = true;
+                        } else {
+                            // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
+                            // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
+                            // because desiredStrategyBalanceUniform is a virtual value
+                            // that could mismatch the real token number
+                            // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
+                            // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
+                            // we should subtract 333333330000000000
+                            toSell = fromUniform(desiredStrategyBalanceUniform, tokenInfos[j].tokenAddress);
+                            totalBatchUnallocatedTokens -= toUniform(toSell, tokenInfos[j].tokenAddress);
+                            desiredStrategyBalanceUniform = 0;
+                            tokenInfos[j].balance -= toSell;
                         }
+                    } else {
+                        totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                        toSell = tokenInfos[j].balance;
+                        desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
+//                            tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                        tokenInfos[j].insufficientBalance = true;
+                    }
 
-                        balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
+                    balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
 
-                        // if remaining desired strategy amount is below the threshold then break the cycle
-                        if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
-                            break;
-                        }
+                    // if remaining desired strategy amount is below the threshold then break the cycle
+                    if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                        break;
                     }
                 }
             }
