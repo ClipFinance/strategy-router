@@ -183,7 +183,7 @@ library StrategyRouterLib {
     function rebalanceStrategies(
         Exchange exchange,
         StrategyRouter.StrategyInfo[] storage strategies,
-        uint256 totalStrategyWeight,
+        uint256 totalStrategyWeightSum,
         address[] memory supportedTokens
     )
         public
@@ -237,7 +237,7 @@ library StrategyRouterLib {
 
             //        bool[] memory excludedStrategies = new bool[](strategies.length);
             for (uint256 i; i < strategies.length; i++) {
-                uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / totalStrategyWeight;
+                uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / totalStrategyWeightSum;
                 desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
 //                console.log('====Initial setup===');
 //                console.log('desiredBalance', i, desiredBalance);
