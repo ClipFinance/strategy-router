@@ -79,7 +79,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
           router,
         } = await loadFixture(loadStateNoStrategies);
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(0);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(0);
       });
       it('checks adding strategies to initial state updates total weight correctly', async function() {
         const {
@@ -93,7 +93,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
           1000,
         );
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(1000);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(1000);
         expectPercentValueEqualsTo(
           await router.getStrategyPercentWeight(0),
           100,
@@ -105,7 +105,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
           3000,
         );
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(4000);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(4000);
         expectPercentValueEqualsTo(
           await router.getStrategyPercentWeight(0),
           25,
@@ -131,7 +131,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
         await router.updateStrategy(1, 4000);
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(5000);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(5000);
         expectPercentValueEqualsTo(
           await router.getStrategyPercentWeight(0),
           20,
@@ -148,7 +148,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
         await router.removeStrategy(0);
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(3000);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(3000);
         expectPercentValueEqualsTo(
           await router.getStrategyPercentWeight(0),
           100,
@@ -173,7 +173,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
         await router.updateStrategy(1, 4000);
         await router.removeStrategy(0);
 
-        expect(await router.totalStrategyWeightSum()).to.be.equal(10_000);
+        expect(await router.allStrategiesWeightSum()).to.be.equal(10_000);
         expectPercentValueEqualsTo(
           await router.getStrategyPercentWeight(0),
           30,
