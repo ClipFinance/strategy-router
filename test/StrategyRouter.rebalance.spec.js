@@ -253,7 +253,7 @@ describe("Test rebalance functions", function () {
 
   describe("Test rebalanceStrategies function", function () {
 
-    it("one strategy rebalance should revert", async function () {
+    it.skip("one strategy rebalance should revert", async function () {
 
       await router.setSupportedToken(usdt.address, true);
 

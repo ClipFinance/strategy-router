@@ -4,6 +4,40 @@ const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWit
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
 
+async function expectStrategyHoldsExactBalances(
+  strategy,
+  expectedBalanceFullUnits,
+  deviationPercent = 1
+) {
+  const expectedBalance = BigNumber
+    .from(
+      FixedNumber
+        .from(expectedBalanceFullUnits)
+        .mulUnsafe(
+          FixedNumber.from(
+            BigNumber.from(10).pow(strategy.token.decimalNumber)
+          )
+        )
+        .toFormat({decimals: 0})
+        .toString()
+    );
+
+  const expectedBalanceDeviation = expectedBalance
+    .mul(deviationPercent)
+    .div(100);
+
+  const strategyTokenBalance = await strategy.token.balanceOf(strategy.address);
+
+  expect(
+    strategyTokenBalance,
+    `Strategy has balance ${strategyTokenBalance}`
+    + ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`,
+  ).to.be.closeTo(
+    expectedBalance,
+    expectedBalanceDeviation,
+  );
+}
+
 describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner", function () {
   async function loadState(feeBps = 25) {
     const [owner, nonReceiptOwner] = await ethers.getSigners();
@@ -262,7 +296,44 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       });
     });
     describe('withdraw', async function () {
-      it('withdraw is not called if required balance of router', async function () {
+      it('withdraw called min amount of times', async function () {
+        const {
+          router, oracle,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          batch,
+          expectNoRemnants, deployStrategy
+        } = await loadFixture(loadState);
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("100"));
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        const strategy2 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy4 = await deployStrategy({
+          token: busd,
+        });
+        const strategy5 = await deployStrategy({
+          token: busd,
+        });
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        expect(await strategy1.withdrawCount()).to.be.equal(1);
+        expect(await strategy2.withdrawCount()).to.be.equal(0);
+        expect(await strategy3.withdrawCount()).to.be.equal(0);
+        expect(await strategy4.withdrawCount()).to.be.equal(0);
+        expect(await strategy5.withdrawCount()).to.be.equal(0);
+      });
+      it('withdraw is not called if required balance on router', async function () {
         const {
           router, oracle,
           busd, parseBusd,
@@ -364,6 +435,65 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
     });
   });
   describe('test funds on the contract are taken into account', async function () {
+    it('rebalances funds on router', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadState);
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("100"));
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await usdc.transfer(router.address, parseUsdc('100'));
+      await busd.transfer(router.address, parseBusd('100'));
+      await usdt.transfer(router.address, parseUsdt('100'));
+
+      await router.rebalanceStrategies();
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 400);
+    });
+  });
+  describe('THRESHOLD compliance testing', async function () {
+    it('rebalancing doesnt happen if weight changes below threshold', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadState);
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+        weight: 10000,
+      });
+      const strategy2 = await deployStrategy({
+        token: usdc,
+        weight: 10000,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("100"));
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await router.updateStrategy(0, 10010);
+      await router.updateStrategy(0, 9990);
+
+      await router.rebalanceStrategies();
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 50, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 50, 0);
+    });
   });
   describe('weight updates are correctly handled', async function () {
   });

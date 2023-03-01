@@ -189,7 +189,7 @@ library StrategyRouterLib {
         public
         returns (uint256[] memory balances)
     {
-        if (strategies.length < 2) revert StrategyRouter.NothingToRebalance();
+//        if (strategies.length < 2) revert StrategyRouter.NothingToRebalance();
 
         uint256 totalUnallocatedBalanceUniform;
         StrategyData[] memory strategyDatas = new StrategyData[](strategies.length);
