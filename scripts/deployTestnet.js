@@ -136,7 +136,7 @@ async function main() {
   await (await router.setSupportedToken(usdc.address, true)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(mockStrategy.address, busd.address, 10000)).wait();
+  await (await router.addStrategy(mockStrategy.address, 10000)).wait();
 
   console.log("Approving for initial deposit...");
   if ((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
