@@ -12,8 +12,8 @@ function bnbChain() {
     // current token holders for tests, 
     // may not work based on block number used in forking, in such case try find other holders
     busdHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
-    usdcHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
-    usdtHolder: "0xf977814e90da44bfa03b6295a0616a897441acec"
+    usdcHolder: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3", // binance delisted usdc some time ago
+    usdtHolder: "0x8894e0a0c962cb723c1976a4421c95949be2d4e3"
   };
 
   // acryptos curve-like pool
@@ -24,6 +24,8 @@ function bnbChain() {
   };
 
   bnb.uniswapRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  bnb.biswapFarm = "0xDbc1A13490deeF9c3C12b44FE77b503c1B061739";
+  bnb.biswapRouter = "0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8"
 
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
@@ -31,6 +33,27 @@ function bnbChain() {
   return bnb;
 }
 
-const config = { bnb: bnbChain(), bnbTest: bnbChain(), localhost: bnbChain(), };
+
+function bnbTestChain() {
+
+  const bnb = {
+    // https://testnet.bscscan.com/address/0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7
+    busd: "0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7",
+    // https://testnet.bscscan.com/address/0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D
+    usdc: "0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D",
+  };
+
+  // https://testnet.bscscan.com/address/0xD99D1c33F9fC3444f8101754aBC46c52416550D1
+  bnb.uniswapRouter = "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
+
+  // https://testnet.bscscan.com/address/0x9331b55D9830EF609A2aBCfAc0FBCE050A52fdEa
+  bnb.BusdUsdPriceFeed = "0x9331b55D9830EF609A2aBCfAc0FBCE050A52fdEa";
+  // https://testnet.bscscan.com/address/0x90c069C4538adAc136E051052E14c1cD799C41B7
+  bnb.UsdcUsdPriceFeed = "0x90c069C4538adAc136E051052E14c1cD799C41B7";
+
+  return bnb;
+}
+
+const config = { bnb: bnbChain(), bnbTest: bnbTestChain(), localhost: bnbChain(), };
 
 module.exports = config;

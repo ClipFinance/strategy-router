@@ -1,18 +1,20 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { MaxUint256, parseUniform } = require("./utils");
+const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
+const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 
 
 describe("Test StrategyRouter", function () {
 
-  let owner, nonReceiptOwner;
+  let owner, nonReceiptOwner, feeAddress;
   // mock tokens with different decimals
   let usdc, usdt, busd;
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
+  let allocationWindowTime;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -20,11 +22,12 @@ describe("Test StrategyRouter", function () {
 
   before(async function () {
 
-    [owner, nonReceiptOwner] = await ethers.getSigners();
+    [owner, nonReceiptOwner,,,,,,,,feeAddress] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
+    allocationWindowTime = await router.allocationWindowTime();
 
     // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
@@ -53,6 +56,8 @@ describe("Test StrategyRouter", function () {
     await deployFakeStrategy({ router, token: usdc });
     await deployFakeStrategy({ router, token: usdt });
 
+    await saturateTokenBalancesInStrategies(router);
+
     // admin initial deposit to set initial shares and pps
     await router.depositToBatch(busd.address, parseBusd("1"));
     await router.allocateToStrategies();
@@ -70,7 +75,6 @@ describe("Test StrategyRouter", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-
   it("should allocateToStrategies", async function () {
     await router.depositToBatch(busd.address, parseBusd("100"))
 
@@ -84,9 +88,23 @@ describe("Test StrategyRouter", function () {
     await router.allocateToStrategies()
 
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
@@ -98,8 +116,23 @@ describe("Test StrategyRouter", function () {
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
     await router.redeemReceiptsToShares([1]);
 
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([], usdc.address, receiptsShares);
+    await router.withdrawFromStrategies(
+      [],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
@@ -115,8 +148,23 @@ describe("Test StrategyRouter", function () {
     let receiptsShares = await router.calculateSharesFromReceipts([2]);
     let withdrawShares = sharesBalance.add(receiptsShares);
 
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([2], usdc.address, withdrawShares);
+    await router.withdrawFromStrategies(
+      [2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
   });
@@ -128,10 +176,27 @@ describe("Test StrategyRouter", function () {
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    let withdrawShares = sharesBalance.add(receiptsShares);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
     // if this call not revert, that means receipt still exists and not burned
@@ -145,10 +210,28 @@ describe("Test StrategyRouter", function () {
 
     let sharesBalance = await sharesToken.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    let withdrawShares = sharesBalance.add(receiptsShares);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2)
+    ;
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
 
     let oldBalance = await usdc.balanceOf(owner.address);
-    await router.withdrawFromStrategies([1, 2], usdc.address, withdrawShares.div(2));
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
     // if this not revert, means receipt still exists and not burned
@@ -178,7 +261,23 @@ describe("Test StrategyRouter", function () {
     // withdraw user shares
     let oldBalance = await usdc.balanceOf(owner.address);
     let receiptsShares = await router.calculateSharesFromReceipts([1]);
-    await router.withdrawFromStrategies([1], usdc.address, receiptsShares);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(
       parseUsdc("10"),
@@ -192,7 +291,8 @@ describe("Test StrategyRouter", function () {
       [, nonModerator] = await ethers.getSigners();
       await router.depositToBatch(busd.address, parseBusd("10"));
       await router.allocateToStrategies();
-      await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1])).to.be.revertedWith("NotModerator()");
+      await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1]))
+        .to.be.revertedWithCustomError(router, "NotModerator");
     });
 
     it("should unlock list of 1 receipt", async function () {
@@ -279,6 +379,5 @@ describe("Test StrategyRouter", function () {
       expect(receipts2.toString()).to.be.equal("");
     });
 
-  });
-
+  }); 
 });

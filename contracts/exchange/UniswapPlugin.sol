@@ -34,7 +34,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         useWeth[token0][token1] = _useWeth;
     }
 
-    function isUseWeth(address tokenA, address tokenB) public view returns (bool) {
+    function canUseWeth(address tokenA, address tokenB) public view returns (bool) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
         return useWeth[token0][token1];
     }
@@ -45,7 +45,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenB,
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
-        if (isUseWeth(tokenA, tokenB)) {
+        if (canUseWeth(tokenA, tokenB)) {
             address[] memory path = new address[](3);
             path[0] = address(tokenA);
             path[1] = uniswapRouter.WETH();
@@ -61,7 +61,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         }
     }
 
-    function getFee(address, address) public pure override returns (uint256 feePercent) {
+    function getExchangeProtocolFee(address, address) public pure override returns (uint256 feePercent) {
         return 25e14; // 0.25% or 0.0025 with 18 decimals
     }
 
@@ -70,7 +70,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenA,
         address tokenB
     ) external view override returns (uint256 amountOut) {
-        if (isUseWeth(tokenA, tokenB)) {
+        if (canUseWeth(tokenA, tokenB)) {
             address[] memory path = new address[](3);
             path[0] = address(tokenA);
             path[1] = uniswapRouter.WETH();

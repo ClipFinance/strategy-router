@@ -36,7 +36,7 @@ describe("Test rebalance functions", function () {
 
     // setup params for testing
     await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
-    await router.setCycleDuration(1);
+    await router.setAllocationWindowTime(1);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));
@@ -234,7 +234,7 @@ describe("Test rebalance functions", function () {
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
 
-      await expect(router.rebalanceStrategies()).to.be.revertedWith("NothingToRebalance()");
+      await expect(router.rebalanceStrategies()).to.be.revertedWithCustomError(router, "NothingToRebalance");
     });
 
     it("two usdt strategies", async function () {

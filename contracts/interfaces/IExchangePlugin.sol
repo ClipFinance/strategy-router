@@ -16,8 +16,8 @@ interface IExchangePlugin {
     ) external returns (uint256 amountReceivedTokenB);
 
     /// @notice Returns percent taken by DEX on which we swap provided tokens.
-    /// @dev Fee percent has 18 decimals.
-    function getFee(address tokenA, address tokenB)
+    /// @dev Fee percent has 18 decimals, e.g. 100% = 10**18
+    function getExchangeProtocolFee(address tokenA, address tokenB)
         external
         view
         returns (uint256 feePercent);

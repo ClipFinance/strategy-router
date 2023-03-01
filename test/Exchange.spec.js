@@ -3,8 +3,8 @@ const { parseEther, parseUnits } = require("ethers/lib/utils");
 const { ethers, artifacts } = require("hardhat");
 const { provider, deploy, MaxUint256 } = require("./utils");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { deployMockContract } = require("ethereum-waffle");
 const { BigNumber } = require("ethers");
+const { smock } = require("@defi-wonderland/smock");
 
 describe("Test Exchange", function () {
     let owner, nonOwner, stubPlugin, stubPlugin2;
@@ -109,7 +109,7 @@ describe("Test Exchange", function () {
     describe("getPlugin", function () {
         it("should revert when plugin not set", async function () {
             await expect(exchangeNonOwner.getPlugin(0, usdc.address, usdc.address))
-                .to.be.revertedWith("RouteNotFound()");
+                .to.be.revertedWithCustomError(exchangeNonOwner, "RouteNotFound");
         });
         it("should return correct plugin based on input amount", async function () {
             // setup route
@@ -124,43 +124,43 @@ describe("Test Exchange", function () {
             expect(plugin).to.be.equal(routeParams.secondRoute);
         });
     });
-    describe("getFee", function () {
+    describe("getExchangeProtocolFee", function () {
         it("should revert when plugin not set", async function () {
-            await expect(exchangeNonOwner.getFee(0, usdc.address, usdc.address))
-                .to.be.revertedWith("RouteNotFound()");
+            await expect(exchangeNonOwner.getExchangeProtocolFee(0, usdc.address, usdc.address))
+                .to.be.revertedWithCustomError(exchangeNonOwner, "RouteNotFound");
         });
         it("should query correct plugin for fee based on input amount", async function () {
             // setup mocks
             let mockPlugin = await getMockPlugin();
             let fee = 100;
-            await mockPlugin.mock.getFee.returns(fee);
+            await mockPlugin.getExchangeProtocolFee.returns(fee);
 
             let mockPlugin2 = await getMockPlugin();
             let fee2 = 333;
-            await mockPlugin2.mock.getFee.returns(fee2);
+            await mockPlugin2.getExchangeProtocolFee.returns(fee2);
 
             // setup route
             let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
             await exchange.setRouteEx([usdc.address], [busd.address], [routeParams])
 
             // get fee
-            let feeReturned = await exchangeNonOwner.getFee(0, usdc.address, busd.address);
+            let feeReturned = await exchangeNonOwner.getExchangeProtocolFee(0, usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee);
             // exceed limit input amount
-            feeReturned = await exchangeNonOwner.getFee(parseUsdc("1.1"), usdc.address, busd.address);
+            feeReturned = await exchangeNonOwner.getExchangeProtocolFee(parseUsdc("1.1"), usdc.address, busd.address);
             expect(feeReturned).to.be.equal(fee2);
         });
     });
     describe("swap", function () {
         it("should revert when plugin not set", async function () {
             await expect(exchangeNonOwner.swap(0, usdc.address, usdc.address, owner.address))
-                .to.be.revertedWith("RouteNotFound()");
+                .to.be.revertedWithCustomError(exchangeNonOwner, "RouteNotFound");
         });
         it("should revert when received 0", async function () {
             // setup mocks
             let mockPlugin = await getMockPlugin();
             let swapReturns = 0;
-            await mockPlugin.mock.swap.returns(swapReturns);
+            await mockPlugin.swap.returns(swapReturns);
 
             // setup route
             let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: stubPlugin.address };
@@ -168,17 +168,17 @@ describe("Test Exchange", function () {
 
             // do swap
             await expect(exchangeNonOwner.swap(0, usdc.address, busd.address, owner.address))
-                .to.be.revertedWith("RoutedSwapFailed()")
+                .to.be.revertedWithCustomError(exchangeNonOwner, "RoutedSwapFailed")
         });
         it("should swap on correct plugin based on input amount", async function () {
             // setup mocks
             let mockPlugin = await getMockPlugin();
             let swapReturns = 1337;
-            await mockPlugin.mock.swap.returns(swapReturns);
+            await mockPlugin.swap.returns(swapReturns);
 
             let mockPlugin2 = await getMockPlugin();
             let swapReturns2 = 666;
-            await mockPlugin2.mock.swap.returns(swapReturns2);
+            await mockPlugin2.swap.returns(swapReturns2);
 
             // setup route
             let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
@@ -197,17 +197,17 @@ describe("Test Exchange", function () {
     describe("getAmountOut", function () {
         it("should revert when plugin not set", async function () {
             await expect(exchangeNonOwner.getAmountOut(0, usdc.address, usdc.address))
-                .to.be.revertedWith("RouteNotFound()");
+                .to.be.revertedWithCustomError(exchangeNonOwner, "RouteNotFound");
         });
         it("should query correct plugin based on input amount", async function () {
             // setup mocks
             let mockPlugin = await getMockPlugin();
             let amountOut = 1337;
-            await mockPlugin.mock.getAmountOut.returns(amountOut);
+            await mockPlugin.getAmountOut.returns(amountOut);
 
             let mockPlugin2 = await getMockPlugin();
             let amountOut2 = 1337;
-            await mockPlugin2.mock.getAmountOut.returns(amountOut2);
+            await mockPlugin2.getAmountOut.returns(amountOut2);
 
             // setup route
             let routeParams = { defaultRoute: mockPlugin.address, limit: parseUnits("1", 12), secondRoute: mockPlugin2.address };
@@ -224,7 +224,7 @@ describe("Test Exchange", function () {
     });
     async function getMockPlugin() {
         const abi = (await artifacts.readArtifact("IExchangePlugin")).abi;
-        const mock = await deployMockContract(owner, abi);
+        const mock = await smock.fake(abi);
         return mock;
     }
 });
