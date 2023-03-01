@@ -33,6 +33,7 @@ module.exports = {
   setupFakeExchangePlugin,
   mintFakeToken,
   deployBiswapStrategy,
+  deployDodoStrategy,
   addBiswapPool,
 };
 
@@ -64,6 +65,24 @@ async function deployBiswapStrategy({
   });
 
   return biswapStrategy;
+}
+
+async function deployDodoStrategy({
+  router,
+  token,
+  lpToken,
+  dodoToken,
+  pool,
+  farm,
+  upgrader,
+}) {
+  let DodoBase = await ethers.getContractFactory("DodoBase");
+  let dodoStrategy = await upgrades.deployProxy(DodoBase, [upgrader], {
+    kind: "uups",
+    constructorArgs: [router, token, lpToken, dodoToken, pool, farm],
+  });
+
+  return dodoStrategy;
 }
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({

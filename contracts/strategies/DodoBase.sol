@@ -8,6 +8,9 @@ import "../interfaces/IDodoMine.sol";
 import "../interfaces/IDodoSingleAssetPool.sol";
 import "../StrategyRouter.sol";
 
+import "hardhat/console.sol";
+
+/// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract DodoBase is
     Initializable,
     UUPSUpgradeable,
@@ -145,7 +148,8 @@ contract DodoBase is
         if (lpToken.balanceOf(address(this)) != 0)
             amountWithdrawn = _withdrawAllFromDodoLp();
 
-        amountWithdrawn += _sellDodo();
+        _sellDodo();
+        amountWithdrawn = token.balanceOf(address(this));
 
         if (amountWithdrawn != 0)
             token.safeTransfer(msg.sender, amountWithdrawn);

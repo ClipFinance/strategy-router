@@ -14,4 +14,9 @@ interface IDodoMine {
         external
         view
         returns (uint256);
+
+    function getPendingReward(address _lpToken, address _user)
+        external
+        view
+        returns (uint256);
 }
