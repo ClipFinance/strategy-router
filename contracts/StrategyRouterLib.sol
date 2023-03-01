@@ -13,7 +13,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 library StrategyRouterLib {
     error CycleNotClosed();
@@ -253,6 +253,8 @@ library StrategyRouterLib {
                         // when idle will be deployed such remnant will disappear
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
+                        console.log('balanceToWithdraw', balanceToWithdraw);
+                        console.log('withdrawnBalance', withdrawnBalance);
                         balances[i] -= withdrawnBalance;
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalance += withdrawnBalance;
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalanceUniform += toUniform(
@@ -280,14 +282,17 @@ library StrategyRouterLib {
                 }
 //                console.log('=======');
             }
+            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
 
             for (uint256 i; i < supportedTokens.length; i++) {
                 uint256 currentTokenBalanceUniform = currentTokenDatas[i].currentBalanceUniform;
+                console.log('currentTokenDatas[i].currentBalanceUniform', i, currentTokenDatas[i].currentBalanceUniform);
                 if (currentTokenBalanceUniform < REBALANCE_SWAP_THRESHOLD) {
                     currentTokenDatas[i].isBalanceInsufficient = true;
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
                 }
             }
+            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
         }
 
 //        uint256[] memory supportedTokensIndexes = new uint256[](strategies.length);
