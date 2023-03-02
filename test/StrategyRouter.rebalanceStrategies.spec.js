@@ -405,9 +405,206 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       });
     });
   });
-  describe('remnants', async function () {
+  describe('no remnants', async function () {
+    it('general case', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("50"));
+      await router.depositToBatch(busd.address, parseBusd("50"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      const strategy3 = await deployStrategy({
+        token: usdt,
+      });
+
+      await usdt.transfer(router.address, parseUsdt('20'));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+      await expectStrategyHoldsExactBalances(strategy1, 40);
+      await expectStrategyHoldsExactBalances(strategy2, 40);
+      await expectStrategyHoldsExactBalances(strategy3, 40);
+    });
+    describe('asadasdas', async function () {
+      it('no swap happens', async function () {
+        const {
+          router, oracle,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          usdt, parseUsdt,
+          batch,
+          expectNoRemnants, deployStrategy
+        } = await loadFixture(loadStateWithZeroSwapFee);
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdc,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("60"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await usdc.transfer(router.address, parseUsdc('100'));
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+        expect(await busd.balanceOf(router.address)).to.be.equal(0);
+        expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+        await expectStrategyHoldsExactBalances(strategy1, '53.33');
+        await expectStrategyHoldsExactBalances(strategy2, '53.33');
+        await expectStrategyHoldsExactBalances(strategy3, '53.33');
+      });
+      it('swap happens', async function () {
+        const {
+          router, oracle,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          usdt, parseUsdt,
+          batch,
+          expectNoRemnants, deployStrategy
+        } = await loadFixture(loadStateWithZeroSwapFee);
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdc,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdc,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("60"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await usdt.transfer(router.address, parseUsdt('100'));
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+        expect(await busd.balanceOf(router.address)).to.be.equal(0);
+        expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+        await expectStrategyHoldsExactBalances(strategy1, '53.33');
+        await expectStrategyHoldsExactBalances(strategy2, '53.33');
+        await expectStrategyHoldsExactBalances(strategy3, '53.33');
+      });
+    });
     it('too small value are not withdraws');
     it('too small value withdrawn due to underflow on a strategy');
+    // 2 cases when remnants not exterminated from Router balance
+    // skip until Idle strategies implemented
+    // all remnants will be dispersed to idle strategies
+    it.skip('when router token balances below THRESHOLD', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await usdc.transfer(router.address, parseUsdc('0.05'));
+      await busd.transfer(router.address, parseBusd('0.05'));
+      await usdt.transfer(router.address, parseUsdt('0.05'));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+      await expectStrategyHoldsExactBalances(strategy1, 100, 0);
+    });
+    // skip until Idle strategies implemented
+    // all remnants will be dispersed to idle strategies
+    it.skip('when router token balances below THRESHOLD due to underflowal withdraws on strategies', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      // 1 BUSD = 1 USDT = 1 USDC
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+        underFulfilledWithdrawalBps: 9990,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+        underFulfilledWithdrawalBps: 9990,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdt,
+        underFulfilledWithdrawalBps: 9990,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("30"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+      // after rebalance expected balance here is 300 / 4 = 75
+      // but due to underflow the actual balanace will be 0
+      const strategy4 = await deployStrategy({
+        token: usdt
+      });
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy4, 0, 0);
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+    });
   });
   describe('optimisations', async function () {
     describe('swap optimisations', async function () {
@@ -836,11 +1033,197 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       await expectStrategyHoldsExactBalances(strategy2, 50, 0);
     });
   });
-  describe('weight updates are correctly handled', async function () {
-  });
   describe('weight manipulation when differs from default weights', async function () {
+    it('', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      // 1 BUSD = 1 USDT = 1 USDC
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      // here weight of each strategy is 33.33%
+      // but unallocated funds will be split 50%-50% between strategy 2 and 3
+      // strategy 1 stays untouched
+      const strategy2 = await deployStrategy({
+        token: usdc,
+      });
+      const strategy3 = await deployStrategy({
+        token: busd,
+      });
+
+      await usdc.transfer(router.address, parseUsdc("50"));
+      await usdt.transfer(router.address, parseUsdt("150"));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      expect(await strategy1.withdrawCount()).to.be.equal(0);
+
+      await expectStrategyHoldsExactBalances(strategy1, 100, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 100, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 100, 0);
+    });
   });
   describe('exchange rate change doesnt affect calculations', async function () {
+    describe('absolute token number is used for allocation calculations even on high volatility', async function () {
+      it('no swap happens', async function () {
+        const {
+          router, oracle,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          usdt, parseUsdt,
+          batch,
+          expectNoRemnants, deployStrategy
+        } = await loadFixture(loadStateWithZeroSwapFee);
+
+        // 1 BUSD = 2 USDT = 4 USDC
+        await oracle.setPrice(busd.address, parseBusd("2"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("0.5"));
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        const strategy2 = await deployStrategy({
+          token: busd,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdt,
+        });
+
+        await usdt.transfer(router.address, parseUsdt("100"));
+        await busd.transfer(router.address, parseBusd("100"));
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        await expectStrategyHoldsExactBalances(strategy1, 100, 0);
+        await expectStrategyHoldsExactBalances(strategy2, 100, 0);
+        await expectStrategyHoldsExactBalances(strategy3, 100, 0);
+      });
+      it('swap happens', async function () {
+        const {
+          router, oracle,
+          busd, parseBusd,
+          usdc, parseUsdc,
+          usdt, parseUsdt,
+          batch,
+          expectNoRemnants, deployStrategy
+        } = await loadFixture(loadStateWithZeroSwapFee);
+
+        // 1 BUSD = 2 USDT = 4 USDC
+        await oracle.setPrice(busd.address, parseBusd("2"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("0.5"));
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("300"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        const strategy2 = await deployStrategy({
+          token: busd,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdt,
+        });
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        await expectStrategyHoldsExactBalances(strategy1, 100, 0);
+        await expectStrategyHoldsExactBalances(strategy2, 25, 0);
+        await expectStrategyHoldsExactBalances(strategy3, 50, 0);
+      });
+    });
+    it('changed rates dont trigger rebalance', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      // 1 BUSD = 1 USDT = 1 USDC
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdt,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("300"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      const strategy1DepositCountInitial = await strategy1.depositCount();
+      const strategy1WithdrawCountInitial = await strategy1.withdrawCount();
+
+      const strategy2DepositCountInitial = await strategy2.depositCount();
+      const strategy2WithdrawCountInitial = await strategy2.withdrawCount();
+
+      const strategy3DepositCountInitial = await strategy3.depositCount();
+      const strategy3WithdrawCountInitial = await strategy3.withdrawCount();
+
+      // 1 BUSD = 2 USDT = 4 USDC
+      await oracle.setPrice(busd.address, parseBusd("2"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("0.5"));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 100, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 100, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 100, 0);
+
+      const strategy1DepositCountLast = await strategy1.depositCount();
+      const strategy1WithdrawCountLast = await strategy1.withdrawCount();
+
+      const strategy2DepositCountLast = await strategy2.depositCount();
+      const strategy2WithdrawCountLast = await strategy2.withdrawCount();
+
+      const strategy3DepositCountLast = await strategy3.depositCount();
+      const strategy3WithdrawCountLast = await strategy3.withdrawCount();
+
+      expect(strategy1DepositCountLast - strategy1DepositCountInitial).to.be.equal(0);
+      expect(strategy1WithdrawCountLast - strategy1WithdrawCountInitial).to.be.equal(0);
+
+      expect(strategy2DepositCountLast - strategy2DepositCountInitial).to.be.equal(0);
+      expect(strategy2WithdrawCountLast - strategy2WithdrawCountInitial).to.be.equal(0);
+
+      expect(strategy3DepositCountLast - strategy3DepositCountInitial).to.be.equal(0);
+      expect(strategy3WithdrawCountLast - strategy3WithdrawCountInitial).to.be.equal(0);
+    });
   });
   describe('edge cases', async function () {
     it('money only on router');
