@@ -34,6 +34,11 @@ contract FakeOracle is IUsdOracle, Ownable {
         prices[base][Denominations.USD] = Price(price, ERC20(base).decimals());
     }
 
+    // set fake prices
+    function setPriceAndDecimals(address base, uint256 price, uint8 decimals) public {
+        prices[base][Denominations.USD] = Price(price, decimals);
+    }
+
     /**
      * Returns the latest token / usd price and its decimals
      */

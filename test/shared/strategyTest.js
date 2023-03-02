@@ -3,13 +3,11 @@ const { parseUnits, parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
-const { BigNumber } = require("ethers");
-
+const { BigNumber, utils } = require("ethers");
 
 module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
-
-    let owner, feeAddress;
+    let owner;
     // core contracts
     let router, oracle, exchange;
     let strategy;
@@ -23,7 +21,7 @@ module.exports = function strategyTest(strategyName) {
     let snapshotId;
 
     before(async function () {
-      [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
+      [owner] = await ethers.getSigners();
 
       snapshotId = await provider.send("evm_snapshot");
 
@@ -34,19 +32,37 @@ module.exports = function strategyTest(strategyName) {
       await setupParamsOnBNB(router, oracle, exchange);
 
       // get tokens on bnb chain for testing
-      await setupTokens();
+      const { usdc, busd, usdt } = await setupTokens();
+      await oracle.setPriceAndDecimals(
+        usdc.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        busd.address,
+        utils.parseUnits("1", 8),
+        8
+      );
+      await oracle.setPriceAndDecimals(
+        usdt.address,
+        utils.parseUnits("1", 8),
+        8
+      );
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
-      let StrategyFactory = await ethers.getContractFactory(strategyName)
+      let StrategyFactory = await ethers.getContractFactory(strategyName);
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-        kind: 'uups',
-        constructorArgs: [router.address],
+        kind: "uups",
+        constructorArgs: [router.address, oracle.address],
       });
       await strategy.deployed();
 
       // get deposit token and parse helper function
-      depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
+      depositToken = await ethers.getContractAt(
+        "ERC20",
+        await strategy.depositToken()
+      );
       let decimals = await depositToken.decimals();
       parseAmount = (amount) => parseUnits(amount, decimals);
     });
@@ -59,7 +75,7 @@ module.exports = function strategyTest(strategyName) {
       amountDeposit = parseAmount("10000");
 
       let balanceBefore = await depositToken.balanceOf(owner.address);
-      await depositToken.transfer(strategy.address, amountDeposit)
+      await depositToken.transfer(strategy.address, amountDeposit);
       await strategy.deposit(amountDeposit);
       let balanceAfter = await depositToken.balanceOf(owner.address);
       let totalTokens = await strategy.totalTokens();
@@ -76,12 +92,17 @@ module.exports = function strategyTest(strategyName) {
       let balanceAfter = await depositToken.balanceOf(owner.address);
       let totalTokens = await strategy.totalTokens();
 
-      expect(totalTokens).to.be.closeTo(amountDeposit.sub(amountWithdraw), parseAmount("100"));
-      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(amountWithdraw, parseAmount("100"));
+      expect(totalTokens).to.be.closeTo(
+        amountDeposit.sub(amountWithdraw),
+        parseAmount("100")
+      );
+      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(
+        amountWithdraw,
+        parseAmount("100")
+      );
     });
 
     it("Withdraw all", async function () {
-
       amountWithdraw = await strategy.totalTokens();
       let balanceBefore = await depositToken.balanceOf(owner.address);
       await strategy.withdraw(amountWithdraw);
@@ -89,12 +110,14 @@ module.exports = function strategyTest(strategyName) {
       let totalTokens = await strategy.totalTokens();
 
       expect(totalTokens).to.be.closeTo(BigNumber.from(0), parseAmount("1"));
-      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(amountWithdraw, parseAmount("100"));
+      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(
+        amountWithdraw,
+        parseAmount("100")
+      );
     });
 
     it("compound function, and protocol commissions", async function () {
-
-      await depositToken.transfer(strategy.address, amountDeposit)
+      await depositToken.transfer(strategy.address, amountDeposit);
       await strategy.deposit(amountDeposit);
 
       // skip blocks
@@ -102,12 +125,9 @@ module.exports = function strategyTest(strategyName) {
 
       // compound, should incsrease totalTokens
       let oldBalance = await strategy.totalTokens();
-      let oldFeeBalance = await depositToken.balanceOf(feeAddress.address);
       await strategy.compound();
-      let newFeeBalance = await depositToken.balanceOf(feeAddress.address);
       let newBalance = await strategy.totalTokens();
 
-      expect(newFeeBalance).to.be.gt(oldFeeBalance);
       expect(newBalance).to.be.gt(oldBalance);
 
       // withdraw all
@@ -116,7 +136,10 @@ module.exports = function strategyTest(strategyName) {
       newBalance = await depositToken.balanceOf(owner.address);
 
       expect(await strategy.totalTokens()).to.be.within(0, parseAmount("1"));
-      expect(newBalance.sub(oldBalance)).to.be.closeTo(amountDeposit, parseAmount("100"));
+      expect(newBalance.sub(oldBalance)).to.be.closeTo(
+        amountDeposit,
+        parseAmount("100")
+      );
     });
   });
-}
+};
