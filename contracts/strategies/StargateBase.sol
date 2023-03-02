@@ -9,7 +9,8 @@ import "../interfaces/IStargateFarm.sol";
 import "../interfaces/IStargatePool.sol";
 import "../StrategyRouter.sol";
 
-contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
+/// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
+contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     using SafeERC20 for IERC20;
     using SafeERC20 for IStargatePool;
 
@@ -36,8 +37,8 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     constructor(
         StrategyRouter _strategyRouter,
         IERC20 _token,
-        IERC20 _stgToken,
         IStargatePool _lpToken,
+        IERC20 _stgToken,
         IStargateRouter _stargateRouter,
         IStargateFarm _stargateFarm,
         uint256 _poolId,
@@ -80,7 +81,7 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         external
         override
         onlyOwner
-        returns (uint256 amountWithdrawn)
+        returns (uint256)
     {
         uint256 currTokenBalance = token.balanceOf(address(this));
 
@@ -89,22 +90,25 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
                 strategyTokenAmountToWithdraw - currTokenBalance
             );
             (uint256 lpAmount, ) = stargateFarm.userInfo(farmId, address(this));
+
             if (lpToRemove > lpAmount) {
                 lpToRemove = lpAmount;
             }
 
             if (lpToRemove != 0) {
                 _withdrawFromFarm(lpToRemove);
-                _compoundStg();
+                _sellReward();
             }
 
             currTokenBalance = token.balanceOf(address(this));
-            if (currTokenBalance < strategyTokenAmountToWithdraw) amountWithdrawn = currTokenBalance;
-        } else {
-            amountWithdrawn = strategyTokenAmountToWithdraw;
+            if (currTokenBalance < strategyTokenAmountToWithdraw)
+                strategyTokenAmountToWithdraw = currTokenBalance;
+            else _deposit(currTokenBalance - strategyTokenAmountToWithdraw);
         }
 
-        token.safeTransfer(msg.sender, amountWithdrawn);
+        token.safeTransfer(msg.sender, strategyTokenAmountToWithdraw);
+
+        return strategyTokenAmountToWithdraw;
     }
 
     function compound() external override onlyOwner {

@@ -33,6 +33,7 @@ module.exports = {
   setupFakeExchangePlugin,
   mintFakeToken,
   deployBiswapStrategy,
+  deployStargateStrategy,
   addBiswapPool,
 };
 
@@ -64,6 +65,26 @@ async function deployBiswapStrategy({
   });
 
   return biswapStrategy;
+}
+
+async function deployStargateStrategy({
+  router,
+  token,
+  lpToken,
+  stgToken,
+  stargateRouter,
+  stargateFarm,
+  poolId,
+  farmId,
+  upgrader,
+}) {
+  let StargateBase = await ethers.getContractFactory("StargateBase");
+  let stargateStrategy = await upgrades.deployProxy(StargateBase, [upgrader], {
+    kind: "uups",
+    constructorArgs: [router, token, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
+  });
+
+  return stargateStrategy;
 }
 
 async function deployFakeUnderFulfilledWithdrawalStrategy({
@@ -411,6 +432,7 @@ async function setupPluginsOnBNB(exchange) {
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
+  let stg = hre.networkVariables.stg;
   let acs4usd = hre.networkVariables.acs4usd.address;
 
   let acsPlugin = await deploy("CurvePlugin");
@@ -418,8 +440,8 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw],
-    [usdt, usdc, usdt, busd, usdt, usdc],
+    [busd, busd, usdc, bsw, bsw, bsw, busd],
+    [usdt, usdc, usdt, busd, usdt, usdc, stg],
     [
       acsPlugin.address,
       acsPlugin.address,

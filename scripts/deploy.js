@@ -91,6 +91,15 @@ async function main() {
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+  StrategyFactory = await ethers.getContractFactory("StargateBusd")
+  stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+  });
+  console.log("stargateBusdStrategy", stargateBusdStrategy.address);
+  await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
+
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");
   let oracleTokens = [busd.address, usdc.address];
@@ -137,6 +146,7 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
+      hre.networkVariables.stg,
     ],
     [
       hre.networkVariables.usdt,
@@ -145,6 +155,7 @@ async function main() {
       hre.networkVariables.busd,
       hre.networkVariables.usdt,
       hre.networkVariables.usdc,
+      hre.networkVariables.busd,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
