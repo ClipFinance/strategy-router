@@ -13,7 +13,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
- import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 library StrategyRouterLib {
     error CycleNotClosed();
@@ -189,8 +189,6 @@ library StrategyRouterLib {
         public
         returns (uint256[] memory balances)
     {
-//        if (strategies.length < 2) revert StrategyRouter.NothingToRebalance();
-
         uint256 totalUnallocatedBalanceUniform;
         StrategyData[] memory strategyDatas = new StrategyData[](strategies.length);
 
@@ -235,36 +233,26 @@ library StrategyRouterLib {
                 totalUnallocatedBalanceUniform += currentTokenBalanceUniform;
             }
 
-            //        bool[] memory excludedStrategies = new bool[](strategies.length);
             for (uint256 i; i < strategyDatas.length; i++) {
                 uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / allStrategiesWeightSum;
                 desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
-//                console.log('====Initial setup===');
-//                console.log('desiredBalance', i, desiredBalance);
-//                console.log('strategyDatas[i].balance', i, strategyDatas[i].balance);
                 if (desiredBalance < balances[i]) {
                     strategyDatas[i].saturated = true;
                     uint256 balanceToWithdraw = balances[i] - desiredBalance;
-//                    console.log('balanceToWithdraw', i, balanceToWithdraw);
-//                    console.log('toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress)', i, toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress));
                     if (toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress) >= REBALANCE_SWAP_THRESHOLD) {
                         // test underflow on withdrawal case
                         // mark test skipped for current impl
                         // when idle will be deployed such remnant will disappear
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
-                        console.log('balanceToWithdraw', balanceToWithdraw);
-                        console.log('withdrawnBalance', withdrawnBalance);
                         balances[i] -= withdrawnBalance;
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalance += withdrawnBalance;
-                        currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalanceUniform += toUniform(
+                        withdrawnBalance = toUniform(
                             withdrawnBalance,
                             strategyDatas[i].tokenAddress
                         );
-//                        console.log('balances[i]', i, balances[i]);
-//                        console.log('withdrawnBalance', i, withdrawnBalance);
-                        totalUnallocatedBalanceUniform += currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens]
-                            .currentBalanceUniform;
+                        currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalanceUniform += withdrawnBalance;
+                        totalUnallocatedBalanceUniform += withdrawnBalance;
                     }
                 } else {
                     uint256 balanceToAddUniform = toUniform(
@@ -274,28 +262,21 @@ library StrategyRouterLib {
                     if (balanceToAddUniform >= REBALANCE_SWAP_THRESHOLD) {
                         totalUnderflowStrategyWeight += balanceToAddUniform;
                         underflowedStrategyWeights[i] = balanceToAddUniform;
-//                        console.log('underflowedStrategyWeights[i]', i, underflowedStrategyWeights[i]);
-//                        console.log('totalUnderflowStrategyWeight', i, totalUnderflowStrategyWeight);
                     } else {
                         strategyDatas[i].saturated = true;
                     }
                 }
-//                console.log('=======');
             }
-            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
 
             for (uint256 i; i < supportedTokens.length; i++) {
                 uint256 currentTokenBalanceUniform = currentTokenDatas[i].currentBalanceUniform;
-                console.log('currentTokenDatas[i].currentBalanceUniform', i, currentTokenDatas[i].currentBalanceUniform);
                 if (currentTokenBalanceUniform < REBALANCE_SWAP_THRESHOLD) {
                     currentTokenDatas[i].isBalanceInsufficient = true;
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
                 }
             }
-            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
         }
 
-//        uint256[] memory supportedTokensIndexes = new uint256[](strategies.length);
         for (uint256 i; i < strategyDatas.length; i++) {
             if (strategyDatas[i].saturated) {
                 continue;
@@ -303,8 +284,6 @@ library StrategyRouterLib {
 
             uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
                 / totalUnderflowStrategyWeight;
-//            console.log('=====Native rebalance=====');
-//            console.log('desiredAllocationUniform', i, desiredAllocationUniform);
 
             if (desiredAllocationUniform < REBALANCE_SWAP_THRESHOLD) {
                 strategyDatas[i].saturated = true;
@@ -339,10 +318,6 @@ library StrategyRouterLib {
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
                     currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].isBalanceInsufficient = true;
-//                    console.log('currentTokenBalance', currentTokenBalance);
-//                    console.log('balances[i]', i, balances[i]);
-//                    console.log('underflowedStrategyWeights[i]', i, underflowedStrategyWeights[i]);
-//                    console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
                 } else {
                     desiredAllocationUniform = fromUniform(desiredAllocationUniform, strategyTokenAddress);
                     IERC20(strategyTokenAddress).transfer(
@@ -386,7 +361,6 @@ library StrategyRouterLib {
                 }
                 continue;
             }
-//            console.log('never here');
 
             uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
                 / totalUnderflowStrategyWeight;
@@ -406,7 +380,6 @@ library StrategyRouterLib {
                     continue;
                 }
 
-//                uint256 currentTokenBalance = IERC20(supportedTokens[j]).balanceOf(address(this));
                 uint256 currentTokenBalanceUniform = currentTokenDatas[j].currentBalanceUniform;
 
                 if (currentTokenBalanceUniform >= desiredAllocationUniform) {
@@ -472,7 +445,6 @@ library StrategyRouterLib {
                     currentTokenDatas[j].currentBalanceUniform = 0;
                     currentTokenDatas[j].isBalanceInsufficient = true;
                 }
-//                IERC20(supportedTokens[j]).transfer(strategyDatas[i].strategyAddress, received);
                 if (desiredAllocationUniform < REBALANCE_SWAP_THRESHOLD) {
                     break;
                 }
@@ -480,15 +452,5 @@ library StrategyRouterLib {
 
             IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
         }
-
-//        console.log('=====FINAL BALANCES=====');
-//        for (uint i; i < balances.length; i++) {
-//            console.log(
-//                'IERC20(strategyDatas[i].tokenAddress).balanceOf(strategyDatas[i].strategyAddress)',
-//                i,
-//                IERC20(strategyDatas[i].tokenAddress).balanceOf(strategyDatas[i].strategyAddress)
-//            );
-//            console.log('balances[i]', i, balances[i]);
-//        }
     }
 }

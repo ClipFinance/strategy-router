@@ -444,7 +444,9 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       await expectStrategyHoldsExactBalances(strategy2, 40);
       await expectStrategyHoldsExactBalances(strategy3, 40);
     });
-    describe('asadasdas', async function () {
+    describe('when amount to be allocated is not divisible on integer parts', async function () {
+      // 10 is nnot divisible per 3 strategies with equal weights
+      // 3.33333(3) to be allocated
       it('no swap happens', async function () {
         const {
           router, oracle,
@@ -518,8 +520,88 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
         await expectStrategyHoldsExactBalances(strategy3, '53.33');
       });
     });
-    it('too small value are not withdraws');
-    it('too small value withdrawn due to underflow on a strategy');
+    describe('very low weight strategies with allocation below THRESHOLD', async function () {
+      it('no swap happens', async function () {const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+          weight: 50,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdc,
+          weight: 9900,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdc,
+          weight: 50,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await usdc.transfer(router.address, parseUsdc('10'));
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+        expect(await busd.balanceOf(router.address)).to.be.equal(0);
+        expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+        await expectStrategyHoldsExactBalances(strategy1, '0.5', 0);
+        await expectStrategyHoldsExactBalances(strategy2, '109', 0);
+        await expectStrategyHoldsExactBalances(strategy3, '0.5', 0);
+      });
+      it('swap happens', async function () {const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+        // 1 BUSD = 1 USDC
+        await oracle.setPrice(busd.address, parseBusd("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdc,
+          weight: 50,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdc,
+          weight: 9900,
+        });
+        const strategy3 = await deployStrategy({
+          token: usdc,
+          weight: 50,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await busd.transfer(router.address, parseBusd('10'));
+
+        await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+        expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+        expect(await busd.balanceOf(router.address)).to.be.equal(0);
+        expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+
+        await expectStrategyHoldsExactBalances(strategy1, '0.5', 0);
+        await expectStrategyHoldsExactBalances(strategy2, '109', 0);
+        await expectStrategyHoldsExactBalances(strategy3, '0.5');
+      });
+    });
     // 2 cases when remnants not exterminated from Router balance
     // skip until Idle strategies implemented
     // all remnants will be dispersed to idle strategies
@@ -1225,9 +1307,218 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       expect(strategy3WithdrawCountLast - strategy3WithdrawCountInitial).to.be.equal(0);
     });
   });
-  describe('edge cases', async function () {
-    it('money only on router');
-    it('money only on strategies');
-    it('money only on both router and strategies');
-  })
+  it('update strategy weights and rebalance', async function () {
+    const {
+      router, oracle,
+      busd, parseBusd,
+      usdc, parseUsdc,
+      usdt, parseUsdt,
+      batch,
+      expectNoRemnants, deployStrategy
+    } = await loadFixture(loadStateWithZeroSwapFee);
+
+    const strategy1 = await deployStrategy({
+      token: usdc,
+      weight: 2500,
+    });
+    const strategy2 = await deployStrategy({
+      token: usdc,
+      weight: 7500,
+    });
+
+    await router.depositToBatch(usdc.address, parseUsdc("100"));
+
+    await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+    await expectStrategyHoldsExactBalances(strategy1, 25, 0);
+    await expectStrategyHoldsExactBalances(strategy2, 75, 0);
+
+    await router.updateStrategy(0, 7500);
+    await router.updateStrategy(1, 2500);
+
+    await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+    await expectStrategyHoldsExactBalances(strategy1, 75, 0);
+    await expectStrategyHoldsExactBalances(strategy2, 25, 0);
+  });
+  describe('complex case: a lot strategies, weight updates, adding new strategies', async function () {
+    it('small deposits', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadState);
+
+      // 1 BUSD = 2 USDT = 4 USDC
+      await oracle.setPrice(busd.address, parseBusd("1.01"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("0.99"));
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+        weight: 1000,
+      });
+
+      const strategy2 = await deployStrategy({
+        token: busd,
+        weight: 3000,
+      });
+
+      const strategy3 = await deployStrategy({
+        token: busd,
+        weight: 50,
+      });
+
+      const strategy4 = await deployStrategy({
+        token: usdc,
+        weight: 6950,
+      });
+
+      const strategy5 = await deployStrategy({
+        token: usdt,
+        weight: 4000,
+      });
+
+      const strategy6 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc("200"));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 10, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 30, 3);
+      await expectStrategyHoldsExactBalances(strategy3, '0.5', 3);
+      await expectStrategyHoldsExactBalances(strategy4, '69.5', 3);
+      await expectStrategyHoldsExactBalances(strategy5, 40, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 50, 3);
+
+      // enforece additional deposit
+      await router.updateStrategy(0, 9000);
+      // enforce withdrawal
+      await router.updateStrategy(5, 1000);
+
+      const strategy7 = await deployStrategy({
+        token: usdt,
+        weight: 995,
+      });
+      const strategy8 = await deployStrategy({
+        token: usdt,
+        weight: 5,
+      });
+
+      await usdc.transfer(router.address, parseUsdc('10'));
+      await busd.transfer(router.address, parseBusd('20'));
+      await usdt.transfer(router.address, parseUsdt('20'));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 90, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 30, 3);
+      await expectStrategyHoldsExactBalances(strategy3, '0.5', 3);
+      await expectStrategyHoldsExactBalances(strategy4, '69.5', 3);
+      await expectStrategyHoldsExactBalances(strategy5, 40, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 10, 3);
+      await expectStrategyHoldsExactBalances(strategy7, 10, 3);
+      await expectStrategyHoldsExactBalances(strategy8, 0, 3);
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+    });
+    it('very large deposits', async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        usdc, parseUsdc,
+        usdt, parseUsdt,
+        batch,
+        expectNoRemnants, deployStrategy
+      } = await loadFixture(loadState);
+
+      // 1 BUSD = 2 USDT = 4 USDC
+      await oracle.setPrice(busd.address, parseBusd("1.01"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("0.99"));
+
+      const strategy1 = await deployStrategy({
+        token: usdc,
+        weight: 1000,
+      });
+
+      const strategy2 = await deployStrategy({
+        token: busd,
+        weight: 3000,
+      });
+
+      const strategy3 = await deployStrategy({
+        token: busd,
+        weight: 50,
+      });
+
+      const strategy4 = await deployStrategy({
+        token: usdc,
+        weight: 6950,
+      });
+
+      const strategy5 = await deployStrategy({
+        token: usdt,
+        weight: 4000,
+      });
+
+      const strategy6 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+
+      await router.depositToBatch(usdc.address, parseUsdc((2_000_000).toString()));
+
+      await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 100_000, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 300_000, 3);
+      await expectStrategyHoldsExactBalances(strategy3, 5_000, 3);
+      await expectStrategyHoldsExactBalances(strategy4, 695_000, 3);
+      await expectStrategyHoldsExactBalances(strategy5, 400_000, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 500_000, 3);
+
+      // enforece additional deposit
+      await router.updateStrategy(0, 9000);
+      // enforce withdrawal
+      await router.updateStrategy(5, 1000);
+
+      const strategy7 = await deployStrategy({
+        token: usdt,
+        weight: 995,
+      });
+      const strategy8 = await deployStrategy({
+        token: usdt,
+        weight: 5,
+      });
+
+      await usdc.transfer(router.address, parseUsdc((100_000).toString()));
+      await busd.transfer(router.address, parseBusd((200_000).toString()));
+      await usdt.transfer(router.address, parseUsdt((200_000).toString()));
+
+      await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      await expectStrategyHoldsExactBalances(strategy1, 900_000, 3);
+      await expectStrategyHoldsExactBalances(strategy2, 300_000, 3);
+      await expectStrategyHoldsExactBalances(strategy3, 5_000, 3);
+      await expectStrategyHoldsExactBalances(strategy4, 695_000, 3);
+      await expectStrategyHoldsExactBalances(strategy5, 400_000, 3);
+      await expectStrategyHoldsExactBalances(strategy6, 100_000, 3);
+      await expectStrategyHoldsExactBalances(strategy7, 99_500, 3);
+      await expectStrategyHoldsExactBalances(strategy8, 500, 3);
+
+      expect(await usdc.balanceOf(router.address)).to.be.equal(0);
+      expect(await busd.balanceOf(router.address)).to.be.equal(0);
+      expect(await usdt.balanceOf(router.address)).to.be.equal(0);
+    });
+  });
 });
