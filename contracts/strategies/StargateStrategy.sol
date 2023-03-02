@@ -19,40 +19,47 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     address internal upgrader;
 
-    IERC20 public token;
-    StrategyRouter public strategyRouter;
-    IERC20 public stgToken;
-    IStargateRouter public stargateRouter; // Stargate router
-    IStargateFarm public stargateFarm;
-    IStargatePool public lpToken;
-    uint256 public poolId; // Stargate router
-    uint256 public farmId; // Stargate farm id
+    IERC20 public immutable token;
+    StrategyRouter public immutable strategyRouter;
+    IERC20 public immutable stgToken;
+    IStargateRouter public immutable stargateRouter; // Stargate router
+    IStargateFarm public immutable stargateFarm;
+    IStargatePool public immutable lpToken;
+    uint256 public immutable poolId; // Stargate router
+    uint256 public immutable farmId; // Stargate farm id
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
         _;
     }
 
-    function initialize(
-        address _upgrader,
+    constructor(
         StrategyRouter _strategyRouter,
+        IERC20 _token,
+        IERC20 _stgToken,
+        IStargatePool _lpToken,
+        IStargateRouter _stargateRouter,
         IStargateFarm _stargateFarm,
         uint256 _poolId,
-        IERC20 _token,
-        IStargatePool _lpToken
-    ) external initializer {
+        uint256 _farmId
+    ) {
+        strategyRouter = _strategyRouter;
+        token = _token;
+        stgToken = _stgToken;
+        lpToken = _lpToken;
+        stargateRouter = _stargateRouter;
+        stargateFarm = _stargateFarm;
+        poolId = _poolId;
+        farmId = _farmId;
+
+        // lock implementation
+        _disableInitializers();
+    }
+
+    function initialize(address _upgrader) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
-
-        strategyRouter = _strategyRouter;
-        poolId = _poolId;
-        token = _token;
-
-        stargateFarm = _stargateFarm;
-        stgToken = IERC20(_stargateFarm.stargate());
-        stargateRouter = IStargateRouter(_stargateFarm.router());
-        lpToken = _lpToken;
     }
 
     function _authorizeUpgrade(address newImplementation)
@@ -67,16 +74,6 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     function deposit(uint256 amount) external override onlyOwner {
         _deposit(amount);
-    }
-
-    function _deposit(uint256 amount) internal {
-        token.safeApprove(address(stargateRouter), amount);
-        stargateRouter.addLiquidity(poolId, amount, address(this));
-
-        uint256 lpBalance = lpToken.balanceOf(address(this));
-
-        lpToken.safeApprove(address(stargateFarm), lpBalance);
-        stargateFarm.deposit(farmId, lpBalance);
     }
 
     function withdraw(uint256 strategyTokenAmountToWithdraw)
@@ -96,15 +93,16 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
                 lpToRemove = lpAmount;
             }
 
-            _withdrawFromFarm(lpToRemove);
+            if (lpToRemove != 0) {
+                _withdrawFromFarm(lpToRemove);
+                _compoundStg();
+            }
 
-            _compoundStg();
+            currTokenBalance = token.balanceOf(address(this));
+            if (currTokenBalance < strategyTokenAmountToWithdraw) amountWithdrawn = currTokenBalance;
+        } else {
+            amountWithdrawn = strategyTokenAmountToWithdraw;
         }
-
-        currTokenBalance = token.balanceOf(address(this));
-        amountWithdrawn = currTokenBalance > strategyTokenAmountToWithdraw
-            ? strategyTokenAmountToWithdraw
-            : currTokenBalance;
 
         token.safeTransfer(msg.sender, amountWithdrawn);
     }
@@ -130,17 +128,26 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        uint256 currTokenBalance = token.balanceOf(address(this));
         (uint256 amount, ) = stargateFarm.userInfo(farmId, address(this));
 
-        if (amount != 0) {
-            _withdrawFromFarm(amount);
-        }
+        if (amount != 0) _withdrawFromFarm(amount);
 
         _sellReward();
 
         amountWithdrawn = token.balanceOf(address(this));
-        token.safeTransfer(msg.sender, amountWithdrawn);
+        if (amountWithdrawn != 0)
+            token.safeTransfer(msg.sender, amountWithdrawn);
+    }
+
+    function _deposit(uint256 amount) internal {
+        if (amount == 0 || _amountLDtoLP(amount) == 0) return;
+        token.safeApprove(address(stargateRouter), amount);
+        stargateRouter.addLiquidity(poolId, amount, address(this));
+
+        uint256 lpBalance = lpToken.balanceOf(address(this));
+
+        lpToken.safeApprove(address(stargateFarm), lpBalance);
+        stargateFarm.deposit(farmId, lpBalance);
     }
 
     function _withdrawFromFarm(uint256 _lpAmount) internal {
@@ -153,11 +160,7 @@ contract StargateStrategy is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     }
 
     function _compoundStg() internal {
-        uint256 swappedAmount = _sellReward();
-
-        if (swappedAmount != 0 && _amountLDtoLP(swappedAmount) != 0) {
-            _deposit(swappedAmount);
-        }
+        _deposit(_sellReward());
     }
 
     function _sellReward() private returns (uint256 received) {
