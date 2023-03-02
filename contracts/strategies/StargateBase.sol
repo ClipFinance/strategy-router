@@ -163,6 +163,11 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             _lpAmount,
             address(this)
         );
+        uint remainLp = lpToken.balanceOf(address(this));
+        if (remainLp != 0) {
+            lpToken.safeApprove(address(stargateFarm), remainLp);
+            stargateFarm.deposit(farmId, remainLp);
+        }
     }
 
     function _compoundStg() internal {
