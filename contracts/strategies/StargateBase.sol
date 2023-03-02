@@ -15,6 +15,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     using SafeERC20 for IStargatePool;
 
     error CallerUpgrader();
+    error InvalidInput();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
@@ -45,6 +46,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         uint256 _farmId
     ) {
         strategyRouter = _strategyRouter;
+        if (_lpToken.token() != address(_token)) revert InvalidInput();
         token = _token;
         stgToken = _stgToken;
         lpToken = _lpToken;

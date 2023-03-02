@@ -9,4 +9,6 @@ interface IStargatePool is IERC20 {
     function convertRate() external view returns (uint256);
 
     function totalLiquidity() external view returns (uint256);
+
+    function token() external view returns (address);
 }
