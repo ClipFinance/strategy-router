@@ -8,8 +8,6 @@ import "../interfaces/IDodoMine.sol";
 import "../interfaces/IDodoSingleAssetPool.sol";
 import "../StrategyRouter.sol";
 
-import "hardhat/console.sol";
-
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract DodoBase is
     Initializable,

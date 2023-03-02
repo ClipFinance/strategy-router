@@ -172,14 +172,14 @@ describe("Test DodoBase", function () {
       // Test when DODO reward is greater than 0.
       expect(dodoRewardAmount).to.greaterThan(0);
 
-      await dodoStrategy.compound();
-
       const newStakedLpAmount = await getLpAmountFromAmount(
         dodoPool.address,
         lpToken.address,
         true,
         exchangedTokenAmount
       );
+
+      await dodoStrategy.compound();
 
       // The Underlying token balance should be same after compound.
       expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(
@@ -193,7 +193,7 @@ describe("Test DodoBase", function () {
 
       expect(
         await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
-      ).to.be.greaterThan(stakedLpAmount.add(newStakedLpAmount));
+      ).to.be.equal(stakedLpAmount.add(newStakedLpAmount));
     });
   });
 
@@ -238,6 +238,7 @@ describe("Test DodoBase", function () {
         true,
         stakedLpAmount
       );
+
       await dodoStrategy.withdrawAll();
 
       // The Underlying token balance should zero
@@ -338,12 +339,6 @@ describe("Test DodoBase", function () {
       const compoundAmount = exchangedTokenAmount.sub(
         extraWithdrwalAmount.sub(actualWithdrawAmount)
       );
-      const compoundedLpAmount = await getLpAmountFromAmount(
-        dodoPool.address,
-        lpToken.address,
-        true,
-        compoundAmount
-      );
 
       await dodoStrategy.withdraw(withdrawAmount);
 
@@ -359,6 +354,56 @@ describe("Test DodoBase", function () {
       // Owner should have all tokens.
       expect(await token.balanceOf(owner.address)).to.be.equal(
         currnetOwnerBal.add(withdrawAmount)
+      );
+    });
+
+    it("Withdraw all tokens if requested amount is higher than total tokens", async function () {
+      const stakedLpAmount = await dodoMine.getUserLpBalance(
+        lpToken.address,
+        dodoStrategy.address
+      );
+
+      const exchangedTokenAmount = utils.parseEther("100");
+      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      await mockExchange.setAmountReceived(exchangedTokenAmount);
+
+      const currnetOwnerBal = await token.balanceOf(owner.address);
+
+      await skipBlocks(10);
+
+      const dodoRewardAmount = await dodoMine.getPendingReward(
+        lpToken.address,
+        dodoStrategy.address
+      );
+
+      const stakedTokenAmount = await getAmountFromLpAmount(
+        dodoPool.address,
+        lpToken.address,
+        true,
+        stakedLpAmount
+      );
+
+      await dodoStrategy.withdraw(
+        strategyInitialBalance.add(exchangedTokenAmount)
+      );
+
+      // The Underlying token balance should zero
+      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      // DODO token balance should zero
+      expect(await dodo.balanceOf(dodoStrategy.address)).to.be.equal(0);
+
+      // Mock Exchange contract should received DODO reward amount.
+      expect(await dodo.balanceOf(mockExchange.address)).to.be.greaterThan(
+        dodoRewardAmount
+      );
+
+      expect(
+        await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+      ).to.be.equal(0);
+
+      // Owner should have all tokens.
+      expect(await token.balanceOf(owner.address)).to.be.greaterThan(
+        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
     });
   });
