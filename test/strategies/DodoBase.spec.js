@@ -305,7 +305,7 @@ describe("Test DodoBase", function () {
       );
     });
 
-    it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
+    it("Withdraw tokens when remaining token balance is less than withdraw amount", async function () {
       const currentTokenBal = await token.balanceOf(dodoStrategy.address);
       const extraWithdrwalAmount = utils.parseEther("100");
       const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
