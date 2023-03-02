@@ -194,16 +194,16 @@ library StrategyRouterLib {
         uint256 totalUnallocatedBalanceUniform;
         StrategyData[] memory strategyDatas = new StrategyData[](strategies.length);
 
-        uint256[] memory underflowedStrategyWeights = new uint256[](strategies.length);
+        uint256[] memory underflowedStrategyWeights = new uint256[](strategyDatas.length);
         uint256 totalUnderflowStrategyWeight;
 
         TokenData[] memory currentTokenDatas = new TokenData[](supportedTokens.length);
-        balances = new uint256[](strategies.length);
+        balances = new uint256[](strategyDatas.length);
 
         {
             uint256 totalBalanceUniform;
 
-            for (uint256 i; i < strategies.length; i++) {
+            for (uint256 i; i < strategyDatas.length; i++) {
                 balances[i] = IStrategy(strategies[i].strategyAddress).totalTokens();
                 strategyDatas[i] = StrategyData({
                     strategyAddress: strategies[i].strategyAddress,
@@ -236,7 +236,7 @@ library StrategyRouterLib {
             }
 
             //        bool[] memory excludedStrategies = new bool[](strategies.length);
-            for (uint256 i; i < strategies.length; i++) {
+            for (uint256 i; i < strategyDatas.length; i++) {
                 uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / allStrategiesWeightSum;
                 desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
 //                console.log('====Initial setup===');
@@ -296,7 +296,7 @@ library StrategyRouterLib {
         }
 
 //        uint256[] memory supportedTokensIndexes = new uint256[](strategies.length);
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < strategyDatas.length; i++) {
             if (strategyDatas[i].saturated) {
                 continue;
             }
@@ -379,7 +379,7 @@ library StrategyRouterLib {
             }
         }
 
-        for (uint256 i; i < strategies.length; i++) {
+        for (uint256 i; i < strategyDatas.length; i++) {
             if (strategyDatas[i].saturated) {
                 if (strategyDatas[i].toDeposit > 0) {
                     IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
