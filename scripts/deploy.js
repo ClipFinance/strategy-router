@@ -91,6 +91,15 @@ async function main() {
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+  StrategyFactory = await ethers.getContractFactory("DodoUsdt")
+  dodoUsdt = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+  });
+  console.log("dodoUsdt", strategyUsdc.address);
+  await (await dodoUsdt.transferOwnership(router.address)).wait();
+
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");
   let oracleTokens = [busd.address, usdc.address];
@@ -184,8 +193,9 @@ async function main() {
   await (await router.setSupportedToken(usdc.address, true)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(strategyBusd.address, busd.address, 5000)).wait();
-  await (await router.addStrategy(strategyUsdc.address, usdc.address, 5000)).wait();
+  await (await router.addStrategy(strategyBusd.address, busd.address, 3000)).wait();
+  await (await router.addStrategy(strategyUsdc.address, usdc.address, 3000)).wait();
+  await (await router.addStrategy(dodoUsdt.address, usdc.address, 4000)).wait();
 
 
   console.log("Approving for initial deposit...");
@@ -229,6 +239,7 @@ async function main() {
     sharesToken,
     strategyBusd,
     strategyUsdc,
+    dodoUsdt
   ]);
 }
 

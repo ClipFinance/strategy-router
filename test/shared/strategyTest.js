@@ -5,7 +5,7 @@ const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber, utils } = require("ethers");
 
-module.exports = function strategyTest(strategyName) {
+module.exports = function strategyTest(strategyName, needOracle) {
   describe(`Test ${strategyName} strategy`, function () {
     let owner;
     // core contracts
@@ -54,7 +54,9 @@ module.exports = function strategyTest(strategyName) {
       let StrategyFactory = await ethers.getContractFactory(strategyName);
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
         kind: "uups",
-        constructorArgs: [router.address, oracle.address],
+        constructorArgs: needOracle
+          ? [router.address, oracle.address]
+          : [router.address],
       });
       await strategy.deployed();
 

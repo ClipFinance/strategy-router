@@ -430,6 +430,7 @@ async function setupPluginsOnBNB(exchange) {
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
+  let dodo = hre.networkVariables.dodo;
   let acs4usd = hre.networkVariables.acs4usd.address;
 
   let acsPlugin = await deploy("CurvePlugin");
@@ -437,12 +438,13 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw],
-    [usdt, usdc, usdt, busd, usdt, usdc],
+    [busd, busd, usdc, bsw, bsw, bsw, usdt],
+    [usdt, usdc, usdt, busd, usdt, usdc, dodo],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
