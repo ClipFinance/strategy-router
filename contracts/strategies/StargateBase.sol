@@ -138,13 +138,16 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     {
         (uint256 amount, ) = stargateFarm.userInfo(farmId, address(this));
 
-        if (amount != 0) _withdrawFromFarm(amount);
+        if (amount != 0) {
+            _withdrawFromFarm(amount);
+        }
 
         _sellReward();
 
         amountWithdrawn = token.balanceOf(address(this));
-        if (amountWithdrawn != 0)
+        if (amountWithdrawn != 0) {
             token.safeTransfer(msg.sender, amountWithdrawn);
+        }
     }
 
     function _deposit(uint256 amount) internal {
