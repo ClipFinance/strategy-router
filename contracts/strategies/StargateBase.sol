@@ -21,7 +21,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     address internal upgrader;
 
-    IERC20 public immutable token;
+    IERC20 private immutable token;
     StrategyRouter public immutable strategyRouter;
     IERC20 public immutable stgToken;
     IStargateRouter public immutable stargateRouter; // Stargate router

@@ -112,7 +112,6 @@ describe("Test StargateBase", function () {
   describe("constructor & initialize", function () {
     it("check initial values", async function () {
       expect(await stargateStrategy.depositToken()).to.be.eq(token.address);
-      expect(await stargateStrategy.token()).to.be.eq(token.address);
       expect(await stargateStrategy.strategyRouter()).to.be.eq(router.address);
       expect(await stargateStrategy.stgToken()).to.be.eq(stg.address);
       expect(await stargateStrategy.stargateRouter()).to.be.eq(
