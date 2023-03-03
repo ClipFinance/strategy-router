@@ -252,7 +252,7 @@ library StrategyRouterLib {
                     uint256 balanceToWithdraw = balances[i] - desiredBalance;
                     if (toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress) >= ALLOCATION_THRESHOLD) {
                         // withdraw is called only once
-                        // we now starteg has overflow
+                        // we already know that strategy has overflow and its exact amount
                         // we do not care where withdrawn tokens will be allocated
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
@@ -281,7 +281,7 @@ library StrategyRouterLib {
                 }
             }
 
-            // clean up: if router token balance if below THRESHOLD remove it from consideration
+            // clean up: if token balance of Router is below THRESHOLD remove it from consideration
             // as these tokens are not accessible for strategy allocation
             for (uint256 i; i < supportedTokens.length; i++) {
                 uint256 currentTokenBalanceUniform = currentTokenDatas[i].currentBalanceUniform;
