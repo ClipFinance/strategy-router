@@ -253,16 +253,6 @@ describe("Test rebalance functions", function () {
 
   describe("Test rebalanceStrategies function", function () {
 
-    it.skip("one strategy rebalance should revert", async function () {
-
-      await router.setSupportedToken(usdt.address, true);
-
-      let farm = await createMockStrategy(usdt.address, 10000);
-      await router.addStrategy(farm.address, usdt.address, 5000);
-
-      await expect(router.rebalanceStrategies()).to.be.revertedWithCustomError(router, "NothingToRebalance");
-    });
-
     it("two usdt strategies", async function () {
 
       await router.setSupportedToken(usdt.address, true);
@@ -433,7 +423,6 @@ describe("Test rebalance functions", function () {
     assert((await router.getStrategiesCount()) == weights.length);
     const ERROR_THRESHOLD = 0.5;
     const { total, balances } = await getStrategiesBalances();
-    console.log('balances', balances);
     let totalWeight = weights.reduce((e, acc) => acc + e);
     for (let i = 0; i < weights.length; i++) {
       const percentWeight = weights[i] * 100 / totalWeight;
