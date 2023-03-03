@@ -103,9 +103,11 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             }
 
             currTokenBalance = token.balanceOf(address(this));
-            if (currTokenBalance < strategyTokenAmountToWithdraw)
+            if (currTokenBalance < strategyTokenAmountToWithdraw) {
                 strategyTokenAmountToWithdraw = currTokenBalance;
-            else _deposit(currTokenBalance - strategyTokenAmountToWithdraw);
+            } else {
+                _deposit(currTokenBalance - strategyTokenAmountToWithdraw);
+            }
         }
 
         token.safeTransfer(msg.sender, strategyTokenAmountToWithdraw);
