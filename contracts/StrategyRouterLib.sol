@@ -32,11 +32,6 @@ library StrategyRouterLib {
         uint256 toDeposit;
     }
 
-    struct SupportedTokenData {
-        address tokenAddress;
-        uint256 balance;
-    }
-
     struct TokenData {
         uint256 currentBalance;
         uint256 currentBalanceUniform;
