@@ -100,9 +100,9 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             if (lpToRemove != 0) {
                 _withdrawFromFarm(lpToRemove);
                 _sellReward();
+                currTokenBalance = token.balanceOf(address(this));
             }
 
-            currTokenBalance = token.balanceOf(address(this));
             if (currTokenBalance < strategyTokenAmountToWithdraw) {
                 strategyTokenAmountToWithdraw = currTokenBalance;
             } else {
