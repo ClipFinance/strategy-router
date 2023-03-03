@@ -13,7 +13,8 @@ contract MockBiswapBase is BiswapBase {
         ERC20 _tokenA,
         ERC20 _tokenB,
         ERC20 _lpToken,
-        IUsdOracle _oracle
+        IUsdOracle _oracle,
+        uint256 _priceThreshold
     )
         BiswapBase(
             _strategyRouter,
@@ -21,18 +22,15 @@ contract MockBiswapBase is BiswapBase {
             _tokenA,
             _tokenB,
             _lpToken,
-            _oracle
+            _oracle,
+            _priceThreshold
         )
     {}
 
     function calculateSwapAmountPublic(uint256 tokenAmount, uint256 dexFee)
         public
         view
-        returns (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 amountAToSell
-        )
+        returns (uint256 amountA, uint256 amountAToSell)
     {
         return calculateSwapAmount(tokenAmount, dexFee);
     }

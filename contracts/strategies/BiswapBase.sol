@@ -46,6 +46,7 @@ contract BiswapBase is
 
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_A;
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
+    uint256 private immutable PRICE_THRESHOLD;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
 
@@ -61,7 +62,8 @@ contract BiswapBase is
         ERC20 _tokenA,
         ERC20 _tokenB,
         ERC20 _lpToken,
-        IUsdOracle _oracle
+        IUsdOracle _oracle,
+        uint256 _priceThreshold
     ) {
         strategyRouter = _strategyRouter;
         poolId = _poolId;
@@ -71,6 +73,7 @@ contract BiswapBase is
         LEFTOVER_THRESHOLD_TOKEN_A = 10**_tokenA.decimals();
         LEFTOVER_THRESHOLD_TOKEN_B = 10**_tokenB.decimals();
         oracle = _oracle;
+        PRICE_THRESHOLD = _priceThreshold;
 
         // lock implementation
         _disableInitializers();
@@ -100,14 +103,13 @@ contract BiswapBase is
             address(tokenA),
             address(tokenB)
         );
-        (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 amountAToSell
-        ) = calculateSwapAmount(amount, dexFee);
+        (uint256 amountA, uint256 amountAToSell) = calculateSwapAmount(
+            amount,
+            dexFee
+        );
 
         tokenA.transfer(address(exchange), amountAToSell);
-        amountB = exchange.swap(
+        uint256 amountB = exchange.swap(
             amountAToSell,
             address(tokenA),
             address(tokenB),
@@ -165,11 +167,6 @@ contract BiswapBase is
                 (amountA + amountB)) / (balance0 + balance1);
 
             farm.withdraw(poolId, liquidityToRemove);
-            uint256 bswAmount = bsw.balanceOf(address(this));
-            if (bswAmount != 0) {
-                sellRewardToTokenA(bswAmount);
-                _compoundBsw();
-            }
 
             lpToken.approve(address(biswapRouter), liquidityToRemove);
             (amountA, amountB) = biswapRouter.removeLiquidity(
@@ -193,6 +190,9 @@ contract BiswapBase is
                 ) +
                 tokenABalance;
             tokenA.transfer(msg.sender, amountA);
+
+            _compoundBsw();
+
             return amountA;
         }
     }
@@ -293,7 +293,7 @@ contract BiswapBase is
                 address(tokenB)
             );
             // TODO: looks wrong
-            (, , toSwap) = calculateSwapAmount(toSwap, dexFee);
+            (, toSwap) = calculateSwapAmount(toSwap, dexFee);
             tokenB.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -310,7 +310,7 @@ contract BiswapBase is
                 address(tokenA),
                 address(tokenB)
             );
-            (, , toSwap) = calculateSwapAmount(toSwap, dexFee);
+            (, toSwap) = calculateSwapAmount(toSwap, dexFee);
             tokenA.transfer(address(exchange), toSwap);
             exchange.swap(
                 toSwap,
@@ -366,11 +366,7 @@ contract BiswapBase is
     function calculateSwapAmount(uint256 tokenAmount, uint256 dexFee)
         internal
         view
-        returns (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 amountAToSell
-        )
+        returns (uint256 amountA, uint256 amountAToSell)
     {
         (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(
             address(lpToken)
@@ -389,19 +385,18 @@ contract BiswapBase is
                 1e18 +
                 reserve1 *
                 1e18);
-        amountB = (amountAToSell * oraclePrice * (1e18 - dexFee)) / 1e36;
         amountA = tokenAmount - amountAToSell;
     }
 
     function _checkPriceManipulation(uint256 oraclePrice, uint256 ammPrice)
         internal
-        pure
+        view
     {
         if (oraclePrice != ammPrice) {
             uint256 priceDiff = oraclePrice > ammPrice
                 ? ((oraclePrice - ammPrice) * 10000) / ammPrice
                 : ((ammPrice - oraclePrice) * 10000) / oraclePrice;
-            if (priceDiff > 2000) revert PriceManipulation();
+            if (priceDiff > PRICE_THRESHOLD) revert PriceManipulation();
         }
     }
 
