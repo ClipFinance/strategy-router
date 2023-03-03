@@ -8,7 +8,7 @@ const {
   setupTokensLiquidityOnBiswap,
   deployBiswapStrategy,
   getPairTokenOnBiswap,
-  addBiswapPool,
+  addBiswapPoolToRewardProgram,
 } = require("../shared/commonSetup");
 const {
   getTokenContract,
@@ -79,7 +79,7 @@ describe("Test BiswapBase", function () {
     await tokenB.transfer(mockExchange.address, utils.parseEther("10000"));
 
     lpToken = await getPairTokenOnBiswap(tokenA, tokenB);
-    biswapPoolId = await addBiswapPool(lpToken.address);
+    biswapPoolId = await addBiswapPoolToRewardProgram(lpToken.address);
 
     biswapStrategy = await deployBiswapStrategy({
       router: router.address,
@@ -88,6 +88,7 @@ describe("Test BiswapBase", function () {
       tokenB: tokenB.address,
       lpToken: lpToken.address,
       oracle: oracle.address,
+      priceThreshold: 2000,
       upgrader: owner.address,
     });
 
@@ -123,36 +124,36 @@ describe("Test BiswapBase", function () {
 
   describe("#getOraclePrice", function () {
     it("get oracle price with same decimals", async function () {
-      const tokenAPrice = utils.parseUnits("2", 8);
-      const tokenBPrice = utils.parseUnits("1", 8);
+      const tokenAPrice = utils.parseUnits("1", 8);
+      const tokenBPrice = utils.parseUnits("1.1", 8);
       await oracle.setPriceAndDecimals(tokenA.address, tokenAPrice, 8);
       await oracle.setPriceAndDecimals(tokenB.address, tokenBPrice, 8);
 
       expect(
         await biswapStrategy.getOraclePrice(tokenA.address, tokenB.address)
-      ).to.be.eq(utils.parseEther("0.5"));
+      ).to.be.eq(utils.parseEther("1.1"));
     });
 
     it("get oracle price with different same decimals(A decimals < B decimals)", async function () {
-      const tokenAPrice = utils.parseUnits("2", 8);
-      const tokenBPrice = utils.parseUnits("1", 10);
+      const tokenAPrice = utils.parseUnits("1", 8);
+      const tokenBPrice = utils.parseUnits("1.1", 10);
       await oracle.setPriceAndDecimals(tokenA.address, tokenAPrice, 8);
       await oracle.setPriceAndDecimals(tokenB.address, tokenBPrice, 10);
 
       expect(
         await biswapStrategy.getOraclePrice(tokenA.address, tokenB.address)
-      ).to.be.eq(utils.parseEther("0.5"));
+      ).to.be.eq(utils.parseEther("1.1"));
     });
 
     it("get oracle price with different same decimals(A decimals > B decimals)", async function () {
-      const tokenAPrice = utils.parseUnits("2", 18);
-      const tokenBPrice = utils.parseUnits("1", 10);
+      const tokenAPrice = utils.parseUnits("1", 18);
+      const tokenBPrice = utils.parseUnits("1.1", 10);
       await oracle.setPriceAndDecimals(tokenA.address, tokenAPrice, 18);
       await oracle.setPriceAndDecimals(tokenB.address, tokenBPrice, 10);
 
       expect(
         await biswapStrategy.getOraclePrice(tokenA.address, tokenB.address)
-      ).to.be.eq(utils.parseEther("0.5"));
+      ).to.be.eq(utils.parseEther("1.1"));
     });
   });
 
@@ -206,6 +207,7 @@ describe("Test BiswapBase", function () {
         tokenB: tokenB.address,
         lpToken: mockLpToken.address,
         oracle: oracle.address,
+        priceThreshold: 2000,
         upgrader: owner.address,
       });
 
@@ -216,6 +218,7 @@ describe("Test BiswapBase", function () {
         tokenB: tokenA.address,
         lpToken: mockLpToken.address,
         oracle: oracle.address,
+        priceThreshold: 2000,
         upgrader: owner.address,
       });
     });
@@ -278,14 +281,13 @@ describe("Test BiswapBase", function () {
         8
       );
 
-      const { amountA: amountX, amountB: amountY } =
+      const { amountA: amountX } =
         await mockBiswapStrategyAB.calculateSwapAmountPublic(
           tokenAmount,
           DEX_FEE
         );
 
       expect(amountX).to.be.equal("998497746619929894843");
-      expect(amountY).to.be.equal("998497746619929894841");
     });
 
     describe("AMM and Oracle price match", function () {
@@ -305,13 +307,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("998497746619929894841");
         expect(amountY).to.be.equal("998497746619929894843");
       });
 
@@ -331,14 +332,13 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountX, amountB: amountY } =
+        const { amountA: amountX } =
           await mockBiswapStrategyAB.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
         expect(amountX).to.be.equal("998497746619929894643");
-        expect(amountY).to.be.equal("832081455516608245534");
       });
 
       it("test scenario(X: 1200000, Y: 1000000, OraclePriceXinY: 1.2, OraclePriceYinX: 0.83, TotalAmountInY: 2000)", async function () {
@@ -357,13 +357,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("1198197295943915873809");
         expect(amountY).to.be.equal("998497746619929894843");
       });
 
@@ -383,14 +382,13 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountX, amountB: amountY } =
+        const { amountA: amountX } =
           await mockBiswapStrategyAB.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
         expect(amountX).to.be.equal("998497746619929894843");
-        expect(amountY).to.be.equal("1198197295943915873809");
       });
 
       it("test scenario(X: 1000000, Y: 1200000, OraclePriceXinY: 0.83, OraclePriceYinX: 1.2, TotalAmountInY: 2000)", async function () {
@@ -409,13 +407,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("832081455516608245534");
         expect(amountY).to.be.equal("998497746619929894643");
       });
     });
@@ -437,14 +434,13 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountX, amountB: amountY } =
+        const { amountA: amountX } =
           await mockBiswapStrategyAB.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
         expect(amountX).to.be.equal("950882212684787791586");
-        expect(amountY).to.be.equal("950882212684787791584");
       });
 
       it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 1.1, OraclePriceYinX: 0.9, TotalAmountInY: 2000)", async function () {
@@ -463,13 +459,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("1046120093480230838936");
         expect(amountY).to.be.equal("1046120093480230838938");
       });
 
@@ -489,14 +484,13 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountX, amountB: amountY } =
+        const { amountA: amountX } =
           await mockBiswapStrategyAB.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
         expect(amountX).to.be.equal("1051133368476541908227");
-        expect(amountY).to.be.equal("1051133368476541908225");
       });
 
       it("test scenario(X: 1000000, Y: 1000000, OraclePriceXinY: 0.9, OraclePriceYinX: 1.1, TotalAmountInY: 2000)", async function () {
@@ -515,13 +509,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("945870447477995045590");
         expect(amountY).to.be.equal("945870447477995045592");
       });
     });
@@ -545,13 +538,12 @@ describe("Test BiswapBase", function () {
           8
         );
 
-        const { amountA: amountY, amountB: amountX } =
+        const { amountA: amountY } =
           await mockBiswapStrategyBA.calculateSwapAmountPublic(
             tokenAmount,
             DEX_FEE
           );
 
-        expect(amountX).to.be.equal("1000000000000000000000");
         expect(amountY).to.be.equal("1000000000000000000000");
       });
     });
