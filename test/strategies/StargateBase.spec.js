@@ -17,7 +17,7 @@ describe("Test StargateBase", function () {
   const USDT_POOL_ID = 2;
   const USDT_LP_FARM_ID = 0;
 
-  let owner, nonReceiptOwner;
+  let owner, alice;
   // mainnet contracts
   let stargateFarm, stargateRouter;
   // mainnet tokens
@@ -31,10 +31,12 @@ describe("Test StargateBase", function () {
   // revert to fresh fork state
   let initialSnapshot;
 
+  let parseUsdt;
+
   const strategyInitialBalance = utils.parseEther("1000000");
 
   before(async function () {
-    [owner, nonReceiptOwner] = await ethers.getSigners();
+    [owner, alice] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
@@ -51,7 +53,9 @@ describe("Test StargateBase", function () {
       receiptContract.address
     );
 
-    token = (await getTokenContract(hre.networkVariables.usdt)).token;
+    const tokenInfo = await getTokenContract(hre.networkVariables.usdt);
+    token = tokenInfo.token;
+    parseUsdt = tokenInfo.parseToken;
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
 
@@ -66,7 +70,7 @@ describe("Test StargateBase", function () {
     await mintForkedToken(
       token.address,
       owner.address,
-      utils.parseEther("10000000000")
+      parseUsdt("10000000000")
     );
 
     stargateRouter = await getContract(
@@ -128,11 +132,11 @@ describe("Test StargateBase", function () {
   });
 
   describe("#deposit", function () {
-    const amount = utils.parseEther("10000");
+    const amount = parseUsdt("10000");
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(nonReceiptOwner).deposit(amount)
+        stargateStrategy.connect(alice).deposit(amount)
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -166,7 +170,7 @@ describe("Test StargateBase", function () {
   });
 
   describe("#compound", function () {
-    const amount = utils.parseEther("10000");
+    const amount = parseUsdt("10000");
 
     beforeEach(async () => {
       await stargateStrategy.deposit(amount);
@@ -174,7 +178,7 @@ describe("Test StargateBase", function () {
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(nonReceiptOwner).compound()
+        stargateStrategy.connect(alice).compound()
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -186,7 +190,7 @@ describe("Test StargateBase", function () {
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      const exchangedTokenAmount = utils.parseEther("100");
+      const exchangedTokenAmount = parseUsdt("100");
       await token.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
@@ -226,7 +230,7 @@ describe("Test StargateBase", function () {
   });
 
   describe("#withdrawAll", function () {
-    const amount = utils.parseEther("10000");
+    const amount = parseUsdt("10000");
 
     beforeEach(async () => {
       await stargateStrategy.deposit(amount);
@@ -234,7 +238,7 @@ describe("Test StargateBase", function () {
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(nonReceiptOwner).withdrawAll()
+        stargateStrategy.connect(alice).withdrawAll()
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -246,7 +250,7 @@ describe("Test StargateBase", function () {
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      const exchangedTokenAmount = utils.parseEther("100");
+      const exchangedTokenAmount = parseUsdt("100");
       await token.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
@@ -290,7 +294,7 @@ describe("Test StargateBase", function () {
   });
 
   describe("#withdraw", function () {
-    const amount = utils.parseEther("10000");
+    const amount = parseUsdt("10000");
 
     beforeEach(async () => {
       await stargateStrategy.deposit(amount);
@@ -298,7 +302,7 @@ describe("Test StargateBase", function () {
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(nonReceiptOwner).withdraw(amount)
+        stargateStrategy.connect(alice).withdraw(amount)
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -306,7 +310,7 @@ describe("Test StargateBase", function () {
     });
 
     it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
-      const withdrawAmount = utils.parseEther("100");
+      const withdrawAmount = parseUsdt("100");
       const currnetOwnerBal = await token.balanceOf(owner.address);
 
       const stakedLpAmount = (
@@ -335,14 +339,14 @@ describe("Test StargateBase", function () {
 
     it("Withdraw tokens when remaining token balance is less than withdraw amount", async function () {
       const currentTokenBal = await token.balanceOf(stargateStrategy.address);
-      const extraWithdrwalAmount = utils.parseEther("100");
+      const extraWithdrwalAmount = parseUsdt("100");
       const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
 
       const stakedLpAmount = (
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      const exchangedTokenAmount = utils.parseEther("100");
+      const exchangedTokenAmount = parseUsdt("100");
       await token.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
@@ -394,7 +398,7 @@ describe("Test StargateBase", function () {
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      const exchangedTokenAmount = utils.parseEther("100");
+      const exchangedTokenAmount = parseUsdt("100");
       await token.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
@@ -413,7 +417,7 @@ describe("Test StargateBase", function () {
       );
 
       await stargateStrategy.withdraw(
-        strategyInitialBalance.add(utils.parseEther("1000"))
+        strategyInitialBalance.add(parseUsdt("1000"))
       );
 
       // The Underlying token balance should zero

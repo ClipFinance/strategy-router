@@ -151,7 +151,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     }
 
     function _deposit(uint256 amount) internal {
-        if (amount == 0 || _amountLDtoLP(amount) == 0) return;
+        if (amount == 0 || _amountLDtoSD(amount) == 0) return;
         token.safeApprove(address(stargateRouter), amount);
         stargateRouter.addLiquidity(poolId, amount, address(this));
 
@@ -199,9 +199,17 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         view
         returns (uint256 _amountLP)
     {
-        uint256 _amountSD = _amountLD / lpToken.convertRate();
+        uint256 _amountSD = _amountLDtoSD(_amountLD);
         _amountLP =
             (_amountSD * lpToken.totalSupply()) /
             lpToken.totalLiquidity();
+    }
+
+    function _amountLDtoSD(uint256 _amountLD)
+        internal
+        view
+        returns (uint256 _amountSD)
+    {
+        _amountSD = _amountLD / lpToken.convertRate();
     }
 }
