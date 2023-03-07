@@ -178,7 +178,7 @@ library StrategyRouterLib {
     function rebalanceStrategies(
         Exchange exchange,
         StrategyRouter.StrategyInfo[] storage strategies,
-        uint256 allStrategiesWeightSum,
+        uint256 remainingToAllocateStrategiesWeightSum,
         address[] memory supportedTokens
     )
         public
@@ -243,7 +243,8 @@ library StrategyRouterLib {
             // derive desired strategy balances
             // sum withdrawn overflows to total unallocated balance
             for (uint256 i; i < strategyDatas.length; i++) {
-                uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight) / allStrategiesWeightSum;
+                uint256 desiredBalance = (totalBalanceUniform * strategyDatas[i].weight)
+                    / remainingToAllocateStrategiesWeightSum;
                 desiredBalance = fromUniform(desiredBalance, strategyDatas[i].tokenAddress);
                 // if current balance is greater than desired – withdraw excessive tokens
                 // add them up to total unallocated balance
@@ -273,7 +274,7 @@ library StrategyRouterLib {
                         strategyDatas[i].tokenAddress
                     );
                     if (balanceToAddUniform >= ALLOCATION_THRESHOLD) {
-                        allUnderflowStrategiesWeightSum += balanceToAddUniform;
+                        remainingToAllocateUnderflowStrategiesWeightSum += balanceToAddUniform;
                         underflowedStrategyWeights[i] = balanceToAddUniform;
                     } else {
                         strategyDatas[i].saturated = true;
@@ -305,11 +306,11 @@ library StrategyRouterLib {
             // NOT: desired balance is calculated used new derived weights
             // only underflow strategies has that weights
             uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
-                / allUnderflowStrategiesWeightSum;
+                / remainingToAllocateUnderflowStrategiesWeightSum;
 
             if (desiredAllocationUniform < ALLOCATION_THRESHOLD) {
                 strategyDatas[i].saturated = true;
-                allUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
+                remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
                 underflowedStrategyWeights[i] = 0;
                 continue;
             }
@@ -327,7 +328,7 @@ library StrategyRouterLib {
             // allocation logic
             if (currentTokenBalanceUniform >= desiredAllocationUniform) {
                 strategyDatas[i].saturated = true;
-                allUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
+                remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
                 underflowedStrategyWeights[i] = 0;
 
                 // manipulation to avoid leftovers
@@ -384,7 +385,7 @@ library StrategyRouterLib {
                 uint256 saturatedWeightPoints = underflowedStrategyWeights[i] * currentTokenBalanceUniform
                     / desiredAllocationUniform;
                 underflowedStrategyWeights[i] -= saturatedWeightPoints;
-                allUnderflowStrategiesWeightSum -= saturatedWeightPoints;
+                remainingToAllocateUnderflowStrategiesWeightSum -= saturatedWeightPoints;
                 totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
                 IERC20(strategyTokenAddress).transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
@@ -413,9 +414,9 @@ library StrategyRouterLib {
             }
 
             uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
-                / allUnderflowStrategiesWeightSum;
+                / remainingToAllocateUnderflowStrategiesWeightSum;
             // reduce weight, we are sure we will fulfill desired balance on this step
-            allUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
+            remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
             underflowedStrategyWeights[i] = 0;
 
             if (desiredAllocationUniform < ALLOCATION_THRESHOLD) {
