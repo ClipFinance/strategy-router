@@ -228,7 +228,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        (StrategyRouter.StrategyInfo[] memory strategies, uint256 allStrategiesWeightSum) = router.getStrategies();
+        (StrategyRouter.StrategyInfo[] memory strategies, uint256 remainingToAllocateStrategiesWeightSum)
+            = router.getStrategies();
 
         balances = new uint256[](strategies.length);
         uint256[] memory strategyToSupportedTokenIndexMap = new uint256[](strategies.length);
@@ -238,11 +239,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // that minimises swaps between tokens – prefer to put a token to strategy that natively support it
         for (uint256 i; i < strategies.length; i++) {
             // necessary check in assumption that some strategies could have 0 weight
-            if (allStrategiesWeightSum == 0) {
+            if (remainingToAllocateStrategiesWeightSum == 0) {
                 break;
             }
             address strategyToken = strategies[i].depositToken;
-            uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight / allStrategiesWeightSum;
+            uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
+                / remainingToAllocateStrategiesWeightSum;
 
             // nothing to deposit to this strategy
             if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
@@ -269,7 +271,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             // if there anything to allocate to a strategy
             if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
                 // reduce weight of the current strategy in this iteration of rebalance to 0
-                allStrategiesWeightSum -= strategies[i].weight;
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
                 strategies[i].weight = 0;
                 // manipulation to avoid dust:
                 // if the case remaining balance of token is below allocation threshold –
@@ -302,7 +304,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // total strategy weight = 100,000 - 80% * 10,000 = 92,000
                 uint256 strategyWeightFulfilled = strategies[i].weight * batchTokenBalanceUniform
                     / desiredStrategyBalanceUniform;
-                allStrategiesWeightSum -= strategyWeightFulfilled;
+                remainingToAllocateStrategiesWeightSum -= strategyWeightFulfilled;
                 strategies[i].weight -= strategyWeightFulfilled;
 
                 totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
@@ -312,17 +314,17 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        // if everything was rebalanced already then allStrategiesWeightSum == 0, spare cycles
-        if (allStrategiesWeightSum > 0) {
+        // if everything was rebalanced already then remainingToAllocateStrategiesWeightSum == 0, spare cycles
+        if (remainingToAllocateStrategiesWeightSum > 0) {
             for (uint256 i; i < strategies.length; i++) {
                 // necessary check as some strategies that go last could saturated on the previous step already
-                if (allStrategiesWeightSum == 0) {
+                if (remainingToAllocateStrategiesWeightSum == 0) {
                     break;
                 }
 
                 uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
-                    / allStrategiesWeightSum;
-                allStrategiesWeightSum -= strategies[i].weight;
+                    / remainingToAllocateStrategiesWeightSum;
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
 
                 if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     continue;
