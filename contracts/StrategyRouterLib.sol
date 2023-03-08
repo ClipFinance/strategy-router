@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IIdleStrategy.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
@@ -38,13 +39,18 @@ library StrategyRouterLib {
         bool isBalanceInsufficient;
     }
 
-    function getStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
+    function getStrategiesValue(
+        IUsdOracle oracle,
+        StrategyRouter.StrategyInfo[] storage strategies,
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies
+    )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances)
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        balances = new uint256[](strategies.length);
-        for (uint256 i; i < balances.length; i++) {
+        uint256 strategiesLength = strategies.length;
+        balances = new uint256[](strategiesLength);
+        for (uint256 i; i < strategiesLength; i++) {
             address token = strategies[i].depositToken;
 
             uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
@@ -53,6 +59,20 @@ library StrategyRouterLib {
             balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
+            totalBalance += balanceInDepositToken;
+        }
+
+        uint256 idleStrategiesLength = idleStrategies.length;
+        idleBalances = new uint256[](idleStrategies.length);
+        for (uint256 i; i < idleStrategiesLength; i++) {
+            address token = idleStrategies[i].depositToken;
+
+            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
+
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
+            idleBalances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
         }
     }

@@ -4,7 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
-import "../interfaces/IStrategy.sol";
+import "../interfaces/IIdleStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 

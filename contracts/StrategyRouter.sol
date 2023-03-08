@@ -8,6 +8,7 @@ import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IIdleStrategy.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
@@ -83,11 +84,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error NotModerator();
     error WithdrawnAmountLowerThanExpectedAmount();
     error InvalidIdleStrategy();
+    error IdleStrategySupportedTokenMismatch();
 
     struct StrategyInfo {
         address strategyAddress;
         address depositToken;
         uint256 weight;
+    }
+
+    struct IdleStrategyInfo {
+        address strategyAddress;
+        address depositToken;
     }
 
     struct Cycle {
@@ -134,7 +141,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     StrategyInfo[] public strategies;
     uint256 public allStrategiesWeightSum;
 
-    StrategyInfo[] public idleStrategies;
+    IdleStrategyInfo[] public idleStrategies;
 
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
@@ -347,9 +354,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total usd value.
-    /// @return balances Array of usd value of token balances.
-    function getStrategiesValue() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies);
+    /// @return balances Array of usd value of strategy token balances.
+    /// @return idleBalances Array of usd value of idle strategy token balances.
+    function getStrategiesValue()
+        public
+        view
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+    {
+        (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies, idleStrategies);
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
@@ -673,30 +685,39 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         if (idleStrategies[i].strategyAddress != address(0)) {
-            IStrategy currentIdleStrategy = IStrategy(idleStrategies[i].strategyAddress);
+            IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
             currentIdleStrategyBalance = currentIdleStrategy.totalTokens();
             if (currentIdleStrategyBalance != 0) {
                 uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
                 IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
-                IStrategy(idleStrategy).deposit(withdrawnAmount);
+                IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
             }
         }
 
-        idleStrategies[i] = idleStrategy;
+        idleStrategies[i] = IdleStrategyInfo({
+            strategyAddress: idleStrategy,
+            depositAddress: tokenAddress
+        });
     }
 
     function _removeIdleStrategy(address tokenAddress) internal {
-        IStrategy idleStrategyToRemove;
+        IdleStrategyInfo idleStrategyToRemove;
         for (uint256 i; i < idleStrategies.length; i++) {
             if (tokenAddress == idleStrategies[i].depositToken) {
                 idleStrategyToRemove = idleStrategies[i];
                 idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
                 idleStrategies.pop();
+                // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
+                // so the shifted indexes must match
+                // but better to double check
+                if (idleStrategies[i] != getSupportedTokens()[i]) {
+                    revert IdleStrategySupportedTokenMismatch();
+                }
                 break;
             }
         }
 
-        idleStrategyToRemove.withdrawAll();
+        IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll();
         StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
     }
 
