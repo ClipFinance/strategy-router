@@ -209,7 +209,7 @@ library StrategyRouterLib {
         StrategyData[] memory strategyDatas = new StrategyData[](strategies.length);
 
         uint256[] memory underflowedStrategyWeights = new uint256[](strategyDatas.length);
-        uint256 allUnderflowStrategiesWeightSum;
+        uint256 remainingToAllocateUnderflowStrategiesWeightSum;
 
         TokenData[] memory currentTokenDatas = new TokenData[](supportedTokens.length);
         balances = new uint256[](strategyDatas.length);
