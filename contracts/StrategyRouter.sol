@@ -549,7 +549,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function setSupportedToken(address tokenAddress, bool supported, address idleStrategy) external onlyOwner {
         batch.setSupportedToken(tokenAddress, supported);
         if (supported) {
-            _setIdleStrategy(getSupportedTokens().length - 1, idleStrategy);
+            address[] memory supportedTokens = getSupportedTokens();
+            StrategyRouterLib.setIdleStrategy(
+                idleStrategies,
+                supportedTokens,
+                supportedTokens.length - 1,
+                idleStrategy);
         } else {
             _removeIdleStrategy(tokenAddress);
         }
@@ -675,41 +680,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     function setIdleStrategy(uint256 i, address idleStrategy) external onlyOwner {
-        _setIdleStrategy(i, idleStrategy);
-    }
-
-    function _setIdleStrategy(uint256 i, address idleStrategy) internal {
-        address tokenAddress = getSupportedTokens()[i];
-        if (idleStrategy == address(0)) {
-            idleStrategy = address(new IdleStrategy(this, IERC20(tokenAddress)));
-        } else {
-            if (IIdleStrategy(idleStrategy).depositToken() != tokenAddress)  {
-                revert InvalidIdleStrategy();
-            }
-        }
-
-        if (i < idleStrategies.length) {
-            if (idleStrategies[i].strategyAddress != address(0)) {
-                IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
-                if (currentIdleStrategy.totalTokens() != 0) {
-                    uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
-                    IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
-                    IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
-                }
-            }
-
-            idleStrategies[i] = IdleStrategyInfo({
-                strategyAddress: idleStrategy,
-                depositToken: tokenAddress
-            });
-        } else {
-            idleStrategies.push(
-                IdleStrategyInfo({
-                    strategyAddress: idleStrategy,
-                    depositToken: tokenAddress
-                })
-            );
-        }
+        StrategyRouterLib.setIdleStrategy(
+            idleStrategies,
+            getSupportedTokens(),
+            i,
+            idleStrategy
+        );
     }
 
     function _removeIdleStrategy(address tokenAddress) internal {
@@ -722,7 +698,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
                 // so the shifted indexes must match
                 // but better to double check
-                if (idleStrategies[i].depositToken != getSupportedTokens()[i]) {
+                // TODO add tests for idleStrategyLength = 0 after removal
+                if (idleStrategies.length > 0 && idleStrategies[i].depositToken != getSupportedTokens()[i]) {
                     revert IdleStrategySupportedTokenMismatch();
                 }
                 break;

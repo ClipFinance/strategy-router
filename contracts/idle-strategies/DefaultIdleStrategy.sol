@@ -10,7 +10,7 @@ import "../deps/OwnableUpgradeable.sol";
 import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract IdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeable, IIdleStrategy {
+contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeable, IIdleStrategy {
     error CallerUpgrader();
 
     address internal upgrader;
@@ -25,10 +25,10 @@ contract IdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeable, IId
 
     /// @dev construct is intended to initialize immutables on implementation
     constructor(
-        StrategyRouter _strategyRouter,
+        address _strategyRouter,
         IERC20 _token
     ) {
-        strategyRouter = _strategyRouter;
+        strategyRouter = StrategyRouter(_strategyRouter);
         token = _token;
 
         // lock implementation

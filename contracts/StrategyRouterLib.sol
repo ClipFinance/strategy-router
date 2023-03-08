@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./idle-strategies/DefaultIdleStrategy.sol";
 import "./interfaces/IIdleStrategy.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
@@ -542,6 +543,41 @@ library StrategyRouterLib {
             // deposit amount of tokens was transfered to the strategy
             // NOTE: in some edge cases 0 could be deposited
             IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
+        }
+    }
+
+    function setIdleStrategy(
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        address[] memory supportedTokens,
+        uint256 i,
+        address idleStrategy
+    ) public {
+        address tokenAddress = supportedTokens[i];
+        if (idleStrategy == address(0) || IIdleStrategy(idleStrategy).depositToken() != tokenAddress) {
+            revert StrategyRouter.InvalidIdleStrategy();
+        }
+
+        if (i < idleStrategies.length) {
+            if (idleStrategies[i].strategyAddress != address(0)) {
+                IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
+                if (currentIdleStrategy.totalTokens() != 0) {
+                    uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
+                    IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
+                    IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
+                }
+            }
+
+            idleStrategies[i] = StrategyRouter.IdleStrategyInfo({
+                strategyAddress: idleStrategy,
+                depositToken: tokenAddress
+            });
+        } else {
+            idleStrategies.push(
+                StrategyRouter.IdleStrategyInfo({
+                    strategyAddress: idleStrategy,
+                    depositToken: tokenAddress
+                })
+            );
         }
     }
 }

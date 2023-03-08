@@ -7,7 +7,8 @@ module.exports = {
   setupFakeUnderFulfilledWithdrawalStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams, setupRouterParams,
   setupFakePrices, setupPancakePlugin,
-  setupFakeExchangePlugin, mintFakeToken
+  setupFakeExchangePlugin, mintFakeToken,
+  setupIdleStrategies
 };
 
 async function deployFakeStrategy({ router, token, weight = 10_000, profitPercent = 10_000 }) {
@@ -67,6 +68,19 @@ async function setupFakeTokens() {
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
+}
+
+async function setupIdleStrategies(owner, router, ...tokens) {
+  for (const token of tokens) {
+    const StrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
+    const idleSTrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+      kind: 'uups',
+      constructorArgs: [router.address, token.address],
+    });
+    await idleSTrategy.transferOwnership(router.address);
+
+    token.idleStrategy = idleSTrategy;
+  }
 }
 
 async function mintFakeToken(toAddress, token, value) {

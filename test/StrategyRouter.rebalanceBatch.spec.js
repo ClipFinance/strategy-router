@@ -4,7 +4,6 @@ const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWit
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
 const { constants } = require("@openzeppelin/test-helpers");
-const { constants } = require("@openzeppelin/test-helpers");
 
 async function expectNoRemnantsFn(contract, busd, usdc, usdt) {
   expect(
