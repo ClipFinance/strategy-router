@@ -361,7 +361,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         view
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies, idleStrategies);
+        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
+            oracle,
+            strategies,
+            idleStrategies
+        );
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
