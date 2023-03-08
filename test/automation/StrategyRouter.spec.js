@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestParams, deployFakeStrategy } = require("../shared/commonSetup");
 const { skipTimeAndBlocks, provider, parseUniform } = require("../utils");
+const { constants } = require("@openzeppelin/test-helpers");
 
 describe("StrategyRouter upkeep automation", function () {
 
@@ -44,8 +45,8 @@ describe("StrategyRouter upkeep automation", function () {
       await usdt.approve(router.address, parseUsdt("1000000"));
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: usdc });

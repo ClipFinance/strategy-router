@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestParams, deployFakeStrategy } = require("./shared/commonSetup");
 const { provider, parseUniform } = require("./utils");
+const { constants } = require("@openzeppelin/test-helpers");
 
 
 describe("Test Batch", function () {
@@ -65,9 +66,9 @@ describe("Test Batch", function () {
             _snapshot = await provider.send("evm_snapshot");
 
             // setup supported tokens
-            await router.setSupportedToken(usdc.address, true);
-            await router.setSupportedToken(busd.address, true);
-            await router.setSupportedToken(usdt.address, true);
+            await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
             // add fake strategies
             await deployFakeStrategy({ router, token: busd });
@@ -121,8 +122,8 @@ describe("Test Batch", function () {
             _snapshot = await provider.send("evm_snapshot");
 
             // setup supported tokens
-            await router.setSupportedToken(usdc.address, true);
-            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
 
             // add fake strategies
             await deployFakeStrategy({ router, token: usdc });
@@ -158,7 +159,7 @@ describe("Test Batch", function () {
             await oracle.setPrice(busd.address, parseBusd("0.5"));
 
             // setup supported tokens
-            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
             // add fake strategies
             await deployFakeStrategy({ router, token: busd });
 
@@ -174,9 +175,9 @@ describe("Test Batch", function () {
             await oracle.setPrice(usdt.address, parseUsdt("1.1"));
 
             // setup supported tokens
-            await router.setSupportedToken(usdc.address, true);
-            await router.setSupportedToken(busd.address, true);
-            await router.setSupportedToken(usdt.address, true);
+            await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
             // add fake strategies
             await deployFakeStrategy({ router, token: busd });
@@ -204,9 +205,9 @@ describe("Test Batch", function () {
             _snapshot = await provider.send("evm_snapshot");
 
             // setup supported tokens
-            await router.setSupportedToken(usdc.address, true);
-            await router.setSupportedToken(busd.address, true);
-            await router.setSupportedToken(usdt.address, true);
+            await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
             // add fake strategies
             await deployFakeStrategy({ router, token: busd });
@@ -271,38 +272,38 @@ describe("Test Batch", function () {
     describe("setSupportedToken", function () {
 
         it("should add supported token", async function () {
-            await router.setSupportedToken(usdt.address, true);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${usdt.address}`
             );
         });
 
         it("should be idempotent", async function () {
-            await router.setSupportedToken(usdt.address, true);
-            await router.setSupportedToken(usdt.address, false);
-            await router.setSupportedToken(usdt.address, true);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, false, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${usdt.address}`
             );
         });
 
         it("should revert when adding the same token twice", async function () {
-            await router.setSupportedToken(usdt.address, true);
-            await expect(router.setSupportedToken(usdt.address, true)).to.be.reverted;
+            await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+            await expect(router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS)).to.be.reverted;
         });
 
         it("should revert when removing token that is in use by strategy", async function () {
-            await router.setSupportedToken(busd.address, true);
+            await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
             await deployFakeStrategy({ router, token: busd });
-            await expect(router.setSupportedToken(busd.address, false)).to.be.reverted;
+            await expect(router.setSupportedToken(busd.address, false, constants.ZERO_ADDRESS)).to.be.reverted;
         });
 
         it("pass address that is not a token", async function () {
-            await router.setSupportedToken(owner.address, true);
+            await router.setSupportedToken(owner.address, true, constants.ZERO_ADDRESS);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${owner.address}`
             );
-            await router.setSupportedToken(owner.address, false);
+            await router.setSupportedToken(owner.address, false, constants.ZERO_ADDRESS);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 ``
             );

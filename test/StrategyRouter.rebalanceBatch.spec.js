@@ -3,6 +3,8 @@ const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
+const { constants } = require("@openzeppelin/test-helpers");
+const { constants } = require("@openzeppelin/test-helpers");
 
 async function expectNoRemnantsFn(contract, busd, usdc, usdt) {
   expect(
@@ -113,9 +115,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     await usdt.approve(router.address, parseUsdt("10000000"));
 
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true);
-    await router.setSupportedToken(busd.address, true);
-    await router.setSupportedToken(usdt.address, true);
+    await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+    await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+    await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
     const expectNoRemnants = async function (contract) {
       await expectNoRemnantsFn(contract, busd, usdc, usdt);

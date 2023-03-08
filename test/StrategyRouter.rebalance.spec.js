@@ -2,6 +2,7 @@ const { expect, assert } = require("chai");
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake } = require("./shared/commonSetup");
+const { constants } = require("@openzeppelin/test-helpers");
 
 describe("Test rebalance functions", function () {
 
@@ -61,7 +62,7 @@ describe("Test rebalance functions", function () {
 
     it("usdt strategy, router supports only usdt, should revert", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -71,9 +72,9 @@ describe("Test rebalance functions", function () {
 
     it("usdt strategy, router supports multiple arbitrary tokens", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -96,7 +97,7 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies, router supports only usdt", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -118,9 +119,9 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies, router supports usdt,busd,usdc", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -146,8 +147,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies, router supports usdt,busd", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -172,9 +173,9 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies, router supports usdt,busd,usdc", async function () {
 
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -201,9 +202,9 @@ describe("Test rebalance functions", function () {
 
     it("'dust' token balances should not be swapped on dexes", async function () {
 
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       await router.addStrategy(farm.address, usdt.address, 5000);
@@ -225,9 +226,9 @@ describe("Test rebalance functions", function () {
     });
 
     it("high number of strategies", async function () {
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -255,7 +256,7 @@ describe("Test rebalance functions", function () {
 
     it("two usdt strategies", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(usdt.address, 10000);
@@ -277,8 +278,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt and busd strategies", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -303,8 +304,8 @@ describe("Test rebalance functions", function () {
 
     it("usdt,usdt,busd strategies", async function () {
 
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);
@@ -331,9 +332,9 @@ describe("Test rebalance functions", function () {
 
     it("'dust' amounts should be ignored and not swapped on dex", async function () {
 
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       let farm = await createMockStrategy(usdt.address, 10000);
       let farm2 = await createMockStrategy(busd.address, 10000);

@@ -6,6 +6,7 @@ const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWit
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
 const { deploy } = require("./utils");
+const { constants } = require("@openzeppelin/test-helpers");
 
 function expectPercentValueEqualsTo(actualPercentUniform, expectedPercent) {
   expect(actualPercentUniform).to.be.equal(
@@ -24,7 +25,7 @@ describe("Test StrategyRouter manages strategies correctly", function () {
     const { usdc } = await setupFakeTokens();
 
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true);
+    await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
 
     const strategy1 = await setupFakeUnderFulfilledWithdrawalStrategy({
       router,

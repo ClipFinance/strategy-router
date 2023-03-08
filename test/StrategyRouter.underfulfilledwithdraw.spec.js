@@ -4,6 +4,7 @@ const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPanca
 const { MaxUint256, parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 const { BigNumber } = require("ethers");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+const { constants } = require("@openzeppelin/test-helpers");
 
 
 describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
@@ -69,9 +70,9 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       await usdt.approve(router.address, parseUsdt("1000000"));
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
       // add fake strategies
       await strategyDeploymentFn({router, busd, usdc, usdt});

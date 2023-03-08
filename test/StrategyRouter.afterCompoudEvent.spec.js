@@ -5,6 +5,7 @@ const {
   deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken
 } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+const { constants } = require("@openzeppelin/test-helpers");
 
 function loadState(profitPercent, isRewardPositive = true) {
    async function state() {
@@ -34,9 +35,9 @@ function loadState(profitPercent, isRewardPositive = true) {
     await usdt.approve(router.address, parseUsdt("1000000"));
 
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true);
-    await router.setSupportedToken(busd.address, true);
-    await router.setSupportedToken(usdt.address, true);
+    await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
+    await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
+    await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
 
     // add fake strategies
     await deployFakeUnderFulfilledWithdrawalStrategy({
