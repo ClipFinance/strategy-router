@@ -15,6 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
+import "./idle-strategies/DefaultIdleStrategy.sol";
 
 // import "hardhat/console.sol";
 
@@ -81,6 +82,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error NothingToRebalance();
     error NotModerator();
     error WithdrawnAmountLowerThanExpectedAmount();
+    error InvalidIdleStrategy();
 
     struct StrategyInfo {
         address strategyAddress;
@@ -131,6 +133,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     StrategyInfo[] public strategies;
     uint256 public allStrategiesWeightSum;
+
+    StrategyInfo[] public idleStrategies;
 
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
@@ -526,8 +530,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
+    function setSupportedToken(address tokenAddress, bool supported, address idleStrategy) external onlyOwner {
         batch.setSupportedToken(tokenAddress, supported);
+        if (supported) {
+            _setIdleStrategy(getSupportedTokens().length, idleStrategy);
+        } else {
+            _removeIdleStrategy(tokenAddress);
+        }
     }
 
     /// @notice Set wallets that will be moderators.
@@ -647,6 +656,48 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).deposit(depositAmount);
         }
         Ownable(address(removedStrategy)).transferOwnership(msg.sender);
+    }
+
+    function setIdleStrategy(uint256 i, address idleStrategy) external onlyOwner {
+        _setIdleStrategy(i, idleStrategy);
+    }
+
+    function _setIdleStrategy(uint256 i, address idleStrategy) internal {
+        address tokenAddress = batch.getSupportedTokens()[i];
+        if (idleStrategy == address(0)) {
+            idleStrategy = new IdleStrategy(this, tokenAddress);
+        } else {
+            if (idleStrategy.depositAddress() != tokenAddress)  {
+                revert InvalidIdleStrategy();
+            }
+        }
+
+        if (idleStrategies[i].strategyAddress != address(0)) {
+            IStrategy currentIdleStrategy = IStrategy(idleStrategies[i].strategyAddress);
+            currentIdleStrategyBalance = currentIdleStrategy.totalTokens();
+            if (currentIdleStrategyBalance != 0) {
+                uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
+                IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
+                IStrategy(idleStrategy).deposit(withdrawnAmount);
+            }
+        }
+
+        idleStrategies[i] = idleStrategy;
+    }
+
+    function _removeIdleStrategy(address tokenAddress) internal {
+        IStrategy idleStrategyToRemove;
+        for (uint256 i; i < idleStrategies.length; i++) {
+            if (tokenAddress == idleStrategies[i].depositToken) {
+                idleStrategyToRemove = idleStrategies[i];
+                idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
+                idleStrategies.pop();
+                break;
+            }
+        }
+
+        idleStrategyToRemove.withdrawAll();
+        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
     }
 
     /// @notice Rebalance batch, so that token balances will match strategies weight.
