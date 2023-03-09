@@ -47,7 +47,7 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
     const { router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore();
 
     // deploy mock tokens
-    const { usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens();
+    const { usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router);
 
     const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
       oracle,
@@ -67,9 +67,9 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
     await usdt.approve(router.address, parseUsdt("10000000"));
 
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
-    await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
-    await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+    await router.addSupportedToken(usdc);
+    await router.addSupportedToken(busd);
+    await router.addSupportedToken(usdt);
 
     const expectNoRemnants = async function (contract) {
       await expectNoRemnantsFn(contract, busd, usdc, usdt);

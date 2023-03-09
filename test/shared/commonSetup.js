@@ -1,6 +1,7 @@
 const { parseUnits } = require("ethers/lib/utils");
 const { ethers, upgrades } = require("hardhat");
-const { getUSDC, getBUSD, getUSDT, deploy, parseUniform, deployProxy } = require("../utils");
+const { getUSDC, getBUSD, getUSDT, deploy, parseUniform, deployProxy, deployProxyIdleStrategy } = require("../utils");
+const { constants } = require('@openzeppelin/test-helpers');
 
 module.exports = {
   setupTokens, setupCore, deployFakeStrategy,
@@ -49,7 +50,8 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
-async function setupFakeTokens() {
+async function setupFakeTokens(router) {
+  const [owner] = await ethers.getSigners();
 
   // each test token's total supply, minted to owner
   let totalSupply = (100_000_000).toString();
@@ -58,13 +60,19 @@ async function setupFakeTokens() {
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
 
+  usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
 
+  busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
+
+  usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
@@ -135,6 +143,7 @@ async function setupTokens() {
   ({ tokenContract: usdc, parse: parseUsdc } = await getUSDC());
   ({ tokenContract: usdt, parse: parseUsdt } = await getUSDT());
   ({ tokenContract: busd, parse: parseBusd } = await getBUSD());
+
   return { usdc, busd, usdt, parseUsdc, parseUsdt, parseBusd };
 };
 
@@ -181,6 +190,13 @@ async function setupCore() {
 
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let INITIAL_SHARES = Number(1e12);
+
+  router.addSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, true, token.idleStrategy.address);
+  };
+  router.removeSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, false, constants.ZERO_ADDRESS);
+  };
 
   return { oracle, exchange, router, receiptContract, batch, sharesToken, INITIAL_SHARES };
 }

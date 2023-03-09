@@ -50,7 +50,7 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
 
       // deploy mock tokens
-      ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+      ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router));
 
       const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
         oracle,
@@ -70,9 +70,9 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
       await usdt.approve(router.address, parseUsdt("1000000"));
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS);
-      await router.setSupportedToken(busd.address, true, constants.ZERO_ADDRESS);
-      await router.setSupportedToken(usdt.address, true, constants.ZERO_ADDRESS);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await strategyDeploymentFn({router, busd, usdc, usdt});

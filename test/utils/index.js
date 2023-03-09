@@ -1,5 +1,5 @@
 const { parseEther, parseUnits } = require("ethers/lib/utils");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 const { BigNumber } = require("ethers");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
@@ -16,6 +16,7 @@ module.exports = {
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
   deploy, deployProxy, saturateTokenBalancesInStrategies,
   convertFromUsdToTokenAmount, applySlippageInBps,
+  deployProxyIdleStrategy,
 }
 
 // helper to reduce code duplication, transforms 3 lines of deployemnt into 1
@@ -31,6 +32,21 @@ async function deployProxy(contractName, initializeArgs = []) {
     kind: 'uups',
   });
   return await contract.deployed();
+}
+
+async function deployProxyIdleStrategy(owner, router, token) {
+  const IdleStrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
+  const idleSTrategy = await upgrades.deployProxy(
+    IdleStrategyFactory,
+    [owner.address],
+    {
+      kind: 'uups',
+      constructorArgs: [router.address, token.address],
+    }
+  );
+  await idleSTrategy.transferOwnership(router.address);
+
+  return idleSTrategy;
 }
 
 async function getBUSD(receiverAddress = null) {

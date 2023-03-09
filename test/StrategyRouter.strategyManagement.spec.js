@@ -2,7 +2,6 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken,
   setupFakeUnderFulfilledWithdrawalStrategy,
-  setupIdleStrategies
 } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
@@ -18,14 +17,11 @@ function expectPercentValueEqualsTo(actualPercentUniform, expectedPercent) {
 
 describe("Test StrategyRouter manages strategies correctly", function () {
   async function loadStateNoStrategies() {
-    const [owner] = await ethers.getSigners();
     // deploy core contracts
     const { router } = await setupCore();
 
     // deploy mock tokens
-    const { usdc } = await setupFakeTokens();
-
-    await setupIdleStrategies(owner, router, usdc);
+    const { usdc } = await setupFakeTokens(router);
 
     // setup supported tokens
     await router.setSupportedToken(usdc.address, true, usdc.idleStrategy.address);

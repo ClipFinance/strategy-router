@@ -708,6 +708,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll();
         StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
+
+        // TODO test
+        Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
     }
 
     /// @notice Rebalance batch, so that token balances will match strategies weight.
