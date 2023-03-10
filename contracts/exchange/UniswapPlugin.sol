@@ -16,6 +16,9 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     // whether swap for the pair should be done through WETH as intermediary
     mapping(address => mapping(address => bool)) public useWeth;
 
+    // whether swap for the pair should be done through some ERC20-like token as intermediary
+    mapping(address => mapping(address => address)) public midToken;
+
     IUniswapV2Router02 public uniswapRouter;
 
     constructor() {}
@@ -39,6 +42,25 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         return useWeth[token0][token1];
     }
 
+    function setMidToken(
+        address tokenA,
+        address tokenB,
+        address _midToken // set zero address to disable midToken
+    ) external onlyOwner {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        midToken[token0][token1] = _midToken;
+    }
+
+    function getMidToken(address tokenA, address tokenB) public view returns (address) {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        return midToken[token0][token1];
+    }
+
+    function haveMidToken(address tokenA, address tokenB) public view returns (bool) {
+        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        return midToken[token0][token1] != address(0x0);
+    }
+
     function swap(
         uint256 amountA,
         address tokenA,
@@ -52,13 +74,20 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
             path[2] = address(tokenB);
 
             return _swap(amountA, path, to);
-        } else {
-            address[] memory path = new address[](2);
+        } else if(haveMidToken(tokenA, tokenB)) {
+            address[] memory path = new address[](3);
             path[0] = address(tokenA);
-            path[1] = address(tokenB);
+            path[1] = getMidToken(tokenA, tokenB);
+            path[2] = address(tokenB);
 
             return _swap(amountA, path, to);
         }
+
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+
+        return _swap(amountA, path, to);
     }
 
     function getExchangeProtocolFee(address, address) public pure override returns (uint256 feePercent) {
@@ -76,12 +105,18 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
             path[1] = uniswapRouter.WETH();
             path[2] = address(tokenB);
             return uniswapRouter.getAmountsOut(amountA, path)[2];
-        } else {
+        } else if(haveMidToken(tokenA, tokenB)) {
             address[] memory path = new address[](3);
             path[0] = address(tokenA);
-            path[1] = address(tokenB);
-            return uniswapRouter.getAmountsOut(amountA, path)[1];
+            path[1] = getMidToken(tokenA, tokenB);
+            path[2] = address(tokenB);
+            return uniswapRouter.getAmountsOut(amountA, path)[2];
         }
+
+        address[] memory path = new address[](2);
+        path[0] = address(tokenA);
+        path[1] = address(tokenB);
+        return uniswapRouter.getAmountsOut(amountA, path)[1];
     }
 
     function _swap(
