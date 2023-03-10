@@ -54,7 +54,7 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Withdraw tokens from strategy.
     /// @dev Max withdrawable amount is returned by totalTokens.
     function withdraw(uint256 amount) external override onlyOwner returns (uint256 amountWithdrawn) {
-        token.transfer(address(strategyRouter), amount);
+        token.transfer(msg.sender, amount);
 
         return amount;
     }
@@ -67,6 +67,6 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Withdraw all tokens from strategy.
     function withdrawAll() external override onlyOwner returns (uint256 amountWithdrawn) {
         amountWithdrawn = token.balanceOf(address(this));
-        token.transfer(address(strategyRouter), amountWithdrawn);
+        token.transfer(msg.sender, amountWithdrawn);
     }
 }

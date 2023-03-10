@@ -15,7 +15,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 library StrategyRouterLib {
     error CycleNotClosed();
@@ -196,6 +196,7 @@ library StrategyRouterLib {
         }
     }
 
+    // TODO When idle added to rebalanced should be a special case for removed token
     function rebalanceStrategies(
         Exchange exchange,
         StrategyRouter.StrategyInfo[] storage strategies,
@@ -312,6 +313,9 @@ library StrategyRouterLib {
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
                 }
             }
+
+            console.log('totalBalanceUniform', totalBalanceUniform);
+            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
         }
 
         // all tokens to be allocation to strategies with underflows at Router at the moment

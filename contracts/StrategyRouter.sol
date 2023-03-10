@@ -18,7 +18,7 @@ import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 import "./idle-strategies/DefaultIdleStrategy.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -345,6 +345,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Returns array of strategies.
     function getStrategies() public view returns (StrategyInfo[] memory, uint256) {
         return (strategies, allStrategiesWeightSum);
+    }
+
+    /// @notice Returns array of idle strategies.
+    function getIdleStrategies() public view returns (IdleStrategyInfo[] memory) {
+        return idleStrategies;
     }
 
     /// @notice Returns deposit token of the strategy.
@@ -700,7 +705,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 // so the shifted indexes must match
                 // but better to double check
                 // TODO add tests for idleStrategyLength = 0 after removal
-                if (idleStrategies.length > 0 && idleStrategies[i].depositToken != getSupportedTokens()[i]) {
+                if (
+                    idleStrategies.length != 0
+                    && i != idleStrategies.length
+                    && idleStrategies[i].depositToken != getSupportedTokens()[i]
+                ) {
                     revert IdleStrategySupportedTokenMismatch();
                 }
                 break;
@@ -708,7 +717,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll();
-        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
+        console.log('balanceOf', ERC20(idleStrategyToRemove.depositToken).balanceOf(address(this)));
+        address[] memory supportedTokens = getSupportedTokens();
+        address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
+        supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
+        for (uint256 i; i < supportedTokens.length; i++) {
+            supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+        }
+        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, supportedTokensWithRemovedToken);
+        console.log('balanceOf2', ERC20(idleStrategyToRemove.depositToken).balanceOf(address(this)));
 
         // TODO test
         Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
