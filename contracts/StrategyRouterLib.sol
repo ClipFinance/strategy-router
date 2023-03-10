@@ -552,6 +552,10 @@ library StrategyRouterLib {
         uint256 i,
         address idleStrategy
     ) public {
+        if (i >= supportedTokens.length) {
+            revert StrategyRouter.InvalidIndexForIdleStrategy();
+        }
+
         address tokenAddress = supportedTokens[i];
         if (idleStrategy == address(0) || IIdleStrategy(idleStrategy).depositToken() != tokenAddress) {
             revert StrategyRouter.InvalidIdleStrategy();
@@ -565,6 +569,9 @@ library StrategyRouterLib {
                     IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
                     IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
                 }
+
+                Ownable(address(currentIdleStrategy))
+                    .transferOwnership(Ownable(address(this)).owner());
             }
 
             idleStrategies[i] = StrategyRouter.IdleStrategyInfo({
@@ -572,6 +579,16 @@ library StrategyRouterLib {
                 depositToken: tokenAddress
             });
         } else {
+            // ensure idle strategy pushed at index i
+            // though in practice the loop will never be iterated
+            for (uint256 j = idleStrategies.length; j < i; j++) {
+                idleStrategies.push(
+                    StrategyRouter.IdleStrategyInfo({
+                        strategyAddress: address(0),
+                        depositToken: address(0)
+                    })
+                );
+            }
             idleStrategies.push(
                 StrategyRouter.IdleStrategyInfo({
                     strategyAddress: idleStrategy,

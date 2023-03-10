@@ -84,6 +84,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error NotModerator();
     error WithdrawnAmountLowerThanExpectedAmount();
     error InvalidIdleStrategy();
+    error InvalidIndexForIdleStrategy();
     error IdleStrategySupportedTokenMismatch();
 
     struct StrategyInfo {
