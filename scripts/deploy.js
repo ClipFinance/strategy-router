@@ -112,6 +112,11 @@ async function main() {
   await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true)).wait();
   await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true)).wait();
+  await (await pancakePlugin.setMidToken(
+    hre.networkVariables.stg,
+    hre.networkVariables.usdt,
+    hre.networkVariables.busd
+  )).wait();
 
   // acryptos plugin params
   console.log("acryptos plugin setup...");
@@ -155,13 +160,14 @@ async function main() {
       hre.networkVariables.busd,
       hre.networkVariables.usdt,
       hre.networkVariables.usdc,
-      hre.networkVariables.busd,
+      hre.networkVariables.usdt,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
     ]
