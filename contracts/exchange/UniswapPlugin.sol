@@ -13,9 +13,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     error RoutedSwapFailed();
     error RouteNotFound();
 
-    // whether swap for the pair should be done through WETH as intermediary
-    mapping(address => mapping(address => bool)) public useWeth;
-
     // whether swap for the pair should be done through some ERC20-like token as intermediary
     mapping(address => mapping(address => address)) public midToken;
 
@@ -26,20 +23,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     /// @notice Set uniswap02-like router.
     function setUniswapRouter(address _uniswapRouter) external onlyOwner {
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
-    }
-
-    function setUseWeth(
-        address tokenA,
-        address tokenB,
-        bool _useWeth
-    ) external onlyOwner {
-        (address token0, address token1) = sortTokens(tokenA, tokenB);
-        useWeth[token0][token1] = _useWeth;
-    }
-
-    function canUseWeth(address tokenA, address tokenB) public view returns (bool) {
-        (address token0, address token1) = sortTokens(tokenA, tokenB);
-        return useWeth[token0][token1];
     }
 
     function setMidToken(
@@ -67,14 +50,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenB,
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
-        if (canUseWeth(tokenA, tokenB)) {
-            address[] memory path = new address[](3);
-            path[0] = address(tokenA);
-            path[1] = uniswapRouter.WETH();
-            path[2] = address(tokenB);
-
-            return _swap(amountA, path, to);
-        } else if(haveMidToken(tokenA, tokenB)) {
+        if (haveMidToken(tokenA, tokenB)) {
             address[] memory path = new address[](3);
             path[0] = address(tokenA);
             path[1] = getMidToken(tokenA, tokenB);
@@ -99,13 +75,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenA,
         address tokenB
     ) external view override returns (uint256 amountOut) {
-        if (canUseWeth(tokenA, tokenB)) {
-            address[] memory path = new address[](3);
-            path[0] = address(tokenA);
-            path[1] = uniswapRouter.WETH();
-            path[2] = address(tokenB);
-            return uniswapRouter.getAmountsOut(amountA, path)[2];
-        } else if(haveMidToken(tokenA, tokenB)) {
+        if (haveMidToken(tokenA, tokenB)) {
             address[] memory path = new address[](3);
             path[0] = address(tokenA);
             path[1] = getMidToken(tokenA, tokenB);

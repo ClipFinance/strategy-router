@@ -26,7 +26,6 @@ module.exports = {
   setupTestParams,
   setupRouterParams,
   setupFakePrices,
-  setupPancakePlugin,
   setupFakeExchangePlugin,
   mintFakeToken,
   deployBiswapStrategy,
@@ -366,6 +365,7 @@ async function setupTestParams(
   let usdcAmount = parseUnits("1.0", await usdc.decimals());
   await oracle.setPrice(usdc.address, usdcAmount);
 
+  // let weth = hre.networkVariables.weth;
   let bsw = hre.networkVariables.bsw;
 
   // Setup exchange params
@@ -396,9 +396,9 @@ async function setupTestParams(
 
     // pancake plugin params
     await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-    // await pancakePlugin.setUseWeth(bsw, busd, true);
-    // await pancakePlugin.setUseWeth(bsw, usdt, true);
-    // await pancakePlugin.setUseWeth(bsw, usdc, true);
+    // await pancakePlugin.setMidToken(bsw, busd, weth);
+    // await pancakePlugin.setMidToken(bsw, usdt, weth);
+    // await pancakePlugin.setMidToken(bsw, usdc, weth);
   }
 }
 
@@ -420,27 +420,6 @@ async function setupFakePrices(oracle, usdc, usdt, busd) {
   await oracle.setPrice(usdc.address, usdcAmount);
 }
 
-async function setupPancakePlugin(exchange, usdc, usdt, busd) {
-  let bsw = hre.networkVariables.bsw;
-
-  let pancakePlugin = await deploy("UniswapPlugin");
-  let pancake = pancakePlugin.address;
-  // Setup exchange params
-  busd = busd.address;
-  usdc = usdc.address;
-  usdt = usdt.address;
-  await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw],
-    [usdt, usdc, usdt, busd, usdt, usdc],
-    [pancake, pancake, pancake, pancake, pancake, pancake]
-  );
-
-  // pancake plugin params
-  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  // await pancakePlugin.setUseWeth(bsw, busd, true);
-  // await pancakePlugin.setUseWeth(bsw, usdt, true);
-  // await pancakePlugin.setUseWeth(bsw, usdc, true);
-}
 
 // Setup core params that are similar (or the same) as those that will be set in production
 async function setupParamsOnBNB(router, oracle, exchange) {
@@ -454,6 +433,7 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 }
 
 async function setupPluginsOnBNB(exchange) {
+  let weth = hre.networkVariables.weth;
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
@@ -491,8 +471,8 @@ async function setupPluginsOnBNB(exchange) {
 
   // pancake plugin params
   await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await pancakePlugin.setUseWeth(bsw, busd, true);
-  await pancakePlugin.setUseWeth(bsw, usdt, true);
-  await pancakePlugin.setUseWeth(bsw, usdc, true);
+  await pancakePlugin.setMidToken(bsw, busd, weth);
+  await pancakePlugin.setMidToken(bsw, usdt, weth);
+  await pancakePlugin.setMidToken(bsw, usdc, weth);
   await pancakePlugin.setMidToken(stg, usdt, busd);
 }
