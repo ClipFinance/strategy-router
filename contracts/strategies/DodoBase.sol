@@ -102,7 +102,7 @@ contract DodoBase is
                 lpAmountToWithdraw = stakedLpBalance;
             farm.withdraw(address(lpToken), lpAmountToWithdraw);
 
-            uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw);
+            uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw, false);
             _withdrawFromDodoLp(receiveAmount);
             _sellDodo();
 
@@ -131,7 +131,8 @@ contract DodoBase is
         return
             currentBal +
             _getAmountFromLpAmount(
-                farm.getUserLpBalance(address(lpToken), address(this))
+                farm.getUserLpBalance(address(lpToken), address(this)),
+                true
             );
     }
 
@@ -220,7 +221,7 @@ contract DodoBase is
             );
     }
 
-    function _getAmountFromLpAmount(uint256 lpAmount)
+    function _getAmountFromLpAmount(uint256 lpAmount, bool subtractPenalty)
         internal
         view
         returns (uint256)
@@ -234,6 +235,9 @@ contract DodoBase is
             ? pool.getWithdrawBasePenalty(amount)
             : pool.getWithdrawQuotePenalty(amount);
 
-        return amount - penalty;
+        if(subtractPenalty)
+            return amount - penalty;
+
+        return amount;
     }
 }
