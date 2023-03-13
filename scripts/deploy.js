@@ -92,13 +92,13 @@ async function main() {
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
-  StrategyFactory = await ethers.getContractFactory("StargateBusd")
-  stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+  StrategyFactory = await ethers.getContractFactory("StargateUsdt")
+  stargateUsdtStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
     constructorArgs: [router.address],
   });
-  console.log("stargateBusdStrategy", stargateBusdStrategy.address);
-  await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
+  console.log("stargateUsdtStrategy", stargateUsdtStrategy.address);
+  await (await stargateUsdtStrategy.transferOwnership(router.address)).wait();
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");

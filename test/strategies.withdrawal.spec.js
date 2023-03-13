@@ -4,7 +4,7 @@ describe("Test strategies", function () {
   let strategies = [
     { name: "BiswapUsdcUsdt", needOracle: true },
     { name: "BiswapBusdUsdt", needOracle: true },
-    { name: "StargateBusd" },
+    { name: "StargateUsdt" },
   ];
 
   for (let i = 0; i < strategies.length; i++) {
