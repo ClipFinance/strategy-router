@@ -32,6 +32,7 @@ describe("Test StargateBase", function () {
   let initialSnapshot;
 
   let parseUsdt;
+  let testUsdtAmount;
 
   const strategyInitialBalance = utils.parseEther("1000000");
 
@@ -56,6 +57,7 @@ describe("Test StargateBase", function () {
     const tokenInfo = await getTokenContract(hre.networkVariables.usdt);
     token = tokenInfo.token;
     parseUsdt = tokenInfo.parseToken;
+    testUsdtAmount = parseUsdt("10000");
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
 
@@ -132,11 +134,9 @@ describe("Test StargateBase", function () {
   });
 
   describe("#deposit", function () {
-    const amount = parseUsdt("10000");
-
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(alice).deposit(amount)
+        stargateStrategy.connect(alice).deposit(testUsdtAmount)
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -144,11 +144,11 @@ describe("Test StargateBase", function () {
     });
 
     it("swap token to LP and deposit to stargate farm", async function () {
-      const lpAmount = await getLpAmountFromAmount(lpToken.address, amount);
-      await stargateStrategy.deposit(amount);
+      const lpAmount = await getLpAmountFromAmount(lpToken.address, testUsdtAmount);
+      await stargateStrategy.deposit(testUsdtAmount);
 
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount)
+        strategyInitialBalance.sub(testUsdtAmount)
       );
 
       expect(await lpToken.balanceOf(stargateStrategy.address)).to.be.equal(0);
@@ -170,10 +170,8 @@ describe("Test StargateBase", function () {
   });
 
   describe("#compound", function () {
-    const amount = parseUsdt("10000");
-
     beforeEach(async () => {
-      await stargateStrategy.deposit(amount);
+      await stargateStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
@@ -213,7 +211,7 @@ describe("Test StargateBase", function () {
 
       // The Underlying token balance should be same after compound.
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount)
+        strategyInitialBalance.sub(testUsdtAmount)
       );
 
       // Mock Exchange contract should received STG reward amount.
@@ -230,10 +228,8 @@ describe("Test StargateBase", function () {
   });
 
   describe("#withdrawAll", function () {
-    const amount = parseUsdt("10000");
-
     beforeEach(async () => {
-      await stargateStrategy.deposit(amount);
+      await stargateStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
@@ -294,15 +290,13 @@ describe("Test StargateBase", function () {
   });
 
   describe("#withdraw", function () {
-    const amount = parseUsdt("10000");
-
     beforeEach(async () => {
-      await stargateStrategy.deposit(amount);
+      await stargateStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        stargateStrategy.connect(alice).withdraw(amount)
+        stargateStrategy.connect(alice).withdraw(testUsdtAmount)
       ).to.be.revertedWithCustomError(
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -321,7 +315,7 @@ describe("Test StargateBase", function () {
 
       // The Underlying token balance should zero
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount).sub(withdrawAmount)
+        strategyInitialBalance.sub(testUsdtAmount).sub(withdrawAmount)
       );
 
       // Should have same staked balance after withdraw
