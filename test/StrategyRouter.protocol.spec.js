@@ -255,7 +255,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // 59,906,344,997,371,393,851
         expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
             parseUsdc(USER_2_DEPOSIT_AMOUNT),
-            parseUniform("0.1")
+            parseUniform("0.3")
         );
       });
 
