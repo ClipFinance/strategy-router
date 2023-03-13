@@ -80,6 +80,7 @@ async function deployDodoStrategy({
   let dodoStrategy = await upgrades.deployProxy(DodoBase, [upgrader], {
     kind: "uups",
     constructorArgs: [router, token, lpToken, dodoToken, pool, farm],
+    unsafeAllow: ['delegatecall']
   });
 
   return dodoStrategy;

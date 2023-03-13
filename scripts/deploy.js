@@ -96,6 +96,7 @@ async function main() {
   dodoUsdt = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
     constructorArgs: [router.address],
+    unsafeAllow: ['delegatecall']
   });
   console.log("dodoUsdt", strategyUsdc.address);
   await (await dodoUsdt.transferOwnership(router.address)).wait();
