@@ -15,7 +15,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
- import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 library StrategyRouterLib {
     error CycleNotClosed();
@@ -313,9 +313,6 @@ library StrategyRouterLib {
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
                 }
             }
-
-            console.log('totalBalanceUniform', totalBalanceUniform);
-            console.log('totalUnallocatedBalanceUniform', totalUnallocatedBalanceUniform);
         }
 
         // all tokens to be allocation to strategies with underflows at Router at the moment

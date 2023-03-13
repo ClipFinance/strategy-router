@@ -36,7 +36,7 @@ async function deployProxy(contractName, initializeArgs = []) {
 
 async function deployProxyIdleStrategy(owner, router, token) {
   const IdleStrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
-  const idleSTrategy = await upgrades.deployProxy(
+  const idleStrategy = await upgrades.deployProxy(
     IdleStrategyFactory,
     [owner.address],
     {
@@ -44,9 +44,9 @@ async function deployProxyIdleStrategy(owner, router, token) {
       constructorArgs: [router.address, token.address],
     }
   );
-  await idleSTrategy.transferOwnership(router.address);
+  await idleStrategy.transferOwnership(router.address);
 
-  return idleSTrategy;
+  return idleStrategy;
 }
 
 async function getBUSD(receiverAddress = null) {

@@ -6,7 +6,8 @@ const { constants } = require('@openzeppelin/test-helpers');
 module.exports = {
   setupTokens, setupCore, deployFakeStrategy,
   setupFakeUnderFulfilledWithdrawalStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
-  setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams, setupRouterParams,
+  setupFakeTokens, setupFakeToken, setupTokensLiquidityOnPancake, setupParamsOnBNB,
+  setupTestParams, setupRouterParams,
   setupFakePrices, setupPancakePlugin,
   setupFakeExchangePlugin, mintFakeToken,
   setupIdleStrategies
@@ -76,6 +77,18 @@ async function setupFakeTokens(router) {
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
+}
+
+async function setupFakeToken(decimals = 18) {
+  // each test token's total supply, minted to owner
+  let totalSupply = (100_000_000).toString();
+
+  let parseToken = (args) => parseUnits(args, decimals);
+  let token = await deploy("MockToken", parseToken(totalSupply), decimals);
+  token.decimalNumber = 18;
+  token.parse = parseToken;
+
+  return token;
 }
 
 async function setupIdleStrategies(owner, router, ...tokens) {
