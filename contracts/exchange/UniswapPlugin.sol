@@ -26,11 +26,10 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     }
 
     function setMediatorTokenForPair(
-        address _mediatorToken, // set zero address to disable mediatorToken for the pair of tokenA and tokenB
-        address tokenA,
-        address tokenB
+        address _mediatorToken, // set zero address to disable mediatorToken for a pair
+        address[2] calldata pair
     ) external onlyOwner {
-        (address token0, address token1) = sortTokens(tokenA, tokenB);
+        (address token0, address token1) = sortTokens(pair[0], pair[1]);
         mediatorTokens[token0][token1] = _mediatorToken;
     }
 

@@ -212,9 +212,9 @@ async function setupTestParams(
 
     // pancake plugin params
     await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-    // await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, busd);
-    // await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, usdt);
-    // await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, usdc);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
   }
 }
 
@@ -280,7 +280,7 @@ async function setupPluginsOnBNB(exchange) {
 
   // pancake plugin params
   await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, busd);
-  await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, usdt);
-  await pancakePlugin.setMediatorTokenForPair(wbnb, bsw, usdc);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
 }
