@@ -5,6 +5,7 @@ describe("Test strategies", function () {
     { name: "BiswapUsdcUsdt", needOracle: true },
     { name: "BiswapBusdUsdt", needOracle: true },
     { name: "StargateUsdt" },
+    { name: "StargateBusd" },
   ];
 
   for (let i = 0; i < strategies.length; i++) {

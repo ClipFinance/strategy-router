@@ -100,6 +100,15 @@ async function main() {
   console.log("stargateUsdtStrategy", stargateUsdtStrategy.address);
   await (await stargateUsdtStrategy.transferOwnership(router.address)).wait();
 
+   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+   StrategyFactory = await ethers.getContractFactory("StargateBusd")
+   stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+     kind: 'uups',
+     constructorArgs: [router.address],
+   });
+   console.log("stargateBusdStrategy", stargateBusdStrategy.address);
+   await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
+
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");
   let oracleTokens = [busd.address, usdc.address];
@@ -147,6 +156,7 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
       hre.networkVariables.stg,
+      hre.networkVariables.stg,
     ],
     [
       hre.networkVariables.usdt,
@@ -156,12 +166,14 @@ async function main() {
       hre.networkVariables.usdt,
       hre.networkVariables.usdc,
       hre.networkVariables.usdt,
+      hre.networkVariables.busd,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },

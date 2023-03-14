@@ -454,7 +454,6 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 }
 
 async function setupPluginsOnBNB(exchange) {
-  let weth = hre.networkVariables.weth;
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
@@ -467,12 +466,13 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw, stg],
-    [usdt, usdc, usdt, busd, usdt, usdc, usdt],
+    [busd, busd, usdc, bsw, bsw, bsw, stg, stg],
+    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
