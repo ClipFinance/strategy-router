@@ -10,10 +10,14 @@ contract MockStrategy is Ownable, IStrategy {
     address private _depositToken;
     uint256 private balance;
     uint256 private mockProfitPercent;
+    uint256 private hardcapTarget;
+    uint8 private hardcapDeviationBp;
 
-    constructor(address depositToken_, uint256 _mockProfitPercent) {
+    constructor(address depositToken_, uint256 _mockProfitPercent, uint256 _hardcapTarget, uint8 _hardcapDeviationBp) {
         _depositToken = depositToken_;
         mockProfitPercent = _mockProfitPercent;
+        hardcapTarget = _hardcapTarget;
+        hardcapDeviationBp = _hardcapDeviationBp;
     }
 
     function depositToken() external view override returns (address) {
@@ -43,7 +47,7 @@ contract MockStrategy is Ownable, IStrategy {
         balance = balance * (1000000 + mockProfitPercent) / 1000000;
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() public view override returns (uint256) {
         return balance;
     }
 
@@ -52,5 +56,34 @@ contract MockStrategy is Ownable, IStrategy {
             amountWithdrawn = balance;
             ERC20(_depositToken).transfer(msg.sender, amountWithdrawn);
         }
+    }
+
+    /// @notice Get hardcap target value
+    function getHardcardTarget() view public override {
+        return hardcapTarget;
+    }
+
+    /// @notice Set allowed deviation from target value
+    function getHardcardDeviationBp() view public override {
+        return hardcapDeviationBp;
+    }
+
+    function getCapacityData() view public override returns (bool limitReached, int256 underflow, int256 overflow) {
+        uint256 strategyAllocatedTokens = totalTokens();
+        uint256 hardcapTarget = getHardcardTarget();
+        uint256 hardcapDeviationBp = getHardcardDeviationBp();
+
+        uint256 lowerBound = hardcapTarget - (hardcapTarget * hardcapDeviationBp / 10000);
+        uint256 upperBound = hardcapTarget + (hardcapTarget * hardcapDeviationBp / 10000);
+
+        if (strategyAllocatedTokens < lowerBound) {
+            return (false, hardcapTarget - strategyAllocatedTokens, 0);
+        }
+
+        if (strategyAllocatedTokens > upperBound) {
+            return (true, 0, strategyAllocatedTokens - hardcapTarget);
+        }
+
+        return (true, 0, 0);
     }
 }

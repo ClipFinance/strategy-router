@@ -19,8 +19,20 @@ interface IStrategy {
     function compound() external;
 
     /// @notice Approximated amount of token on the strategy.
-    function totalTokens() external view returns (uint256);
+    function totalTokens() public view returns (uint256);
 
     /// @notice Withdraw all tokens from strategy.
     function withdrawAll() external returns (uint256 amountWithdrawn);
+
+    /// @notice Set hardcap target value
+    function setHardcardTarget(uint256 _hardcapTarget) external;
+
+    /// @notice Get hardcap target value
+    function getHardcardTarget() view public;
+
+    /// @notice Set allowed deviation from target value
+    function getHardcardDeviationBp() view public;
+
+    /// @notice Get data on satisfying hard limits
+    function getCapacityData() view public returns (bool limitReached, uint256 underflow, uint256 overflow);
 }

@@ -36,6 +36,11 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
 
+    uint256 private hardcapTarget;
+    uint8 private hardcapDeviationBp;
+
+    error HardcapLimitExceeded();
+
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
         _;
@@ -61,10 +66,12 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         _disableInitializers();
     }
 
-    function initialize(address _upgrader) external initializer {
+    function initialize(address _upgrader, uint256 _hardcapTarget, uint8 _hardcapDeviationBp) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
+        hardcapTarget = _hardcapTarget;
+        hardcapDeviationBp = _hardcapDeviationBp;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {}
@@ -74,6 +81,18 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     }
 
     function deposit(uint256 amount) external override onlyOwner {
+        (bool limitReached, uint256 underflow, ) = getCapacityData();
+        // We do not want to get deposit into a strategy out of capacity
+        // If a deposit is big there could be significant risks
+        // Revert if the deposit exceeds capacity
+        // External code should check that but this check adds additional level of safety
+        // TODO Consider different handling to override depositAmount to capacity if depositAmount > capacity
+        // TODO and return excessive funds back to StrategyRouter
+        // TODO though it would require much bigger changes also in StrategyRouter to take into account returned funds
+        if (limitReached || amount > underflow) {
+            revert HardcapLimitExceeded();
+        }
+
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
@@ -171,7 +190,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         }
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() public view override returns (uint256) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
         uint256 _totalSupply = lpToken.totalSupply();
@@ -264,5 +283,34 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
         uint256 amountB = (tokenAmount * halfWithFee) / 1e18;
         return amountB;
+    }
+
+    /// @notice Get hardcap target value
+    function getHardcardTarget() view public override {
+        return hardcapTarget;
+    }
+
+    /// @notice Set allowed deviation from target value
+    function getHardcardDeviationBp() view public override {
+        return hardcapDeviationBp;
+    }
+
+    function getCapacityData() view public override returns (bool limitReached, int256 underflow, int256 overflow) {
+        uint256 strategyAllocatedTokens = totalTokens();
+        uint256 hardcapTarget = getHardcardTarget();
+        uint256 hardcapDeviationBp = getHardcardDeviationBp();
+
+        uint256 lowerBound = hardcapTarget - (hardcapTarget * hardcapDeviationBp / 10000);
+        uint256 upperBound = hardcapTarget + (hardcapTarget * hardcapDeviationBp / 10000);
+
+        if (strategyAllocatedTokens < lowerBound) {
+            return (false, hardcapTarget - strategyAllocatedTokens, 0);
+        }
+
+        if (strategyAllocatedTokens > upperBound) {
+            return (true, 0, strategyAllocatedTokens - hardcapTarget);
+        }
+
+        return (true, 0, 0);
     }
 }
