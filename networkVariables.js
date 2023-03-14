@@ -1,7 +1,6 @@
 function bnbChain() {
 
   const bnb = {
-    weth: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
 
     busd: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
     usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
@@ -44,7 +43,6 @@ function bnbChain() {
 function bnbTestChain() {
 
   const bnb = {
-    weth: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
     // https://testnet.bscscan.com/address/0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7
     busd: "0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7",
     // https://testnet.bscscan.com/address/0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D

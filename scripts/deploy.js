@@ -109,26 +109,9 @@ async function main() {
   // pancake plugin params
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setMidToken(
-    hre.networkVariables.bsw,
-    hre.networkVariables.busd,
-    hre.networkVariables.weth
-  )).wait();
-  await (await pancakePlugin.setMidToken(
-    hre.networkVariables.bsw,
-    hre.networkVariables.usdt,
-    hre.networkVariables.weth
-  )).wait();
-  await (await pancakePlugin.setMidToken(
-    hre.networkVariables.bsw,
-    hre.networkVariables.usdc,
-    hre.networkVariables.weth
-  )).wait();
-  await (await pancakePlugin.setMidToken(
-    hre.networkVariables.stg,
-    hre.networkVariables.usdt,
-    hre.networkVariables.busd
-  )).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true)).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true)).wait();
+  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true)).wait();
 
   // acryptos plugin params
   console.log("acryptos plugin setup...");
