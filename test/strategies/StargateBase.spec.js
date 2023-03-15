@@ -229,6 +229,7 @@ describe("Test StargateBase", function () {
 
   describe("#withdrawAll", function () {
     beforeEach(async () => {
+      await stargateStrategy.compound();
       await stargateStrategy.deposit(testUsdtAmount);
     });
 
@@ -286,11 +287,20 @@ describe("Test StargateBase", function () {
       expect(await token.balanceOf(owner.address)).to.be.greaterThan(
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
+
+      // expect error when nothing to withdraw
+      await expect(
+        stargateStrategy.withdrawAll()
+      ).to.be.revertedWithCustomError(
+        stargateStrategy,
+        "NothingToWithdraw"
+      );
     });
   });
 
   describe("#withdraw", function () {
     beforeEach(async () => {
+      await stargateStrategy.compound();
       await stargateStrategy.deposit(testUsdtAmount);
     });
 

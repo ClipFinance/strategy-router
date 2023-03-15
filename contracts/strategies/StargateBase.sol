@@ -18,6 +18,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     error CallerUpgrader();
     error InvalidInput();
+    error NothingToWithdraw();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
@@ -149,7 +150,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         amountWithdrawn = token.balanceOf(address(this));
         if (amountWithdrawn != 0) {
             token.safeTransfer(msg.sender, amountWithdrawn);
-        }
+        } else revert NothingToWithdraw();
     }
 
     function _deposit(uint256 amount) internal {
