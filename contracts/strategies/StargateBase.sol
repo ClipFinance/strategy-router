@@ -9,6 +9,8 @@ import "../interfaces/IStargateFarm.sol";
 import "../interfaces/IStargatePool.sol";
 import "../StrategyRouter.sol";
 
+// import "hardhat/console.sol";
+
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     using SafeERC20 for IERC20;
@@ -154,6 +156,12 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         if (amount == 0 || _amountLDtoSD(amount) == 0) return;
         token.safeApprove(address(stargateRouter), amount);
         stargateRouter.addLiquidity(poolId, amount, address(this));
+
+        // remove dust allowance
+        uint256 tokenAllowance = token.allowance(address(this), address(stargateRouter));
+        if (tokenAllowance > 0) {
+            token.safeDecreaseAllowance(address(stargateRouter), tokenAllowance);
+        }
 
         uint256 lpBalance = lpToken.balanceOf(address(this));
 
