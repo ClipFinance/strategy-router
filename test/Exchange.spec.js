@@ -187,7 +187,7 @@ describe("Test Exchange", function () {
             // do swap
             let received = await exchangeNonOwner.callStatic.swap(0, usdc.address, busd.address, owner.address);
             expect(received).to.be.equal(swapReturns);
-            
+
             // exceed limit input amount
             await usdc.transfer(exchangeNonOwner.address, parseUsdc("1.1"));
             received = await exchangeNonOwner.callStatic.swap(parseUsdc("1.1"), usdc.address, busd.address, owner.address);
@@ -216,12 +216,34 @@ describe("Test Exchange", function () {
             // do swap
             let received = await exchangeNonOwner.getAmountOut(0, usdc.address, busd.address);
             expect(received).to.be.equal(amountOut);
-            
+
             // exceed limit input amount
             received = await exchangeNonOwner.getAmountOut(parseUsdc("1.1"), usdc.address, busd.address);
             expect(received).to.be.equal(amountOut2);
         });
     });
+
+    describe("Uniswap Plugin", function () {
+        it("should set correct mediator token for a pair", async function () {
+
+            // get uniswap plugin for BUSD and USDT pair
+            const uniswapPluginAddress = await exchange.getPlugin(0, busd.address, usdt.address);
+            const uniswapPlugin = await ethers.getContractAt("UniswapPlugin", uniswapPluginAddress);
+
+            // expect that mediatorToken equal to the zero address
+            const mediatorTokenBefore = await uniswapPlugin.getMediatorTokenOfPair(busd.address, usdt.address);
+            expect(mediatorTokenBefore).to.be.equal(ethers.constants.AddressZero);
+
+            // set USDC as MediatorToken for BUSD and USDT pair
+            await uniswapPlugin.setMediatorTokenForPair(usdc.address, [busd.address, usdt.address]);
+
+            // expect that mediatorToken equal to the usdc address
+            const mediatorTokenAfter = await uniswapPlugin.getMediatorTokenOfPair(busd.address, usdt.address);
+            expect(mediatorTokenAfter).to.be.equal(usdc.address);
+
+        });
+    });
+
     async function getMockPlugin() {
         const abi = (await artifacts.readArtifact("IExchangePlugin")).abi;
         const mock = await smock.fake(abi);
