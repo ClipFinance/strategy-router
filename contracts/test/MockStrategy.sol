@@ -5,19 +5,25 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "../interfaces/IStrategy.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
+import "../strategies/AbstractBaseStrategyWithHardcap.sol";
 
-contract MockStrategy is Ownable, IStrategy {
+contract MockStrategy is Ownable, IStrategy, AbstractBaseStrategyWithHardcap {
     address private _depositToken;
     uint256 private balance;
     uint256 private mockProfitPercent;
     uint256 private hardcapTarget;
     uint8 private hardcapDeviationBp;
 
-    constructor(address depositToken_, uint256 _mockProfitPercent, uint256 _hardcapTarget, uint8 _hardcapDeviationBp) {
+    constructor(
+        address depositToken_,
+        uint256 _mockProfitPercent,
+        uint256 _hardcapTargetInToken,
+        uint8 _hardcapDeviationInBps
+    ) {
         _depositToken = depositToken_;
         mockProfitPercent = _mockProfitPercent;
-        hardcapTarget = _hardcapTarget;
-        hardcapDeviationBp = _hardcapDeviationBp;
+        hardcapTargetInToken = _hardcapTargetInToken;
+        hardcapDeviationInBps = _hardcapDeviationInBps;
     }
 
     function depositToken() external view override returns (address) {

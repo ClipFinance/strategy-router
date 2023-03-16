@@ -28,10 +28,10 @@ interface IStrategy {
     function setHardcardTarget(uint256 _hardcapTarget) external;
 
     /// @notice Get hardcap target value
-    function getHardcardTarget() view public;
+    function getHardcardTargetInToken() view public;
 
     /// @notice Set allowed deviation from target value
-    function getHardcardDeviationBp() view public;
+    function getHardcardDeviationInBps() view public;
 
     /// @notice Get data on satisfying hard limits
     function getCapacityData() view public returns (bool limitReached, uint256 underflow, uint256 overflow);

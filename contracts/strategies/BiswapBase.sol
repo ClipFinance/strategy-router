@@ -9,13 +9,14 @@ import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
 
 import "hardhat/console.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
 // their code on github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy {
+contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy, AbstractBaseStrategyWithHardcap {
     error CallerUpgrader();
 
     address internal upgrader;
@@ -35,9 +36,6 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     uint256 private immutable LEFTOVER_THRESHOLD_TOKEN_B;
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
-
-    uint256 private hardcapTarget;
-    uint8 private hardcapDeviationBp;
 
     error HardcapLimitExceeded();
 
@@ -66,12 +64,14 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         _disableInitializers();
     }
 
-    function initialize(address _upgrader, uint256 _hardcapTarget, uint8 _hardcapDeviationBp) external initializer {
-        __Ownable_init();
+    function initialize(address _upgrader, uint256 _hardcapTargetInToken, uint8 _hardcapDeviationInBps)
+        external
+        override
+        initializer
+    {
+        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
-        hardcapTarget = _hardcapTarget;
-        hardcapDeviationBp = _hardcapDeviationBp;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {}
@@ -80,19 +80,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return address(tokenA);
     }
 
-    function deposit(uint256 amount) external override onlyOwner {
-        (bool limitReached, uint256 underflow, ) = getCapacityData();
-        // We do not want to get deposit into a strategy out of capacity
-        // If a deposit is big there could be significant risks
-        // Revert if the deposit exceeds capacity
-        // External code should check that but this check adds additional level of safety
-        // TODO Consider different handling to override depositAmount to capacity if depositAmount > capacity
-        // TODO and return excessive funds back to StrategyRouter
-        // TODO though it would require much bigger changes also in StrategyRouter to take into account returned funds
-        if (limitReached || amount > underflow) {
-            revert HardcapLimitExceeded();
-        }
-
+    function _deposit(uint256 amount) external override onlyOwner {
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
