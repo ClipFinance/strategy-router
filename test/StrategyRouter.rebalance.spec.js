@@ -376,7 +376,7 @@ describe("Test rebalance functions", function () {
     assert(Number(await router.getStrategiesCount()) == weights.length);
     let balances = Array.from(data);
     let totalDeposit = BigNumber.from(0);
-    let strategies = await router.getStrategies();
+    let [strategies] = await router.getStrategies();
 
     for (let i = 0; i < balances.length; i++) {
       let uniformAmount = await toUniform(balances[i], strategies[i].depositToken);
@@ -447,7 +447,7 @@ describe("Test rebalance functions", function () {
   }
 
   async function getStrategiesBalances() {
-    let strategies = await router.getStrategies();
+    let [strategies] = await router.getStrategies();
     let total = BigNumber.from(0);
     let balances = [];
     for (let i = 0; i < strategies.length; i++) {

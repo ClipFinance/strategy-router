@@ -21,7 +21,7 @@ async function expectStrategiesHoldCorrectBalances(depositAmount, ...strategies)
     .from(depositAmount)
     .mul(BigNumber.from(10).pow(18));
 
-  const totalStrategyWeight = strategies
+  const allStrategiesWeightSum = strategies
       .reduce((totalWeight, strategy) => totalWeight + strategy.weight, 0)
   ;
   for (const strategyIndex of strategies.keys()) {
@@ -29,7 +29,7 @@ async function expectStrategiesHoldCorrectBalances(depositAmount, ...strategies)
 
     const expectedBalanceUniform = totalValueUsd
       .mul(strategy.weight)
-      .div(totalStrategyWeight);
+      .div(allStrategiesWeightSum);
     const expectedBalance = expectedBalanceUniform
       .div(BigNumber.from(10).pow(18 - strategy.token.decimalNumber));
 
