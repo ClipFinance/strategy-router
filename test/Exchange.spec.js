@@ -230,16 +230,23 @@ describe("Test Exchange", function () {
             const uniswapPluginAddress = await exchange.getPlugin(0, busd.address, usdt.address);
             const uniswapPlugin = await ethers.getContractAt("UniswapPlugin", uniswapPluginAddress);
 
-            // expect that mediatorToken equal to the zero address
-            const mediatorTokenBefore = await uniswapPlugin.getMediatorTokenOfPair(busd.address, usdt.address);
-            expect(mediatorTokenBefore).to.be.equal(ethers.constants.AddressZero);
+            // expect that path before added mediator token only to path with BUSD and USDT tokens
+            const pathBeforeAddedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
+            expect(pathBeforeAddedMediatorToken).to.eql([busd.address, usdt.address]);
 
             // set USDC as MediatorToken for BUSD and USDT pair
             await uniswapPlugin.setMediatorTokenForPair(usdc.address, [busd.address, usdt.address]);
 
-            // expect that mediatorToken equal to the usdc address
-            const mediatorTokenAfter = await uniswapPlugin.getMediatorTokenOfPair(busd.address, usdt.address);
-            expect(mediatorTokenAfter).to.be.equal(usdc.address);
+            // expect that path after added mediator token equal to the correct path
+            const pathAfterAddedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
+            expect(pathAfterAddedMediatorToken).to.eql([busd.address, usdc.address, usdt.address]);
+
+            // remove USDC MediatorToken from BUSD and USDT pair
+            await uniswapPlugin.setMediatorTokenForPair(ethers.constants.AddressZero, [busd.address, usdt.address]);
+
+            // expect that path after removed mediator token equal to the correct path
+            const pathAfterRemovedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
+            expect(pathAfterRemovedMediatorToken).to.eql([busd.address, usdt.address]);
 
         });
     });
