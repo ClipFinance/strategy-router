@@ -9,8 +9,6 @@ import "../interfaces/IExchangePlugin.sol";
 import "../StrategyRouter.sol";
 
 contract UniswapPlugin is IExchangePlugin, Ownable {
-    error RoutedSwapFailed();
-    error RouteNotFound();
 
     // whether swap for the pair should be done through some ERC20-like token as intermediary
     mapping(address => mapping(address => address)) public mediatorTokens;
@@ -94,7 +92,6 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     }
 
     function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
-        require(tokenA != tokenB, "UniswapPlugin: identical addresses");
         (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
     }
 }

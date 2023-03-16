@@ -1,8 +1,8 @@
-const { expect, assert } = require("chai");
-const { parseEther, parseUnits } = require("ethers/lib/utils");
+const { expect } = require("chai");
+const { parseUnits } = require("ethers/lib/utils");
 const { ethers, artifacts } = require("hardhat");
-const { provider, deploy, MaxUint256 } = require("./utils");
-const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
+const { provider } = require("../utils");
+const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("../shared/commonSetup");
 const { BigNumber } = require("ethers");
 const { smock } = require("@defi-wonderland/smock");
 
