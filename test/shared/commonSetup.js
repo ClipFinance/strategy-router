@@ -466,12 +466,14 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw, busd],
-    [usdt, usdc, usdt, busd, usdt, usdc, stg],
+    [busd, busd, usdc, bsw, bsw, bsw, stg, stg],
+    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
