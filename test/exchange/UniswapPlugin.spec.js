@@ -92,9 +92,7 @@ describe("UniswapPlugin", function () {
 
       // make approve and perform swap
       await usdc.transfer(uniswapPlugin.address, usdcAmoutIn);
-      await uniswapPlugin.swap(usdcAmoutIn, usdc.address, busd.address, nonOwner.address);
-
-      const busdAmountReceived = await busd.balanceOf(nonOwner.address);
+      const busdAmountReceived = await uniswapPlugin.callStatic.swap(usdcAmoutIn, usdc.address, busd.address, nonOwner.address);
 
       // expect that busdAmountReceived closely to busdAmountOut with slippage 0.5%
       expect(busdAmountReceived).to.be.closeTo(busdAmountOut, parseBusd("0.05"));
