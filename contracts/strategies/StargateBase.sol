@@ -148,9 +148,9 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         _sellReward();
 
         amountWithdrawn = token.balanceOf(address(this));
-        if (amountWithdrawn != 0) {
-            token.safeTransfer(msg.sender, amountWithdrawn);
-        } else revert NothingToWithdraw();
+        if (amountWithdrawn == 0) revert NothingToWithdraw();
+
+        token.safeTransfer(msg.sender, amountWithdrawn);
     }
 
     function _deposit(uint256 amount) internal {
