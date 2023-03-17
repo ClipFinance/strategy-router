@@ -54,6 +54,10 @@ describe("UniswapPlugin", function () {
       await expect(
         uniswapPlugin.setMediatorTokenForPair(busd.address, [busd.address, usdt.address])
       ).to.be.revertedWithCustomError(uniswapPlugin, "CanNotSetIdenticalMediatorToken");
+
+      await expect(
+        uniswapPlugin.setMediatorTokenForPair(usdt.address, [busd.address, usdt.address])
+      ).to.be.revertedWithCustomError(uniswapPlugin, "CanNotSetIdenticalMediatorToken");
     });
 
     it("should be able to set mediator tokens for a pair", async function () {
@@ -81,10 +85,10 @@ describe("UniswapPlugin", function () {
   });
 
   describe("swap", function () {
-    it("should revert with 0 amountIn", async function () {
-      await expect(
-        uniswapPlugin.swap(0, usdc.address, busd.address, nonOwner.address)
-      ).to.be.revertedWithCustomError(uniswapPlugin, "InsufficientInputAmount");
+    it("should return 0 if amountIn is 0", async function () {
+      expect(
+        await uniswapPlugin.callStatic.swap(0, usdc.address, busd.address, nonOwner.address)
+      ).to.be.equal(0);
     });
 
     it("should swap correct received amount closely to predicted amount out without mediator token", async function () {
@@ -133,10 +137,10 @@ describe("UniswapPlugin", function () {
 
   describe("getAmountOut", function () {
 
-    it("should revert with 0 amountIn", async function () {
-      await expect(
-        uniswapPlugin.getAmountOut(0, usdc.address, busd.address)
-      ).to.be.revertedWithCustomError(uniswapPlugin, "InsufficientInputAmount");
+    it("should return 0 if amountIn is 0", async function () {
+      expect(
+        await uniswapPlugin.getAmountOut(0, usdc.address, busd.address)
+      ).to.be.equal(0);
     });
 
     it("should get closely amount out of swap without mediator token", async function () {
