@@ -226,6 +226,25 @@ describe("Test StargateBase", function () {
     });
   });
 
+  describe("#totalTokens", function () {
+    beforeEach(async () => {
+      await stargateStrategy.deposit(testUsdtAmount);
+    });
+
+    it("should return correct amount of the locked and deposited tokens", async function () {
+      const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
+
+      const tokenBalance = await token.balanceOf(stargateStrategy.address);
+      const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
+
+      expect(
+        await stargateStrategy.totalTokens()
+      ).to.be.equal(totalStrategyTokens);
+    });
+
+  });
+
   describe("#withdrawAll", function () {
     beforeEach(async () => {
       await stargateStrategy.compound();
