@@ -1,12 +1,15 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { parseUnits } = require("ethers/lib/utils");
+const { setupFakeTokens, setupTokensLiquidityOnPancake } = require("../shared/commonSetup");
 
 describe("UniswapPlugin", function () {
   let owner, nonOwner, uniswapPlugin, uniswapRouter;
+
+  // mock tokens with different decimals
   let usdc, usdt, busd;
-  // helper functions to parse amounts of tokens
-  let parseUsdc, parseUsdt, parseBusd;
+  // helper functions to parse amounts of mock tokens
+  let parseUsdc, parseBusd, parseUsdt;
 
   before(async function () {
 
@@ -15,32 +18,19 @@ describe("UniswapPlugin", function () {
     // prepare contracts and tokens
     uniswapRouter = await ethers.getContractAt("IUniswapV2Router02", hre.networkVariables.uniswapRouter);
 
-    usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
-    const usdcDecimals = await usdc.decimals();
-    parseUsdc = (args) => parseUnits(args, usdcDecimals);
+    // deploy mock tokens
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
 
-    usdt = await ethers.getContractAt("ERC20", hre.networkVariables.usdt);
-    const usdtDecimals = await usdt.decimals();
-    parseUsdt = (args) => parseUnits(args, usdtDecimals);
-
-    busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
-    const busdDecimals = await busd.decimals();
-    parseBusd = (args) => parseUnits(args, busdDecimals);
+    // setup fake token liquidity
+    let amount = (1_000_000).toString();
+    await setupTokensLiquidityOnPancake(usdc, busd, amount);
+    await setupTokensLiquidityOnPancake(busd, usdt, amount);
+    await setupTokensLiquidityOnPancake(usdc, usdt, amount);
 
     // deploy the UniswapPlugin contract
     const UniswapPlugin = await ethers.getContractFactory("UniswapPlugin");
     uniswapPlugin = await UniswapPlugin.deploy();
     await uniswapPlugin.deployed();
-
-    // swap USDC tokens to owner
-    const timestamp = (await ethers.provider.getBlock()).timestamp + 1;
-    await uniswapRouter.swapExactETHForTokens(
-      parseUsdc("1000"),
-      [hre.networkVariables.wbnb, usdc.address],
-      owner.address,
-      timestamp,
-      { value: parseUnits("5") }
-    );
 
   });
 

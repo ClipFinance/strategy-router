@@ -223,34 +223,6 @@ describe("Test Exchange", function () {
         });
     });
 
-    describe("Uniswap Plugin", function () {
-        it("should set correct mediator token for a pair", async function () {
-
-            // get uniswap plugin for BUSD and USDT pair
-            const uniswapPluginAddress = await exchange.getPlugin(0, busd.address, usdt.address);
-            const uniswapPlugin = await ethers.getContractAt("UniswapPlugin", uniswapPluginAddress);
-
-            // expect that path before added mediator token only to path with BUSD and USDT tokens
-            const pathBeforeAddedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
-            expect(pathBeforeAddedMediatorToken).to.eql([busd.address, usdt.address]);
-
-            // set USDC as MediatorToken for BUSD and USDT pair
-            await uniswapPlugin.setMediatorTokenForPair(usdc.address, [busd.address, usdt.address]);
-
-            // expect that path after added mediator token equal to the correct path
-            const pathAfterAddedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
-            expect(pathAfterAddedMediatorToken).to.eql([busd.address, usdc.address, usdt.address]);
-
-            // remove USDC MediatorToken from BUSD and USDT pair
-            await uniswapPlugin.setMediatorTokenForPair(ethers.constants.AddressZero, [busd.address, usdt.address]);
-
-            // expect that path after removed mediator token equal to the correct path
-            const pathAfterRemovedMediatorToken = await uniswapPlugin.getPathForTokenPair(busd.address, usdt.address);
-            expect(pathAfterRemovedMediatorToken).to.eql([busd.address, usdt.address]);
-
-        });
-    });
-
     async function getMockPlugin() {
         const abi = (await artifacts.readArtifact("IExchangePlugin")).abi;
         const mock = await smock.fake(abi);
