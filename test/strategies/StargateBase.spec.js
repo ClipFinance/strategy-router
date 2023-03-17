@@ -33,8 +33,6 @@ describe("Test StargateBase", function () {
   let parseUsdt;
   let testUsdtAmount;
 
-  const strategyInitialBalance = utils.parseEther("1000000");
-
   before(async function () {
     [owner, alice] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
@@ -99,7 +97,6 @@ describe("Test StargateBase", function () {
       upgrader: owner.address,
     });
 
-    await token.transfer(stargateStrategy.address, strategyInitialBalance);
   });
 
   beforeEach(async function () {
@@ -144,12 +141,11 @@ describe("Test StargateBase", function () {
 
     it("swap token to LP and deposit to stargate farm", async function () {
       const lpAmount = await getLpAmountFromAmount(lpToken.address, testUsdtAmount);
+
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
       await stargateStrategy.deposit(testUsdtAmount);
 
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(testUsdtAmount)
-      );
-
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
       expect(await lpToken.balanceOf(stargateStrategy.address)).to.be.equal(0);
 
       expect(
@@ -162,14 +158,13 @@ describe("Test StargateBase", function () {
     it("do not revert when amount is 0", async function () {
       await stargateStrategy.deposit(0);
 
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance
-      );
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
     });
   });
 
   describe("#compound", function () {
     beforeEach(async () => {
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
       await stargateStrategy.deposit(testUsdtAmount);
     });
 
@@ -208,10 +203,8 @@ describe("Test StargateBase", function () {
 
       await stargateStrategy.compound();
 
-      // The Underlying token balance should be same after compound.
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(testUsdtAmount)
-      );
+      // The Underlying token balance should be zero after compound.
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
 
       // Mock Exchange contract should received STG reward amount.
       expect(await stg.balanceOf(mockExchange.address)).to.be.greaterThan(
@@ -228,6 +221,7 @@ describe("Test StargateBase", function () {
 
   describe("#totalTokens", function () {
     beforeEach(async () => {
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
       await stargateStrategy.deposit(testUsdtAmount);
     });
 
@@ -245,77 +239,10 @@ describe("Test StargateBase", function () {
 
   });
 
-  describe("#withdrawAll", function () {
-    beforeEach(async () => {
-      await stargateStrategy.compound();
-      await stargateStrategy.deposit(testUsdtAmount);
-    });
-
-    it("revert if msg.sender is not owner", async function () {
-      await expect(
-        stargateStrategy.connect(alice).withdrawAll()
-      ).to.be.revertedWithCustomError(
-        stargateStrategy,
-        "Ownable__CallerIsNotTheOwner"
-      );
-    });
-
-    it("Withdraw all tokens", async function () {
-      const stakedLpAmount = (
-        await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
-      )[0];
-
-      const exchangedTokenAmount = parseUsdt("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
-      await mockExchange.setAmountReceived(exchangedTokenAmount);
-
-      const currnetOwnerBal = await token.balanceOf(owner.address);
-
-      await skipBlocks(10);
-
-      const stgRewardAmount = await stargateFarm.pendingStargate(
-        USDT_LP_FARM_ID,
-        stargateStrategy.address
-      );
-
-      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
-
-      await stargateStrategy.withdrawAll();
-
-      // The Underlying token balance should zero
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
-      // STG token balance should zero
-      expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
-
-      // Mock Exchange contract should received STG reward amount.
-      expect(await stg.balanceOf(mockExchange.address)).to.be.greaterThan(
-        stgRewardAmount
-      );
-
-      expect(
-        (
-          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
-        )[0]
-      ).to.be.equal(0);
-
-      // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.greaterThan(
-        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
-      );
-
-      // expect error when nothing to withdraw
-      await expect(
-        stargateStrategy.withdrawAll()
-      ).to.be.revertedWithCustomError(
-        stargateStrategy,
-        "NothingToWithdraw"
-      );
-    });
-  });
-
   describe("#withdraw", function () {
     beforeEach(async () => {
       await stargateStrategy.compound();
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
       await stargateStrategy.deposit(testUsdtAmount);
     });
 
@@ -330,6 +257,8 @@ describe("Test StargateBase", function () {
 
     it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
       const withdrawAmount = parseUsdt("100");
+
+      await token.transfer(stargateStrategy.address, withdrawAmount);
       const currnetOwnerBal = await token.balanceOf(owner.address);
 
       const stakedLpAmount = (
@@ -338,10 +267,8 @@ describe("Test StargateBase", function () {
 
       await stargateStrategy.withdraw(withdrawAmount);
 
-      // The Underlying token balance should zero
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(testUsdtAmount).sub(withdrawAmount)
-      );
+      // The Underlying token balance should be zero
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
 
       // Should have same staked balance after withdraw
       expect(
@@ -390,7 +317,7 @@ describe("Test StargateBase", function () {
 
       await stargateStrategy.withdraw(withdrawAmount);
 
-      // The Underlying token balance should zero
+      // The Underlying token balance should be zero
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
       // STG token balance should zero
       expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
@@ -418,7 +345,7 @@ describe("Test StargateBase", function () {
       await token.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const ownerBalanceBefore = await token.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -427,11 +354,9 @@ describe("Test StargateBase", function () {
         stargateStrategy.address
       );
 
-      const stakedTokenAmount = await await lpToken.amountLPtoLD(stakedLpAmount);
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
-      await stargateStrategy.withdraw(
-        strategyInitialBalance.add(parseUsdt("1000"))
-      );
+      await stargateStrategy.withdraw(stakedTokenAmount.add(parseUsdt("1000")));
 
       // The Underlying token balance should zero
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
@@ -449,9 +374,79 @@ describe("Test StargateBase", function () {
         )[0]
       ).to.be.equal(0);
 
+      const ownerBalanceAfter = await token.balanceOf(owner.address);
       // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.greaterThanOrEqual(
+      expect(ownerBalanceAfter).to.be.greaterThanOrEqual(
+        ownerBalanceBefore.add(stakedTokenAmount).add(exchangedTokenAmount)
+      );
+    });
+  });
+
+  describe("#withdrawAll", function () {
+    beforeEach(async () => {
+      await stargateStrategy.compound();
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      await stargateStrategy.deposit(testUsdtAmount);
+    });
+
+    it("revert if msg.sender is not owner", async function () {
+      await expect(
+        stargateStrategy.connect(alice).withdrawAll()
+      ).to.be.revertedWithCustomError(
+        stargateStrategy,
+        "Ownable__CallerIsNotTheOwner"
+      );
+    });
+
+    it("Withdraw all tokens", async function () {
+      const stakedLpAmount = (
+        await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+      )[0];
+
+      const exchangedTokenAmount = parseUsdt("100");
+      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      await mockExchange.setAmountReceived(exchangedTokenAmount);
+
+      const currnetOwnerBal = await token.balanceOf(owner.address);
+
+      await skipBlocks(10);
+
+      const stgRewardAmount = await stargateFarm.pendingStargate(
+        USDT_LP_FARM_ID,
+        stargateStrategy.address
+      );
+
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
+
+      await stargateStrategy.withdrawAll();
+
+      // The Underlying token balance should zero
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
+      // STG token balance should zero
+      expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
+
+      // Mock Exchange contract should received STG reward amount.
+      expect(await stg.balanceOf(mockExchange.address)).to.be.gte(
+        stgRewardAmount
+      );
+
+      expect(
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
+      ).to.be.equal(0);
+
+      // Owner should have all tokens.
+      expect(await token.balanceOf(owner.address)).to.be.gte(
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
+      );
+
+      // expect error when nothing to withdraw
+      await expect(
+        stargateStrategy.withdrawAll()
+      ).to.be.revertedWithCustomError(
+        stargateStrategy,
+        "NothingToWithdraw"
       );
     });
   });

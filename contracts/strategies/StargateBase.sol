@@ -154,7 +154,8 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     }
 
     function _deposit(uint256 amount) internal {
-        if (amount == 0 || _amountLDtoSD(amount) == 0) return;
+        if (amount == 0 || _amountLDtoSD(amount) == 0) return; // don't need to deposit dust
+
         token.safeApprove(address(stargateRouter), amount);
         stargateRouter.addLiquidity(poolId, amount, address(this));
 
@@ -193,6 +194,14 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
         if (stgBalance != 0) {
             Exchange exchange = strategyRouter.getExchange();
+            uint256 amountOut = exchange.getAmountOut(
+                stgBalance,
+                address(stgToken),
+                address(token)
+            );
+
+            if (_amountLDtoSD(amountOut) == 0) return 0;
+
             stgToken.transfer(address(exchange), stgBalance);
             received = exchange.swap(
                 stgBalance,
