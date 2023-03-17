@@ -9,7 +9,6 @@ const {
 } = require("../shared/forkHelper");
 const {
   getLpAmountFromAmount,
-  getAmountFromLpAmount,
 } = require("../shared/stargate");
 const { provider, deploy, skipBlocks } = require("../utils");
 
@@ -260,10 +259,7 @@ describe("Test StargateBase", function () {
         stargateStrategy.address
       );
 
-      const stakedTokenAmount = await getAmountFromLpAmount(
-        lpToken.address,
-        stakedLpAmount
-      );
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
       await stargateStrategy.withdrawAll();
 
@@ -362,10 +358,7 @@ describe("Test StargateBase", function () {
         lpToken.address,
         extraWithdrwalAmount
       );
-      const actualWithdrawAmount = await getAmountFromLpAmount(
-        lpToken.address,
-        lpAmountToWithdraw
-      );
+      const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw);
 
       const compoundAmount = exchangedTokenAmount.sub(
         extraWithdrwalAmount.sub(actualWithdrawAmount)
@@ -415,10 +408,7 @@ describe("Test StargateBase", function () {
         stargateStrategy.address
       );
 
-      const stakedTokenAmount = await getAmountFromLpAmount(
-        lpToken.address,
-        stakedLpAmount
-      );
+      const stakedTokenAmount = await await lpToken.amountLPtoLD(stakedLpAmount);
 
       await stargateStrategy.withdraw(
         strategyInitialBalance.add(parseUsdt("1000"))
