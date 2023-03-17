@@ -89,7 +89,10 @@ async function main() {
   // pancake plugin params
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.busd, hre.networkVariables.usdc, true)).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.busd, hre.networkVariables.usdc]
+  )).wait();
 
   // setup Exchange routes
   console.log("exchange routes setup...");
