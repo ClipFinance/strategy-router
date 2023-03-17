@@ -9,6 +9,8 @@ import "../interfaces/IExchangePlugin.sol";
 import "../StrategyRouter.sol";
 
 contract UniswapPlugin is IExchangePlugin, Ownable {
+    error CanNotSetIdenticalMediatorToken();
+    error InsufficientInputAmount();
 
     // whether swap for the pair should be done through some ERC20-like token as intermediary
     mapping(address => mapping(address => address)) public mediatorTokens;
@@ -27,6 +29,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address[2] calldata pair
     ) external onlyOwner {
         (address token0, address token1) = sortTokens(pair[0], pair[1]);
+        if (token0 == _mediatorToken || token1 == _mediatorToken) revert CanNotSetIdenticalMediatorToken();
         mediatorTokens[token0][token1] = _mediatorToken;
     }
 
@@ -52,6 +55,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenB,
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
+        if (amountA == 0) revert InsufficientInputAmount();
         address[] memory path = getPathForTokenPair(tokenA, tokenB);
 
         return _swap(amountA, path, to);
@@ -66,6 +70,7 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenA,
         address tokenB
     ) external view override returns (uint256 amountOut) {
+        if (amountA == 0) revert InsufficientInputAmount();
         address[] memory path = getPathForTokenPair(tokenA, tokenB);
 
         return uniswapRouter.getAmountsOut(amountA, path)[path.length - 1];

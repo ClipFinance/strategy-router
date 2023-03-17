@@ -1,6 +1,6 @@
 const { expect } = require("chai");
+const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { parseUnits } = require("ethers/lib/utils");
 const { setupFakeTokens, setupTokensLiquidityOnPancake } = require("../shared/commonSetup");
 
 describe("UniswapPlugin", function () {
@@ -50,6 +50,12 @@ describe("UniswapPlugin", function () {
   });
 
   describe("setMediatorTokenForPair", function () {
+    it ("should revert with identical mediator token", async function () {
+      await expect(
+        uniswapPlugin.setMediatorTokenForPair(busd.address, [busd.address, usdt.address])
+      ).to.be.revertedWithCustomError(uniswapPlugin, "CanNotSetIdenticalMediatorToken");
+    });
+
     it("should be able to set mediator tokens for a pair", async function () {
 
       const pair = [busd.address, usdt.address];
@@ -75,7 +81,13 @@ describe("UniswapPlugin", function () {
   });
 
   describe("swap", function () {
-    it("should swap correct received amount closely to predicted amount out", async function () {
+    it("should revert with 0 amountIn", async function () {
+      await expect(
+        uniswapPlugin.swap(0, usdc.address, busd.address, nonOwner.address)
+      ).to.be.revertedWithCustomError(uniswapPlugin, "InsufficientInputAmount");
+    });
+
+    it("should swap correct received amount closely to predicted amount out without mediator token", async function () {
       const usdcAmoutIn = parseUsdc("10");
       // predict amount out
       const busdAmountOut = await uniswapPlugin.getAmountOut(usdcAmoutIn, usdc.address, busd.address);
@@ -84,19 +96,72 @@ describe("UniswapPlugin", function () {
       await usdc.transfer(uniswapPlugin.address, usdcAmoutIn);
       const busdAmountReceived = await uniswapPlugin.callStatic.swap(usdcAmoutIn, usdc.address, busd.address, nonOwner.address);
 
-      // expect that busdAmountReceived closely to busdAmountOut with slippage 0.5%
-      expect(busdAmountReceived).to.be.closeTo(busdAmountOut, parseBusd("0.05"));
+      // expect that busdAmountReceived equal to busdAmountOut
+      expect(busdAmountReceived).to.be.equal(busdAmountOut);
     });
+
+    it("should swap correctly with mediator token", async function () {
+      const pair = [busd.address, usdc.address];
+
+      // Set USDT as mediator token for BUSD-USDC pair
+      await uniswapPlugin.setMediatorTokenForPair(usdt.address, pair);
+      const usdcAmountIn = parseUsdc("10");
+
+      // Predict amount out with mediator token
+      const amountOutBusd = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
+
+      // Swap with mediator token and predict amount out
+      await usdc.transfer(nonOwner.address, usdcAmountIn);
+      await usdc.connect(nonOwner).approve(uniswapPlugin.address, usdcAmountIn);
+      const amountReceivedBusd = await uniswapPlugin.connect(nonOwner).callStatic.swap(usdcAmountIn, usdc.address, busd.address, nonOwner.address);
+
+      // Expect the amount out to be equal to the predicted amount out
+      expect(amountReceivedBusd).to.be.equal(amountOutBusd);
+
+      // Remove mediator token
+      await uniswapPlugin.setMediatorTokenForPair(ethers.constants.AddressZero, pair);
+    });
+
   });
+
+  describe("getExchangeProtocolFee", function () {
+    it("should get right pancakeswap protocol fee ", async function () {
+      // pancakeswap protocol fee is 0.25% or 0.0025 with 18 decimals
+      expect(await uniswapPlugin.getExchangeProtocolFee(busd.address, usdc.address)).to.be.equal(parseEther("0.0025"));
+    });
+  })
 
   describe("getAmountOut", function () {
 
-    it("should get closely amount out of swap", async function () {
-      const usdcAmoutIn = parseUsdc("10");
+    it("should revert with 0 amountIn", async function () {
+      await expect(
+        uniswapPlugin.getAmountOut(0, usdc.address, busd.address)
+      ).to.be.revertedWithCustomError(uniswapPlugin, "InsufficientInputAmount");
+    });
 
-      const busdAmountOut = await uniswapPlugin.getAmountOut(usdcAmoutIn, usdc.address, busd.address);
-      // expect that busdAmountOut closely to slippage 0.5%
-      expect(busdAmountOut).to.be.closeTo(parseBusd("10"), parseBusd("0.05"));
+    it("should get closely amount out of swap without mediator token", async function () {
+      const usdcAmountIn = parseUsdc("10");
+
+      const busdAmountOut = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
+      // expect that busdAmountOut closely to slippage 0.26%
+      expect(busdAmountOut).to.be.closeTo(parseBusd("10"), parseBusd("10").mul(26).div(10000));
+    });
+
+    it("should get closely amount out of swap with mediator token", async function () {
+      const pair = [busd.address, usdc.address];
+      const usdcAmountIn = parseUsdc("10");
+
+      const busdAmountOutWithoutMediatorToken = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
+
+      // Set USDT as mediator token for BUSD-USDC pair
+      await uniswapPlugin.setMediatorTokenForPair(usdt.address, pair);
+
+      const busdAmountOutWithMediatorToken = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
+
+      // expect that busdAmountOut with mediator token closely to busdAmountOut without mediator token slippage 0.26%
+      expect(busdAmountOutWithMediatorToken).to.be.closeTo(
+        busdAmountOutWithoutMediatorToken,
+        busdAmountOutWithoutMediatorToken.mul(26).div(10000));
     });
 
   });
