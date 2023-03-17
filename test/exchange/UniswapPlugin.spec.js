@@ -154,18 +154,22 @@ describe("UniswapPlugin", function () {
     it("should get closely amount out of swap with mediator token", async function () {
       const pair = [busd.address, usdc.address];
       const usdcAmountIn = parseUsdc("10");
+      const busdAmountOut = parseBusd("10");
 
-      const busdAmountOutWithoutMediatorToken = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
+      // expect that getAmountOut without mediator token to be closely with slippage 0.26%
+      expect(await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address)).to.be.closeTo(
+        busdAmountOut,
+        busdAmountOut.mul(26).div(10000)
+      );
 
       // Set USDT as mediator token for BUSD-USDC pair
       await uniswapPlugin.setMediatorTokenForPair(usdt.address, pair);
 
-      const busdAmountOutWithMediatorToken = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
-
-      // expect that busdAmountOut with mediator token closely to busdAmountOut without mediator token slippage 0.26%
-      expect(busdAmountOutWithMediatorToken).to.be.closeTo(
-        busdAmountOutWithoutMediatorToken,
-        busdAmountOutWithoutMediatorToken.mul(26).div(10000));
+      // expect that busdAmountOut with mediator token to be closely with slippage 0.52%
+      expect(await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address)).to.be.closeTo(
+        busdAmountOut,
+        busdAmountOut.mul(52).div(10000)
+      );
     });
 
   });
