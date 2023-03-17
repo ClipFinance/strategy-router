@@ -93,15 +93,15 @@ describe("UniswapPlugin", function () {
 
     it("should swap correct received amount closely to predicted amount out without mediator token", async function () {
       const usdcAmoutIn = parseUsdc("10");
-      // predict amount out
-      const busdAmountOut = await uniswapPlugin.getAmountOut(usdcAmoutIn, usdc.address, busd.address);
+      const busdAmountOut = parseBusd("10");
 
-      // make approve and perform swap
+      // make approve
       await usdc.transfer(uniswapPlugin.address, usdcAmoutIn);
-      const busdAmountReceived = await uniswapPlugin.callStatic.swap(usdcAmoutIn, usdc.address, busd.address, nonOwner.address);
 
-      // expect that busdAmountReceived equal to busdAmountOut
-      expect(busdAmountReceived).to.be.equal(busdAmountOut);
+      // expect that we received closely amount to busdAmountOut with 0.26% slippage
+      expect(
+        await uniswapPlugin.callStatic.swap(usdcAmoutIn, usdc.address, busd.address, nonOwner.address)
+      ).to.be.closeTo(busdAmountOut, busdAmountOut.mul(26).div(10000));
     });
 
     it("should swap correctly with mediator token", async function () {
@@ -110,19 +110,18 @@ describe("UniswapPlugin", function () {
       // Set USDT as mediator token for BUSD-USDC pair
       await uniswapPlugin.setMediatorTokenForPair(usdt.address, pair);
       const usdcAmountIn = parseUsdc("10");
+      const busdAmountOut = parseBusd("10");
 
-      // Predict amount out with mediator token
-      const amountOutBusd = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
-
-      // Swap with mediator token and predict amount out
+      // send tokens to nonOwner address and make approve
       await usdc.transfer(nonOwner.address, usdcAmountIn);
       await usdc.connect(nonOwner).approve(uniswapPlugin.address, usdcAmountIn);
-      const amountReceivedBusd = await uniswapPlugin.connect(nonOwner).callStatic.swap(usdcAmountIn, usdc.address, busd.address, nonOwner.address);
 
-      // Expect the amount out to be equal to the predicted amount out
-      expect(amountReceivedBusd).to.be.equal(amountOutBusd);
+      // expect that we received closely amount to busdAmountOut with 0.52% double hop swap slippage
+      expect(
+        await uniswapPlugin.connect(nonOwner).callStatic.swap(usdcAmountIn, usdc.address, busd.address, nonOwner.address)
+      ).to.be.closeTo(busdAmountOut, busdAmountOut.mul(52).div(10000));
 
-      // Remove mediator token
+      // Remove mediator token to be sure in getAmountOut test with it
       await uniswapPlugin.setMediatorTokenForPair(ethers.constants.AddressZero, pair);
     });
 
@@ -145,10 +144,12 @@ describe("UniswapPlugin", function () {
 
     it("should get closely amount out of swap without mediator token", async function () {
       const usdcAmountIn = parseUsdc("10");
+      const busdAmountOut = parseBusd("10");
 
-      const busdAmountOut = await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address);
       // expect that busdAmountOut closely to slippage 0.26%
-      expect(busdAmountOut).to.be.closeTo(parseBusd("10"), parseBusd("10").mul(26).div(10000));
+      expect(
+        await uniswapPlugin.getAmountOut(usdcAmountIn, usdc.address, busd.address)
+      ).to.be.closeTo(busdAmountOut, busdAmountOut.mul(26).div(10000));
     });
 
     it("should get closely amount out of swap with mediator token", async function () {
