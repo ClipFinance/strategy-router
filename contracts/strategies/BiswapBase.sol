@@ -37,8 +37,6 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     uint256 private constant PERCENT_DENOMINATOR = 10000;
     uint256 private constant ETHER = 1e18;
 
-    error HardcapLimitExceeded();
-
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
         _;
@@ -64,9 +62,8 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         _disableInitializers();
     }
 
-    function initialize(address _upgrader, uint256 _hardcapTargetInToken, uint8 _hardcapDeviationInBps)
+    function initialize(address _upgrader, uint256 _hardcapTargetInToken, uint16 _hardcapDeviationInBps)
         external
-        override
         initializer
     {
         super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
@@ -80,7 +77,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return address(tokenA);
     }
 
-    function _deposit(uint256 amount) external override onlyOwner {
+    function _deposit(uint256 amount) internal override onlyOwner {
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
@@ -179,6 +176,10 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
     }
 
     function totalTokens() public view override returns (uint256) {
+        return _totalTokens();
+    }
+
+    function _totalTokens() internal view override returns (uint256) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
         uint256 _totalSupply = lpToken.totalSupply();
@@ -271,34 +272,5 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         uint256 halfWithFee = (2 * reserve0 * (dexFee + 1e18)) / ((reserve0 * (dexFee + 1e18)) / 1e18 + reserve1);
         uint256 amountB = (tokenAmount * halfWithFee) / 1e18;
         return amountB;
-    }
-
-    /// @notice Get hardcap target value
-    function getHardcardTarget() view public override {
-        return hardcapTarget;
-    }
-
-    /// @notice Set allowed deviation from target value
-    function getHardcardDeviationBp() view public override {
-        return hardcapDeviationBp;
-    }
-
-    function getCapacityData() view public override returns (bool limitReached, int256 underflow, int256 overflow) {
-        uint256 strategyAllocatedTokens = totalTokens();
-        uint256 hardcapTarget = getHardcardTarget();
-        uint256 hardcapDeviationBp = getHardcardDeviationBp();
-
-        uint256 lowerBound = hardcapTarget - (hardcapTarget * hardcapDeviationBp / 10000);
-        uint256 upperBound = hardcapTarget + (hardcapTarget * hardcapDeviationBp / 10000);
-
-        if (strategyAllocatedTokens < lowerBound) {
-            return (false, hardcapTarget - strategyAllocatedTokens, 0);
-        }
-
-        if (strategyAllocatedTokens > upperBound) {
-            return (true, 0, strategyAllocatedTokens - hardcapTarget);
-        }
-
-        return (true, 0, 0);
     }
 }

@@ -72,7 +72,12 @@ async function main() {
   console.log("Deploying strategies...");
 
   const mockStrategyFactory = await ethers.getContractFactory("MockStrategy");
-  let mockStrategy = await mockStrategyFactory.deploy(usdc.address, 10000);
+  let mockStrategy = await mockStrategyFactory.deploy(
+    usdc.address,
+    10000,
+    parseUsdc((1_000_000).toString()),
+    500 // 5%
+  );
   await mockStrategy.deployed();
   console.log("strategy:", mockStrategy.address);
   await (await mockStrategy.transferOwnership(router.address)).wait();

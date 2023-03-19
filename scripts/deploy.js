@@ -74,20 +74,37 @@ async function main() {
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   console.log("Deploying strategies...");
   let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt")
-  strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    constructorArgs: [router.address],
-  });
+  strategyBusd = await upgrades.deployProxy(StrategyFactory,
+    [
+      owner.address,
+      parseBusd((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
   console.log("strategyBusd", strategyBusd.address);
   await (await strategyBusd.transferOwnership(router.address)).wait();
 
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt")
-  strategyUsdc = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    constructorArgs: [router.address],
-  });
+  strategyUsdc = await upgrades.deployProxy(
+    StrategyFactory,
+    [
+      owner.address,
+      parseUsdc((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
@@ -180,9 +197,17 @@ async function main() {
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 
   console.log("Setting supported token...");
-  const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  const busdIdleStrategy = await deployProxyIdleStrategy(
+    owner,
+    router,
+    busd,
+  );
   await (await router.setSupportedToken(busd.address, true, busdIdleStrategy.address)).wait();
-  const usdcIdleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  const usdcIdleStrategy = await deployProxyIdleStrategy(
+    owner,
+    router,
+    usdc,
+  );
   await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");

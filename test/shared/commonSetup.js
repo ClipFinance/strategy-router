@@ -15,7 +15,13 @@ module.exports = {
 
 async function deployFakeStrategy({ router, token, weight = 10_000, profitPercent = 10_000 }) {
   // console.log(router.address, await token.name(), weight, profitPercent);
-  let strategy = await deploy("MockStrategy", token.address, profitPercent);
+  let strategy = await deploy(
+    "MockStrategy",
+    token.address,
+    profitPercent,
+    token.parse((10_000_000).toString()),
+    2000
+  );
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, token.address, weight);
 }
@@ -29,7 +35,9 @@ async function setupFakeUnderFulfilledWithdrawalStrategy({
     underFulfilledWithdrawalBps,
     token.address,
     profitPercent,
-    isRewardPositive
+    isRewardPositive,
+    token.parse((10_000_000).toString()),
+    2000
   );
   await strategy.transferOwnership(router.address);
   strategy.token = token;
@@ -60,18 +68,21 @@ async function setupFakeTokens(router) {
   let parseUsdc = (args) => parseUnits(args, 18);
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
+  usdc.parse = parseUsdc;
 
   usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
 
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
+  busd.parse = parseBusd;
 
   busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
 
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
+  usdt.parse = parseUsdt;
 
   usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
 

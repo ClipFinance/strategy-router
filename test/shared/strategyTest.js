@@ -6,7 +6,7 @@ const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber } = require("ethers");
 
 
-module.exports = function strategyTest(strategyName) {
+module.exports = function strategyTest(strategyName, strategyToken) {
   describe(`Test ${strategyName} strategy`, function () {
 
     let owner;
@@ -34,21 +34,30 @@ module.exports = function strategyTest(strategyName) {
       await setupParamsOnBNB(router, oracle, exchange);
 
       // get tokens on bnb chain for testing
-      await setupTokens();
+      const tokens = await setupTokens();
+
+      // get deposit token and parse helper function
+      depositToken = tokens[strategyToken];
+      let decimals = await depositToken.decimals();
+      parseAmount = (amount) => parseUnits(amount, decimals);
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
       let StrategyFactory = await ethers.getContractFactory(strategyName)
-      strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-        kind: 'uups',
-        constructorArgs: [router.address],
-      });
+      strategy = await upgrades.deployProxy(
+        StrategyFactory,
+        [
+          owner.address,
+          parseAmount((1_000_000).toString()),
+          500, // 5%
+        ],
+        {
+          kind: 'uups',
+          constructorArgs: [router.address],
+          initializer: 'initialize(address, uint256, uint16)',
+        }
+      );
       await strategy.deployed();
-
-      // get deposit token and parse helper function
-      depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
-      let decimals = await depositToken.decimals();
-      parseAmount = (amount) => parseUnits(amount, decimals);
     });
 
     after(async function () {
