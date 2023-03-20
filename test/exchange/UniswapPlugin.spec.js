@@ -19,7 +19,7 @@ describe("UniswapPlugin", function () {
     uniswapRouter = await ethers.getContractAt("IUniswapV2Router02", hre.networkVariables.uniswapRouter);
 
     // deploy mock tokens
-    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(false));
 
     // setup fake token liquidity
     let amount = (1_000_000).toString();

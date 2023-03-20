@@ -61,19 +61,25 @@ async function setupFakeTokens(router) {
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
 
-  usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  if (router !== false) {
+    usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  }
 
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
 
-  busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  if (router !== false) {
+    busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  }
 
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
 
-  usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
+  if (router !== false) {
+    usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
+  }
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 
