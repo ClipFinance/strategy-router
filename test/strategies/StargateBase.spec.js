@@ -112,6 +112,24 @@ describe("Test StargateBase", function () {
   });
 
   describe("constructor & initialize", function () {
+    it("revert if deposit token is invalid", async function () {
+      try {
+        await deployStargateStrategy({
+          router: router.address,
+          token: stg.address, // set invalid deposit token
+          lpToken: lpToken.address,
+          stgToken: stg.address,
+          stargateRouter: stargateRouter.address,
+          stargateFarm: stargateFarm.address,
+          poolId: USDT_POOL_ID,
+          farmId: USDT_LP_FARM_ID,
+          upgrader: owner.address,
+        });
+      } catch (error) {
+        expect(error.message).to.be.contain("reverted with custom error 'InvalidInput()");
+      }
+    });
+
     it("check initial values", async function () {
       expect(await stargateStrategy.depositToken()).to.be.eq(token.address);
       expect(await stargateStrategy.strategyRouter()).to.be.eq(router.address);
