@@ -247,6 +247,22 @@ describe("Test StargateBase", function () {
       const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
 
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+
+      const tokenBalance = await token.balanceOf(stargateStrategy.address);
+      const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
+
+      expect(
+        await stargateStrategy.totalTokens()
+      ).to.be.equal(totalStrategyTokens);
+    });
+
+    it("should return correct amount of the locked and deposited dust amount of tokens", async function () {
+      const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
+
+      await token.transfer(stargateStrategy.address, parseUsdt("0.000000999")); // dust deposit
+
       const tokenBalance = await token.balanceOf(stargateStrategy.address);
       const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
 
@@ -459,13 +475,10 @@ describe("Test StargateBase", function () {
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
 
-      // expect error when nothing to withdraw
-      await expect(
-        stargateStrategy.withdrawAll()
-      ).to.be.revertedWithCustomError(
-        stargateStrategy,
-        "NothingToWithdraw"
-      );
+      // expect 0 when nothing to withdraw
+      expect(
+       await stargateStrategy.callStatic.withdrawAll()
+      ).to.be.equal(0);
     });
   });
 });
