@@ -235,12 +235,12 @@ describe("Test rebalance functions", function () {
       let farm4 = await createMockStrategy(busd.address, 10000);
       let farm5 = await createMockStrategy(busd.address, 10000);
       let farm6 = await createMockStrategy(usdc.address, 10000);
-      await router.addStrategy(farm.address, usdt.address, 30000);
-      await router.addStrategy(farm2.address, usdt.address, 10000);
-      await router.addStrategy(farm3.address, usdt.address, 10000);
-      await router.addStrategy(farm4.address, busd.address, 10000);
-      await router.addStrategy(farm5.address, busd.address, 10000);
-      await router.addStrategy(farm6.address, usdc.address, 50000);
+      await router.addStrategy(farm.address, 30000);
+      await router.addStrategy(farm2.address, 10000);
+      await router.addStrategy(farm3.address, 10000);
+      await router.addStrategy(farm4.address, 10000);
+      await router.addStrategy(farm5.address, 10000);
+      await router.addStrategy(farm6.address, 50000);
 
       await router.depositToBatch(usdt.address, parseUsdt("1000"));
       await router.depositToBatch(busd.address, parseBusd("1000"));
