@@ -452,6 +452,10 @@ describe("Test StargateBase", function () {
 
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
+      // add unstaked balance
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.gt(0);
+
       await stargateStrategy.withdrawAll();
 
       // The Underlying token balance should zero
