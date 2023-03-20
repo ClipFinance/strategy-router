@@ -1,14 +1,8 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IStrategy.sol";
-import "../interfaces/IBiswapFarm.sol";
-import "../StrategyRouter.sol";
-
-import "hardhat/console.sol";
+import "../deps/OwnableUpgradeable.sol";
+import "../deps/Initializable.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 abstract contract AbstractBaseStrategyWithHardcap is Initializable, OwnableUpgradeable, IStrategy {
