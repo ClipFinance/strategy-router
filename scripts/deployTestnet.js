@@ -89,7 +89,10 @@ async function main() {
   // pancake plugin params
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.busd, hre.networkVariables.usdc, true)).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.busd, hre.networkVariables.usdc]
+  )).wait();
 
   // setup Exchange routes
   console.log("exchange routes setup...");
@@ -138,7 +141,7 @@ async function main() {
   await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(mockStrategy.address, busd.address, 10000)).wait();
+  await (await router.addStrategy(mockStrategy.address, 10000)).wait();
 
   console.log("Approving for initial deposit...");
   if ((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {

@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -7,14 +8,11 @@ import "../interfaces/ICurvePool.sol";
 import "../interfaces/IExchangePlugin.sol";
 import "../StrategyRouter.sol";
 
-// import "hardhat/console.sol";
-
 contract UniswapPlugin is IExchangePlugin, Ownable {
-    error RoutedSwapFailed();
-    error RouteNotFound();
+    error CanNotSetIdenticalMediatorToken();
 
-    // whether swap for the pair should be done through WETH as intermediary
-    mapping(address => mapping(address => bool)) public useWeth;
+    // whether swap for the pair should be done through some ERC20-like token as intermediary
+    mapping(address => mapping(address => address)) public mediatorTokens;
 
     IUniswapV2Router02 public uniswapRouter;
 
@@ -25,18 +23,29 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
     }
 
-    function setUseWeth(
-        address tokenA,
-        address tokenB,
-        bool _useWeth
+    function setMediatorTokenForPair(
+        address _mediatorToken, // set zero address to disable mediatorToken for a pair
+        address[2] calldata pair
     ) external onlyOwner {
-        (address token0, address token1) = sortTokens(tokenA, tokenB);
-        useWeth[token0][token1] = _useWeth;
+        (address token0, address token1) = sortTokens(pair[0], pair[1]);
+        if (token0 == _mediatorToken || token1 == _mediatorToken) revert CanNotSetIdenticalMediatorToken();
+        mediatorTokens[token0][token1] = _mediatorToken;
     }
 
-    function canUseWeth(address tokenA, address tokenB) public view returns (bool) {
+    function getPathForTokenPair(address tokenA, address tokenB) public view returns (address[] memory path) {
         (address token0, address token1) = sortTokens(tokenA, tokenB);
-        return useWeth[token0][token1];
+        address mediatorToken = mediatorTokens[token0][token1];
+
+        if (mediatorToken != address(0)) {
+            path = new address[](3);
+            path[0] = tokenA;
+            path[1] = mediatorToken;
+            path[2] = tokenB;
+        } else {
+            path = new address[](2);
+            path[0] = tokenA;
+            path[1] = tokenB;
+        }
     }
 
     function swap(
@@ -45,20 +54,10 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenB,
         address to
     ) public override returns (uint256 amountReceivedTokenB) {
-        if (canUseWeth(tokenA, tokenB)) {
-            address[] memory path = new address[](3);
-            path[0] = address(tokenA);
-            path[1] = uniswapRouter.WETH();
-            path[2] = address(tokenB);
+        if (amountA == 0) return 0;
+        address[] memory path = getPathForTokenPair(tokenA, tokenB);
 
-            return _swap(amountA, path, to);
-        } else {
-            address[] memory path = new address[](2);
-            path[0] = address(tokenA);
-            path[1] = address(tokenB);
-
-            return _swap(amountA, path, to);
-        }
+        return _swap(amountA, path, to);
     }
 
     function getExchangeProtocolFee(address, address) public pure override returns (uint256 feePercent) {
@@ -70,18 +69,10 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
         address tokenA,
         address tokenB
     ) external view override returns (uint256 amountOut) {
-        if (canUseWeth(tokenA, tokenB)) {
-            address[] memory path = new address[](3);
-            path[0] = address(tokenA);
-            path[1] = uniswapRouter.WETH();
-            path[2] = address(tokenB);
-            return uniswapRouter.getAmountsOut(amountA, path)[2];
-        } else {
-            address[] memory path = new address[](3);
-            path[0] = address(tokenA);
-            path[1] = address(tokenB);
-            return uniswapRouter.getAmountsOut(amountA, path)[1];
-        }
+        if (amountA == 0) return 0;
+        address[] memory path = getPathForTokenPair(tokenA, tokenB);
+
+        return uniswapRouter.getAmountsOut(amountA, path)[path.length - 1];
     }
 
     function _swap(
@@ -91,13 +82,17 @@ contract UniswapPlugin is IExchangePlugin, Ownable {
     ) private returns (uint256 amountReceivedTokenB) {
         IERC20(path[0]).approve(address(uniswapRouter), amountA);
 
-        uint256 received = uniswapRouter.swapExactTokensForTokens(amountA, 0, path, address(this), block.timestamp)[
-            path.length - 1
-        ];
+        // Perform the swap on router and get the amount of tokenB received
+        amountReceivedTokenB = uniswapRouter.swapExactTokensForTokens(
+            amountA,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        )[path.length - 1];
 
-        IERC20(path[path.length - 1]).transfer(to, received);
-
-        return received;
+        // Transfer the received tokens to the recipient
+        IERC20(path[path.length - 1]).transfer(to, amountReceivedTokenB);
     }
 
     function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {

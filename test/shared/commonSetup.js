@@ -8,7 +8,7 @@ module.exports = {
   setupFakeUnderFulfilledWithdrawalStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeTokens, setupFakeToken, setupTokensLiquidityOnPancake, setupParamsOnBNB,
   setupTestParams, setupRouterParams,
-  setupFakePrices, setupPancakePlugin,
+  setupFakePrices,
   setupFakeExchangePlugin, mintFakeToken,
   setupIdleStrategies
 };
@@ -17,7 +17,7 @@ async function deployFakeStrategy({ router, token, weight = 10_000, profitPercen
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 }
 
 async function setupFakeUnderFulfilledWithdrawalStrategy({
@@ -45,7 +45,7 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
   const strategy = await setupFakeUnderFulfilledWithdrawalStrategy({
     router, token, underFulfilledWithdrawalBps, profitPercent, isRewardPositive
   });
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 
   return strategy;
 }
@@ -240,6 +240,7 @@ async function setupTestParams(
   await oracle.setPrice(usdc.address, usdcAmount);
 
   let bsw = hre.networkVariables.bsw;
+  // let wbnb = hre.networkVariables.wbnb;
 
   // Setup exchange params
   busd = busd.address;
@@ -269,9 +270,9 @@ async function setupTestParams(
 
     // pancake plugin params
     await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-    // await pancakePlugin.setUseWeth(bsw, busd, true);
-    // await pancakePlugin.setUseWeth(bsw, usdt, true);
-    // await pancakePlugin.setUseWeth(bsw, usdc, true);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
   }
 }
 
@@ -294,28 +295,6 @@ async function setupFakePrices(oracle, usdc, usdt, busd) {
   await oracle.setPrice(usdc.address, usdcAmount);
 }
 
-async function setupPancakePlugin(exchange, usdc, usdt, busd) {
-  let bsw = hre.networkVariables.bsw;
-
-  let pancakePlugin = await deploy("UniswapPlugin");
-  let pancake = (pancakePlugin).address;
-  // Setup exchange params
-  busd = busd.address;
-  usdc = usdc.address;
-  usdt = usdt.address;
-  await exchange.setRoute(
-      [busd, busd, usdc, bsw, bsw, bsw],
-      [usdt, usdc, usdt, busd, usdt, usdc],
-      [pancake, pancake, pancake, pancake, pancake, pancake]
-  );
-
-  // pancake plugin params
-  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  // await pancakePlugin.setUseWeth(bsw, busd, true);
-  // await pancakePlugin.setUseWeth(bsw, usdt, true);
-  // await pancakePlugin.setUseWeth(bsw, usdc, true);
-}
-
 // Setup core params that are similar (or the same) as those that will be set in production
 async function setupParamsOnBNB(router, oracle, exchange) {
   const [owner,,,,,,,,,,feeAddress] = await ethers.getSigners();
@@ -329,6 +308,7 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 
 async function setupPluginsOnBNB(exchange) {
 
+  let wbnb = hre.networkVariables.wbnb;
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
@@ -342,7 +322,7 @@ async function setupPluginsOnBNB(exchange) {
   await exchange.setRoute(
     [busd, busd, usdc, bsw, bsw, bsw],
     [usdt, usdc, usdt, busd, usdt, usdc],
-    [acsPlugin.address, acsPlugin.address, acsPlugin.address, 
+    [acsPlugin.address, acsPlugin.address, acsPlugin.address,
       pancakePlugin.address, pancakePlugin.address, pancakePlugin.address]
   );
 
@@ -358,7 +338,7 @@ async function setupPluginsOnBNB(exchange) {
 
   // pancake plugin params
   await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await pancakePlugin.setUseWeth(bsw, busd, true);
-  await pancakePlugin.setUseWeth(bsw, usdt, true);
-  await pancakePlugin.setUseWeth(bsw, usdc, true);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
 }
