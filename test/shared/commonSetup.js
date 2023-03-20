@@ -3,7 +3,8 @@ const { ethers, upgrades } = require("hardhat");
 const { getUSDC, getBUSD, getUSDT, deploy, parseUniform, deployProxy } = require("../utils");
 
 module.exports = {
-  setupTokens, setupCore, deployFakeStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
+  setupTokens, setupCore, deployFakeStrategy,
+  setupFakeUnderFulfilledWithdrawalStrategy, deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeTokens, setupTokensLiquidityOnPancake, setupParamsOnBNB, setupTestParams, setupRouterParams,
   setupFakePrices,
   setupFakeExchangePlugin, mintFakeToken
@@ -16,12 +17,11 @@ async function deployFakeStrategy({ router, token, weight = 10_000, profitPercen
   await router.addStrategy(strategy.address, weight);
 }
 
-async function deployFakeUnderFulfilledWithdrawalStrategy({
-  router, token, underFulfilledWithdrawalBps,
-  weight = 10_000, profitPercent = 0, isRewardPositive = true
+async function setupFakeUnderFulfilledWithdrawalStrategy({
+ router, token, underFulfilledWithdrawalBps = 0,
+ profitPercent = 0, isRewardPositive = true
 }) {
-  // console.log(router.address, await token.name(), weight, profitPercent);
-  let strategy = await deploy(
+  const strategy = await deploy(
     "UnderFulfilledWithdrawalMockStrategy",
     underFulfilledWithdrawalBps,
     token.address,
@@ -29,7 +29,22 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
     isRewardPositive
   );
   await strategy.transferOwnership(router.address);
+  strategy.token = token;
+
+  return strategy;
+}
+
+async function deployFakeUnderFulfilledWithdrawalStrategy({
+  router, token, underFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
+}) {
+  // console.log(router.address, await token.name(), weight, profitPercent);
+  const strategy = await setupFakeUnderFulfilledWithdrawalStrategy({
+    router, token, underFulfilledWithdrawalBps, profitPercent, isRewardPositive
+  });
   await router.addStrategy(strategy.address, weight);
+
+  return strategy;
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
