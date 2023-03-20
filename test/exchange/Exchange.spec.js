@@ -1,8 +1,8 @@
-const { expect, assert } = require("chai");
-const { parseEther, parseUnits } = require("ethers/lib/utils");
+const { expect } = require("chai");
+const { parseUnits } = require("ethers/lib/utils");
 const { ethers, artifacts } = require("hardhat");
-const { provider, deploy, MaxUint256 } = require("./utils");
-const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
+const { provider } = require("../utils");
+const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("../shared/commonSetup");
 const { BigNumber } = require("ethers");
 const { smock } = require("@defi-wonderland/smock");
 const { constants } = require("@openzeppelin/test-helpers");
@@ -188,7 +188,7 @@ describe("Test Exchange", function () {
             // do swap
             let received = await exchangeNonOwner.callStatic.swap(0, usdc.address, busd.address, owner.address);
             expect(received).to.be.equal(swapReturns);
-            
+
             // exceed limit input amount
             await usdc.transfer(exchangeNonOwner.address, parseUsdc("1.1"));
             received = await exchangeNonOwner.callStatic.swap(parseUsdc("1.1"), usdc.address, busd.address, owner.address);
@@ -217,12 +217,13 @@ describe("Test Exchange", function () {
             // do swap
             let received = await exchangeNonOwner.getAmountOut(0, usdc.address, busd.address);
             expect(received).to.be.equal(amountOut);
-            
+
             // exceed limit input amount
             received = await exchangeNonOwner.getAmountOut(parseUsdc("1.1"), usdc.address, busd.address);
             expect(received).to.be.equal(amountOut2);
         });
     });
+
     async function getMockPlugin() {
         const abi = (await artifacts.readArtifact("IExchangePlugin")).abi;
         const mock = await smock.fake(abi);

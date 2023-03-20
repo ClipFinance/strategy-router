@@ -258,7 +258,7 @@ describe("Test StrategyRouter", function () {
     await farm2.transferOwnership(router.address);
 
     // add new farm
-    await router.addStrategy(farm2.address, usdc.address, 1000);
+    await router.addStrategy(farm2.address, 1000);
 
     // remove 2nd farm with index 1
     await router.removeStrategy(1);

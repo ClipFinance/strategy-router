@@ -205,7 +205,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         minDeposit = amount;
     }
 
-    function rebalance() public onlyStrategyRouter returns (uint256[] memory balances) {
+    function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {
         uint256 totalBatchUnallocatedTokens;
 
         // point 1
@@ -232,7 +232,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (StrategyRouter.StrategyInfo[] memory strategies, uint256 remainingToAllocateStrategiesWeightSum)
             = router.getStrategies();
 
-        balances = new uint256[](strategies.length);
+        balancesPendingAllocationToStrategy = new uint256[](strategies.length);
         uint256[] memory strategyToSupportedTokenIndexMap = new uint256[](strategies.length);
         // first traversal over strategies
         // 1. collect info: supported token index that corresponds to a strategy
@@ -279,7 +279,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // send it to the current strategy
                 if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                    balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
+                    balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
                     // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
                 } else {
@@ -293,7 +293,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
                     totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
                     tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
-                    balances[i] += desiredStrategyBalance;
+                    balancesPendingAllocationToStrategy[i] += desiredStrategyBalance;
                 }
             } else {
                 // reduce strategy weight in the current rebalance iteration proportionally to the degree
@@ -309,7 +309,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 strategies[i].weight -= strategyWeightFulfilled;
 
                 totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                balances[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
+                balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
                 // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
                 tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
             }
@@ -376,7 +376,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         tokenInfos[j].insufficientBalance = true;
                     }
 
-                    balances[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
+                    balancesPendingAllocationToStrategy[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
 
                     // if remaining desired strategy amount is below the threshold then break the cycle
                     if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {

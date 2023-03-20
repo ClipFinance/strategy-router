@@ -57,12 +57,10 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
     await router.addStrategy(
       strategy1.address,
-      strategy1.token.address,
       1000,
     );
     await router.addStrategy(
       strategy2.address,
-      strategy2.token.address,
       3000,
     );
 
@@ -89,7 +87,6 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
         await router.addStrategy(
           strategy1.address,
-          strategy1.token.address,
           1000,
         );
 
@@ -101,7 +98,6 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
         await router.addStrategy(
           strategy2.address,
-          strategy2.token.address,
           3000,
         );
 
@@ -162,12 +158,10 @@ describe("Test StrategyRouter manages strategies correctly", function () {
 
         await router.addStrategy(
           strategy3.address,
-          strategy3.token.address,
           3000,
         );
         await router.addStrategy(
           strategy4.address,
-          strategy4.token.address,
           3000,
         );
         await router.updateStrategy(1, 4000);

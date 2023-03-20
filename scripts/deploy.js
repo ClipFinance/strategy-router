@@ -117,9 +117,18 @@ async function main() {
   // pancake plugin params
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true)).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.busd]
+  )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.usdt]
+  )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.usdc]
+  )).wait();
 
   // acryptos plugin params
   console.log("acryptos plugin setup...");
@@ -211,8 +220,8 @@ async function main() {
   await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(strategyBusd.address, busd.address, 5000)).wait();
-  await (await router.addStrategy(strategyUsdc.address, usdc.address, 5000)).wait();
+  await (await router.addStrategy(strategyBusd.address, 5000)).wait();
+  await (await router.addStrategy(strategyUsdc.address, 5000)).wait();
 
 
   console.log("Approving for initial deposit...");
