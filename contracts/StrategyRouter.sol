@@ -570,16 +570,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Add strategy.
     /// @param _strategyAddress Address of the strategy.
-    /// @param _depositTokenAddress Token to be deposited into strategy.
     /// @param _weight Weight of the strategy. Used to split user deposit between strategies.
     /// @dev Admin function.
     /// @dev Deposit token must be supported by the router.
     function addStrategy(
         address _strategyAddress,
-        address _depositTokenAddress,
         uint256 _weight
     ) external onlyOwner {
-        if (!supportsToken(_depositTokenAddress)) revert UnsupportedToken();
+        address strategyDepositTokenAddress = IStrategy(_strategyAddress).depositToken();
+        if (!supportsToken(strategyDepositTokenAddress)) {
+            revert UnsupportedToken();
+        }
+        
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
             if (strategies[i].strategyAddress == _strategyAddress) revert DuplicateStrategy();
@@ -588,7 +590,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         strategies.push(
             StrategyInfo({
                 strategyAddress: _strategyAddress,
-                depositToken: IStrategy(_strategyAddress).depositToken(),
+                depositToken: strategyDepositTokenAddress,
                 weight: _weight
             })
         );
