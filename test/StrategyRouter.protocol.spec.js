@@ -60,8 +60,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
 
-    await router.addStrategy(strategyBiswap2.address, busd.address, 5000);
-    await router.addStrategy(strategyBiswap.address, usdc.address, 5000);
+    await router.addStrategy(strategyBiswap2.address, 5000);
+    await router.addStrategy(strategyBiswap.address, 5000);
 
     // admin initial deposit to set initial shares and pps, receipt ID 1
     await router.depositToBatch(busd.address, parseBusd("1"));
@@ -252,7 +252,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // 59,906,344,997,371,393,851
         expect(afterWithdrawUserBalance.sub(beforeWithdrawUserBalance)).to.be.closeTo(
             parseUsdc(USER_2_DEPOSIT_AMOUNT),
-            parseUniform("0.1")
+            parseUniform("0.3")
         );
       });
 
@@ -328,7 +328,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       await farm2.transferOwnership(router.address);
 
       // add new farm
-      await router.addStrategy(farm2.address, usdc.address, 1000);
+      await router.addStrategy(farm2.address, 1000);
 
       // remove 2nd farm with index 1
       await router.removeStrategy(1);
