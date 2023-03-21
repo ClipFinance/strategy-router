@@ -36,7 +36,6 @@ module.exports = {
   deployBiswapStrategy,
   deployStargateStrategy,
   addBiswapPoolToRewardProgram,
-  addBiswapPool,
 };
 
 async function deployFakeStrategy({
@@ -248,7 +247,7 @@ function getPairTokenOnBiswap(tokenA, tokenB) {
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function addBiswapPool(lpTokenAddress, alloc = 70) {
+async function addBiswapPoolToRewardProgram(lpTokenAddress, alloc = 70) {
   const biswapFarm = await getContract("IBiswapFarm", hre.networkVariables.biswapFarm);
 
   biswapOwner = await impersonate(await biswapFarm.owner());
@@ -488,4 +487,5 @@ async function setupPluginsOnBNB(exchange) {
   await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
   await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
   await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
+  await pancakePlugin.setMediatorTokenForPair(busd, [stg, usdt]);
 }

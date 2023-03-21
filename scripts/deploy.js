@@ -130,6 +130,11 @@ async function main() {
     hre.networkVariables.wbnb,
     [hre.networkVariables.bsw, hre.networkVariables.usdc]
   )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.busd,
+    [hre.networkVariables.stg, hre.networkVariables.usdt]
+  )).wait();
+
 
   // acryptos plugin params
   console.log("acryptos plugin setup...");
