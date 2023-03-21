@@ -18,6 +18,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     error CallerUpgrader();
     error InvalidInput();
+    error IncufitientPoolLiquidityToWithdraw();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
@@ -140,6 +141,8 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     {
         (uint256 amount, ) = stargateFarm.userInfo(farmId, address(this));
 
+        if (_amountSDtoLP(lpToken.deltaCredit()) < amount) revert IncufitientPoolLiquidityToWithdraw();
+
         if (amount != 0) {
             _withdrawFromFarm(amount);
         }
@@ -217,9 +220,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         returns (uint256 _amountLP)
     {
         uint256 _amountSD = _amountLDtoSD(_amountLD);
-        _amountLP =
-            (_amountSD * lpToken.totalSupply()) /
-            lpToken.totalLiquidity();
+        return _amountSDtoLP(_amountSD);
     }
 
     function _amountLDtoSD(uint256 _amountLD)
@@ -228,5 +229,14 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         returns (uint256 _amountSD)
     {
         _amountSD = _amountLD / lpToken.convertRate();
+    }
+
+    function _amountSDtoLP(uint256 _amountSD)
+        internal
+        view
+        returns (uint256 _amountLP)
+    {
+        return (_amountSD * lpToken.totalSupply()) /
+            lpToken.totalLiquidity();
     }
 }

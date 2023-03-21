@@ -12,6 +12,10 @@ const {
 } = require("../shared/stargate");
 const { provider, deploy, skipBlocks } = require("../utils");
 
+const {
+  setStorageAt,
+} = require("@nomicfoundation/hardhat-network-helpers");
+
 describe("Test StargateBase", function () {
   const USDT_POOL_ID = 2;
   const USDT_LP_FARM_ID = 0;
@@ -483,6 +487,33 @@ describe("Test StargateBase", function () {
       expect(
        await stargateStrategy.callStatic.withdrawAll()
       ).to.be.equal(0);
+    });
+
+    it("should revert if incufitient pool liquidity via withdraw all tokens", async function () {
+      const deltaCreditBefore = await lpToken.deltaCredit();
+
+      // set custom delta credit
+      const deltaCreditSlot = "0x15";
+      const customDeltaCredit = ethers.BigNumber.from(10000);
+      await setStorageAt(lpToken.address, deltaCreditSlot, customDeltaCredit);
+
+      await expect(
+        stargateStrategy.withdrawAll()
+      ).to.be.revertedWithCustomError(
+        stargateStrategy,
+        "IncufitientPoolLiquidityToWithdraw"
+      );
+
+      // reset delta credit
+      await setStorageAt(lpToken.address, deltaCreditSlot, deltaCreditBefore);
+
+      // should withdraw all successfully
+      await stargateStrategy.withdrawAll();
+
+      expect(
+        (await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address))[0]
+      ).to.be.equal(0);
+
     });
   });
 });
