@@ -47,7 +47,13 @@ library StrategyRouterLib {
     )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+        returns (
+            uint256 totalBalance,
+            uint256 totalStrategyBalance,
+            uint256 totalIdleStrategyBalance,
+            uint256[] memory balances,
+            uint256[] memory idleBalances
+        )
     {
         uint256 strategiesLength = strategies.length;
         balances = new uint256[](strategiesLength);
@@ -61,6 +67,7 @@ library StrategyRouterLib {
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
+            totalStrategyBalance += balanceInDepositToken;
         }
 
         uint256 idleStrategiesLength = idleStrategies.length;
@@ -75,6 +82,7 @@ library StrategyRouterLib {
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             idleBalances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
+            totalIdleStrategyBalance += balanceInDepositToken;
         }
     }
 

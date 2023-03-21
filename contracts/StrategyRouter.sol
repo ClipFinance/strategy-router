@@ -365,13 +365,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function getStrategiesValue()
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+        returns (
+            uint256 totalBalance,
+            uint256 totalStrategyBalance,
+            uint256 totalIdleStrategyBalance,
+            uint256[] memory balances,
+            uint256[] memory idleBalances
+        )
     {
-        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
-            oracle,
-            strategies,
-            idleStrategies
-        );
+        (totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances, idleBalances)
+            = StrategyRouterLib.getStrategiesValue(
+                oracle,
+                strategies,
+                idleStrategies
+            );
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
@@ -791,73 +798,76 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         private
         returns (uint256 tokenAmountToWithdraw)
     {
-        (, uint256[] memory strategyTokenBalancesUsd, ) = getStrategiesValue();
-        uint256 strategiesCount = strategies.length;
+        (,
+            uint256 totalStrategyBalance,
+            uint256 totalIdleStrategyBalance,
+            uint256[] memory strategyTokenBalancesUsd,
+            uint256[] memory idleStrategyTokenBalancesUsd
+        ) = getStrategiesValue();
 
-        // find token to withdraw requested token without extra swaps
-        // otherwise try to find token that is sufficient to fulfill requested amount
-        uint256 supportedTokenId = type(uint256).max; // index of strategy, uint.max means not found
-        {
-            for (uint256 i; i < strategiesCount; i++) {
-                address strategyDepositToken = strategies[i].depositToken;
-                if (strategyTokenBalancesUsd[i] >= withdrawAmountUsd) {
-                    supportedTokenId = i;
-                    if (strategyDepositToken == withdrawToken) break;
-                }
+        for (uint256 i; i < idleStrategies.length; i++) {
+            (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(idleStrategies[i].depositToken);
+
+            if (idleStrategyTokenBalancesUsd[i] == 0) {
+                continue;
             }
-        }
 
-        if (supportedTokenId != type(uint256).max) {
-            address tokenAddress = strategies[supportedTokenId].depositToken;
-            (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
+            // at this moment its in USD
+            uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[i] < withdrawAmountUsd
+                ? idleStrategyTokenBalancesUsd[i]
+                : withdrawAmountUsd;
 
-            // convert usd to token amount
-            tokenAmountToWithdraw = (withdrawAmountUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
-            // convert uniform decimals to token decimas
-            tokenAmountToWithdraw = StrategyRouterLib.fromUniform(tokenAmountToWithdraw, tokenAddress);
+            unchecked {
+                // we assume that the whole requested amount was withdrawn
+                // we on purpose do not adjust for slippage, fees, etc
+                // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+                // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
+                withdrawAmountUsd -= tokenAmountToSwap;
+            }
 
-            // withdraw from strategy
-            tokenAmountToWithdraw = IStrategy(strategies[supportedTokenId].strategyAddress).withdraw(
-                tokenAmountToWithdraw
+            // swap withdrawn token to the requested one
+            uint256 tokenAmountToWithdraw = StrategyRouterLib.trySwap(
+                exchange,
+                tokenAmountToWithdraw,
+                tokenAddress,
+                withdrawToken
             );
-            // is withdrawn token not the one that's requested?
-            if (tokenAddress != withdrawToken) {
-                // swap withdrawn token to the requested one
-                tokenAmountToWithdraw = StrategyRouterLib.trySwap(
-                    exchange,
-                    tokenAmountToWithdraw,
-                    tokenAddress,
-                    withdrawToken
-                );
-            }
-            // we assume that the whole requested amount was withdrawn
-            // we on purpose do not adjust for slippage, fees, etc
-            // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
-            // if the actual withdrawn amount (tokenAmountToWithdraw) doesn't meet the requested amount
-            // then the slippage protection will revert execution at the end of this function
-            // with WithdrawnAmountLowerThanExpectedAmount error
-            withdrawAmountUsd = 0;
+
+            // convert usd value into token amount
+            tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
+            // adjust decimals of the token amount
+            tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, tokenAddress);
+            tokenAmountToSwap = IStrategy(idleStrategies[i].strategyAddress).withdraw(tokenAmountToSwap);
+            // swap for requested token
+            tokenAmountToWithdraw += StrategyRouterLib.trySwap(
+                exchange,
+                tokenAmountToSwap,
+                tokenAddress,
+                withdrawToken
+            );
+
+            if (withdrawAmountUsd == 0) break;
         }
 
-        // if we didn't fulfilled withdraw amount above,
-        // swap tokens one by one until withraw amount is fulfilled
-        if (withdrawAmountUsd >= WITHDRAWAL_DUST_THRESHOLD_USD) {
-            for (uint256 i; i < strategiesCount; i++) {
-                address tokenAddress = strategies[i].depositToken;
-                uint256 tokenAmountToSwap;
-                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
+        if (withdrawAmountUsd >= 0) {
+            for (uint256 i; i < strategies.length; i++) {
+                if (strategyTokenBalancesUsd[i] == 0) {
+                    continue;
+                }
+
+                uint256 desiredAmountToWithdraw = withdrawAmountUsd * strategyTokenBalancesUsd[i]
+                    / totalStrategyBalance;
+                totalStrategyBalance -= strategyTokenBalancesUsd[i];
+
+                withdrawAmountUsd -= desiredAmountToWithdraw;
 
                 // at this moment its in USD
-                tokenAmountToSwap = strategyTokenBalancesUsd[i] < withdrawAmountUsd
+                uint256 tokenAmountToSwap = strategyTokenBalancesUsd[i] < desiredAmountToWithdraw
                     ? strategyTokenBalancesUsd[i]
-                    : withdrawAmountUsd;
-                unchecked {
-                    // we assume that the whole requested amount was withdrawn
-                    // we on purpose do not adjust for slippage, fees, etc
-                    // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
-                    // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
-                    withdrawAmountUsd -= tokenAmountToSwap;
-                }
+                    : desiredAmountToWithdraw;
+
+                address tokenAddress = strategies[supportedTokenId].depositToken;
+                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
 
                 // convert usd value into token amount
                 tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
@@ -871,8 +881,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     tokenAddress,
                     withdrawToken
                 );
-
-                if (withdrawAmountUsd < WITHDRAWAL_DUST_THRESHOLD_USD) break;
             }
         }
 
