@@ -252,12 +252,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        (uint256 balanceAfterCompoundInUsd, , ) = getStrategiesValue();
+        (uint256 balanceAfterCompoundInUsd, , , , ) = getStrategiesValue();
         uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
 
         // step 5
-        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterCompoundInUsd, , , , ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
@@ -272,7 +272,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterDepositInUsd, , , , ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
@@ -322,7 +322,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        (uint256 balanceAfterCompoundInUsd, , ) = getStrategiesValue();
+        (uint256 balanceAfterCompoundInUsd, , , , ) = getStrategiesValue();
         uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(currentCycleId, balanceAfterCompoundInUsd, totalShares);
     }
@@ -360,6 +360,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total usd value.
+    /// @return totalStrategyBalance Total usd active strategy tvl.
+    /// @return totalIdleStrategyBalance Total usd idle strategy tvl.
     /// @return balances Array of usd value of strategy token balances.
     /// @return idleBalances Array of usd value of idle strategy token balances.
     function getStrategiesValue()
@@ -429,7 +431,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function calculateSharesUsdValue(uint256 amountShares) public view returns (uint256 amountUsd) {
         uint256 totalShares = sharesToken.totalSupply();
         if (amountShares > totalShares) revert AmountExceedTotalSupply();
-        (uint256 strategiesLockedUsd, , ) = getStrategiesValue();
+        (uint256 strategiesLockedUsd, , , , ) = getStrategiesValue();
 
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / totalShares;
 
@@ -439,7 +441,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Calculate shares amount from usd value.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
-        (uint256 strategiesLockedUsd, , ) = getStrategiesValue();
+        (uint256 strategiesLockedUsd, , , , ) = getStrategiesValue();
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / sharesToken.totalSupply();
         shares = (amount * PRECISION) / currentPricePerShare;
     }
@@ -806,8 +808,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         ) = getStrategiesValue();
 
         for (uint256 i; i < idleStrategies.length; i++) {
-            (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(idleStrategies[i].depositToken);
-
             if (idleStrategyTokenBalancesUsd[i] == 0) {
                 continue;
             }
@@ -825,13 +825,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 withdrawAmountUsd -= tokenAmountToSwap;
             }
 
-            // swap withdrawn token to the requested one
-            uint256 tokenAmountToWithdraw = StrategyRouterLib.trySwap(
-                exchange,
-                tokenAmountToWithdraw,
-                tokenAddress,
-                withdrawToken
-            );
+            address tokenAddress = idleStrategies[i].depositToken;
+            (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
 
             // convert usd value into token amount
             tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
@@ -866,19 +861,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     ? strategyTokenBalancesUsd[i]
                     : desiredAmountToWithdraw;
 
-                address tokenAddress = strategies[supportedTokenId].depositToken;
-                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(tokenAddress);
+                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(strategies[i].depositToken);
 
                 // convert usd value into token amount
                 tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
-                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, tokenAddress);
+                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, strategies[i].depositToken);
                 tokenAmountToSwap = IStrategy(strategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                 // swap for requested token
                 tokenAmountToWithdraw += StrategyRouterLib.trySwap(
                     exchange,
                     tokenAmountToSwap,
-                    tokenAddress,
+                    strategies[i].depositToken,
                     withdrawToken
                 );
             }
