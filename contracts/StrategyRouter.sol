@@ -130,6 +130,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     address public feeAddress;
 
     StrategyInfo[] public strategies;
+    uint256 public allStrategiesWeightSum;
+
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
 
@@ -320,7 +322,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @dev Returns strategy weight as percent of total weight.
     function getStrategyPercentWeight(uint256 _strategyId) public view returns (uint256 strategyPercentAllocation) {
-        return StrategyRouterLib.getStrategyPercentWeight(_strategyId, strategies);
+        strategyPercentAllocation = (strategies[_strategyId].weight * PRECISION) / allStrategiesWeightSum;
     }
 
     /// @notice Returns count of strategies.
@@ -329,8 +331,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     /// @notice Returns array of strategies.
-    function getStrategies() public view returns (StrategyInfo[] memory) {
-        return strategies;
+    function getStrategies() public view returns (StrategyInfo[] memory, uint256) {
+        return (strategies, allStrategiesWeightSum);
     }
 
     /// @notice Returns deposit token of the strategy.
@@ -568,16 +570,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Add strategy.
     /// @param _strategyAddress Address of the strategy.
-    /// @param _depositTokenAddress Token to be deposited into strategy.
     /// @param _weight Weight of the strategy. Used to split user deposit between strategies.
     /// @dev Admin function.
     /// @dev Deposit token must be supported by the router.
     function addStrategy(
         address _strategyAddress,
-        address _depositTokenAddress,
         uint256 _weight
     ) external onlyOwner {
-        if (!supportsToken(_depositTokenAddress)) revert UnsupportedToken();
+        address strategyDepositTokenAddress = IStrategy(_strategyAddress).depositToken();
+        if (!supportsToken(strategyDepositTokenAddress)) {
+            revert UnsupportedToken();
+        }
+        
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
             if (strategies[i].strategyAddress == _strategyAddress) revert DuplicateStrategy();
@@ -586,10 +590,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         strategies.push(
             StrategyInfo({
                 strategyAddress: _strategyAddress,
-                depositToken: IStrategy(_strategyAddress).depositToken(),
+                depositToken: strategyDepositTokenAddress,
                 weight: _weight
             })
         );
+        allStrategiesWeightSum += _weight;
     }
 
     /// @notice Update strategy weight.
@@ -597,6 +602,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _weight New weight of the strategy.
     /// @dev Admin function.
     function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
+        allStrategiesWeightSum -= strategies[_strategyId].weight;
+        allStrategiesWeightSum += _weight;
+
         strategies[_strategyId].weight = _weight;
     }
 
@@ -613,6 +621,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 len = strategies.length - 1;
         strategies[_strategyId] = strategies[len];
         strategies.pop();
+        allStrategiesWeightSum -= removedStrategyInfo.weight;
 
         // compound removed strategy
         removedStrategy.compound();
@@ -653,7 +662,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
     function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        return StrategyRouterLib.rebalanceStrategies(exchange, strategies);
+        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum);
     }
 
     /// @notice Checkes weither upkeep method is ready to be called.

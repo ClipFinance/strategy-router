@@ -230,7 +230,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
       });
 
       it("should have no shares if there was no yield", async function () {
-        const strategiesData = await router.getStrategies();
+        const [strategiesData] = await router.getStrategies();
 
         for( i = 0; i < strategiesData.length; i++) {
           let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i][0]);

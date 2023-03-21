@@ -8,13 +8,17 @@ const {
   parseUniform,
   deployProxy,
 } = require("../utils");
-const { getContract, impersonate } = require("./forkHelper");
+const {
+  getContract,
+  impersonate
+} = require("./forkHelper")
 
 module.exports = {
   setupTokens,
   setupCore,
   deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeUnderFulfilledWithdrawalStrategy,
   setupFakeToken,
   setupFakeTokens,
   setupFakeTwoTokensByOrder,
@@ -32,6 +36,7 @@ module.exports = {
   deployBiswapStrategy,
   deployStargateStrategy,
   addBiswapPoolToRewardProgram,
+  addBiswapPool,
 };
 
 async function deployFakeStrategy({
@@ -43,7 +48,7 @@ async function deployFakeStrategy({
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 }
 
 async function deployBiswapStrategy({
@@ -53,13 +58,12 @@ async function deployBiswapStrategy({
   tokenB,
   lpToken,
   oracle,
-  priceThreshold,
   upgrader,
 }) {
   let BiswapBase = await ethers.getContractFactory("MockBiswapBase");
   let biswapStrategy = await upgrades.deployProxy(BiswapBase, [upgrader], {
     kind: "uups",
-    constructorArgs: [router, poolId, tokenA, tokenB, lpToken, oracle, priceThreshold],
+    constructorArgs: [router, poolId, tokenA, tokenB, lpToken, oracle],
   });
 
   return biswapStrategy;
@@ -85,16 +89,11 @@ async function deployStargateStrategy({
   return stargateStrategy;
 }
 
-async function deployFakeUnderFulfilledWithdrawalStrategy({
-  router,
-  token,
-  underFulfilledWithdrawalBps,
-  weight = 10_000,
-  profitPercent = 0,
-  isRewardPositive = true,
+async function setupFakeUnderFulfilledWithdrawalStrategy({
+ router, token, underFulfilledWithdrawalBps = 0,
+ profitPercent = 0, isRewardPositive = true
 }) {
-  // console.log(router.address, await token.name(), weight, profitPercent);
-  let strategy = await deploy(
+  const strategy = await deploy(
     "UnderFulfilledWithdrawalMockStrategy",
     underFulfilledWithdrawalBps,
     token.address,
@@ -102,7 +101,22 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
     isRewardPositive
   );
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  strategy.token = token;
+
+  return strategy;
+}
+
+async function deployFakeUnderFulfilledWithdrawalStrategy({
+  router, token, underFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
+}) {
+  // console.log(router.address, await token.name(), weight, profitPercent);
+  const strategy = await setupFakeUnderFulfilledWithdrawalStrategy({
+    router, token, underFulfilledWithdrawalBps, profitPercent, isRewardPositive
+  });
+  await router.addStrategy(strategy.address, weight);
+
+  return strategy;
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
@@ -177,13 +191,7 @@ async function setupFakeExchangePlugin(oracle, slippageBps, feeBps) {
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function setupTokensLiquidity(
-  tokenA,
-  tokenB,
-  amount,
-  amount1,
-  routerAddr
-) {
+async function setupTokensLiquidity(tokenA, tokenB, amount, amount1, routerAddr) {
   const [owner] = await ethers.getSigners();
   let uniswapRouter = await ethers.getContractAt(
     "IUniswapV2Router02",
@@ -191,10 +199,7 @@ async function setupTokensLiquidity(
   );
 
   let amountA = parseUnits(amount.toString(), await tokenA.decimals());
-  let amountB = parseUnits(
-    amount1 ? amount1.toString() : amount.toString(),
-    await tokenB.decimals()
-  );
+  let amountB = parseUnits(amount1 ? amount1.toString() : amount.toString(), await tokenB.decimals());
   await tokenA.approve(uniswapRouter.address, amountA);
   await tokenB.approve(uniswapRouter.address, amountB);
   await uniswapRouter.addLiquidity(
@@ -211,24 +216,12 @@ async function setupTokensLiquidity(
 
 // Create liquidity on Pancake
 async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
-  await setupTokensLiquidity(
-    tokenA,
-    tokenB,
-    amount,
-    amount1,
-    hre.networkVariables.uniswapRouter
-  );
+  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.uniswapRouter)
 }
 
 // Create liquidity on Biswap
 async function setupTokensLiquidityOnBiswap(tokenA, tokenB, amount, amount1) {
-  await setupTokensLiquidity(
-    tokenA,
-    tokenB,
-    amount,
-    amount1,
-    hre.networkVariables.biswapRouter
-  );
+  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.biswapRouter)
 }
 
 // Get lp pair token on uniswap-like router
@@ -251,15 +244,12 @@ async function getPairToken(tokenA, tokenB, routerAddr) {
 
 // Get pair token on Biswap
 function getPairTokenOnBiswap(tokenA, tokenB) {
-  return getPairToken(tokenA, tokenB, hre.networkVariables.biswapRouter);
+  return getPairToken(tokenA, tokenB, hre.networkVariables.biswapRouter)
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function addBiswapPoolToRewardProgram(lpTokenAddress, alloc = 70) {
-  const biswapFarm = await getContract(
-    "IBiswapFarm",
-    hre.networkVariables.biswapFarm
-  );
+async function addBiswapPool(lpTokenAddress, alloc = 70) {
+  const biswapFarm = await getContract("IBiswapFarm", hre.networkVariables.biswapFarm);
 
   biswapOwner = await impersonate(await biswapFarm.owner());
 
@@ -367,6 +357,7 @@ async function setupTestParams(
   await oracle.setPrice(usdc.address, usdcAmount);
 
   let bsw = hre.networkVariables.bsw;
+  // let wbnb = hre.networkVariables.wbnb;
 
   // Setup exchange params
   busd = busd.address;
@@ -396,9 +387,9 @@ async function setupTestParams(
 
     // pancake plugin params
     await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-    // await pancakePlugin.setUseWeth(bsw, busd, true);
-    // await pancakePlugin.setUseWeth(bsw, usdt, true);
-    // await pancakePlugin.setUseWeth(bsw, usdc, true);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
   }
 }
 
@@ -454,6 +445,8 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 }
 
 async function setupPluginsOnBNB(exchange) {
+
+  let wbnb = hre.networkVariables.wbnb;
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
@@ -492,7 +485,7 @@ async function setupPluginsOnBNB(exchange) {
 
   // pancake plugin params
   await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await pancakePlugin.setUseWeth(bsw, busd, true);
-  await pancakePlugin.setUseWeth(bsw, usdt, true);
-  await pancakePlugin.setUseWeth(bsw, usdc, true);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
 }
