@@ -4,6 +4,7 @@ const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPanca
 const { saturateTokenBalancesInStrategies, parseUniform } = require("./utils");
 const { convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 const { constants } = require("@openzeppelin/test-helpers");
+const { BigNumber } = require("ethers");
 
 
 describe("Test StrategyRouter protocol fee collection", function () {
@@ -323,6 +324,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         describe("after withdraw", function () {
           beforeEach(async function () {
+            const preB = await busd.balanceOf(owner.address);
             let receiptIds = [1];
             let shares = await router.calculateSharesFromReceipts(receiptIds);
             let sharesValueUsd = await router.calculateSharesUsdValue(shares);
@@ -335,6 +337,8 @@ describe("Test StrategyRouter protocol fee collection", function () {
               700 // 7% slippage
             );
             await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+            const busdBalance = (await busd.balanceOf(owner.address)).sub(preB);
+            const {price, decimals} = await oracle.getTokenUsdPrice(busd.address);
           });
 
           it("should have shares if there was yield", async function () {
@@ -344,7 +348,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             await router.allocateToStrategies();
 
             let totalShares = await sharesToken.totalSupply();
-            expect(totalShares.toString()).to.be.closeTo(parseUniform("19740"), parseUniform("2"));
+            expect(totalShares.toString()).to.be.closeTo(parseUniform("19762"), parseUniform("2"));
 
             let protocolSharesAfter = await sharesToken.balanceOf(feeAddress.address);
 
@@ -358,8 +362,8 @@ describe("Test StrategyRouter protocol fee collection", function () {
             let cycleData = await router.getCycle(currentCycleId-1);
 
             expect(cycleData.totalDepositedInUsd).to.be.equal(parseUniform("10100"));
-            expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9895"), parseUniform("2"));
-            expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("20060"), parseUniform("3"));
+            expect(cycleData.receivedByStrategiesInUsd).to.be.closeTo(parseUniform("9917"), parseUniform("2"));
+            expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("20079"), parseUniform("3"));
             expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1"), parseUniform("0.02"));
           });
         });
