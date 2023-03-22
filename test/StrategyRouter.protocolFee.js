@@ -324,7 +324,6 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         describe("after withdraw", function () {
           beforeEach(async function () {
-            const preB = await busd.balanceOf(owner.address);
             let receiptIds = [1];
             let shares = await router.calculateSharesFromReceipts(receiptIds);
             let sharesValueUsd = await router.calculateSharesUsdValue(shares);
@@ -337,8 +336,6 @@ describe("Test StrategyRouter protocol fee collection", function () {
               700 // 7% slippage
             );
             await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
-            const busdBalance = (await busd.balanceOf(owner.address)).sub(preB);
-            const {price, decimals} = await oracle.getTokenUsdPrice(busd.address);
           });
 
           it("should have shares if there was yield", async function () {
