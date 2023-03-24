@@ -123,7 +123,8 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         // inside withdraw happens STG rewards collection
         stargateFarm.withdraw(farmId, 0);
 
-        _compoundStg();
+        _sellReward();
+        _deposit(token.balanceOf(address(this)));
     }
 
     function totalTokens() external view override returns (uint256) {
@@ -187,10 +188,6 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
             lpToken.safeApprove(address(stargateFarm), remainLp);
             stargateFarm.deposit(farmId, remainLp);
         }
-    }
-
-    function _compoundStg() internal {
-        _deposit(_sellReward());
     }
 
     function _sellReward() private returns (uint256 received) {

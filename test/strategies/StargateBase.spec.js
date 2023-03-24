@@ -196,12 +196,12 @@ describe("Test StargateBase", function () {
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
     });
 
-    it("should rest dust on the stargate strategy account and dust allowance decreased during the deposit", async () => {
+    it("the remained dust should settle on the stargate strategy account and dust allowance decreased after the deposit", async () => {
       // Deposit with the dust
       await token.transfer(stargateStrategy.address, testUsdtAmountWithDust);
       await stargateStrategy.deposit(testUsdtAmountWithDust);
 
-      // expect the dust to settle on the stargate strategy account
+      // expect the remained dust to settle on the stargate strategy account
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustUsdt);
 
       // expect the dust allowance has decreased and we can make another deposit without any errors
@@ -265,6 +265,30 @@ describe("Test StargateBase", function () {
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
       ).to.be.equal(stakedLpAmount.add(newStakedLpAmount));
+    });
+
+    it("check that accrued dust is deposited once its sum with compound reward", async function () {
+      // set amount received as token amount with the dust to mock exchange
+      await token.transfer(mockExchange.address, testUsdtAmountWithDust);
+      await mockExchange.setAmountReceived(testUsdtAmountWithDust);
+
+      // make 1st compound
+      await skipBlocks(10);
+      await stargateStrategy.compound();
+
+      // expect the dust to settle on the stargate strategy account
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustUsdt);
+
+      // make 2nd compound
+      await token.transfer(mockExchange.address, testUsdtAmountWithDust);
+      await skipBlocks(10);
+      await stargateStrategy.compound();
+
+      // calculate the remained dust
+      const remainedDust = await getDustFromAmount(dustUsdt.mul(2));
+
+      // expect the remaining dust to settle on the stargate strategy score after the 2nd connection
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(remainedDust);
     });
   });
 
@@ -543,4 +567,11 @@ describe("Test StargateBase", function () {
 
     });
   });
+
+  const getDustFromAmount = async (amountLD) => {
+    const convertRate = await lpToken.convertRate();
+
+    const amountSDinLD = amountLD.div(convertRate).mul(convertRate);
+    return amountLD.sub(amountSDinLD);
+  };
 });
