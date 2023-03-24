@@ -36,6 +36,8 @@ describe("Test StargateBase", function () {
 
   let parseUsdt;
   let testUsdtAmount;
+  let dustUsdt;
+  let testUsdtAmountWithDust;
 
   before(async function () {
     [owner, alice] = await ethers.getSigners();
@@ -59,6 +61,8 @@ describe("Test StargateBase", function () {
     token = tokenInfo.token;
     parseUsdt = tokenInfo.parseToken;
     testUsdtAmount = parseUsdt("10000");
+    dustUsdt = parseUsdt("0.000000999");
+    testUsdtAmountWithDust = testUsdtAmount.add(dustUsdt);
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
 
@@ -159,6 +163,15 @@ describe("Test StargateBase", function () {
         stargateStrategy,
         "Ownable__CallerIsNotTheOwner"
       );
+    });
+
+    it("revert if deposit amount exceeds transferred tokens", async () => {
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+
+      await expect(
+        stargateStrategy.deposit(testUsdtAmountWithDust)
+      ).to.be.revertedWithCustomError(stargateStrategy, "DepositAmountExceedsBalance");
+
     });
 
     it("swap token to LP and deposit to stargate farm", async function () {
@@ -265,7 +278,7 @@ describe("Test StargateBase", function () {
       const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
 
-      await token.transfer(stargateStrategy.address, parseUsdt("0.000000999")); // dust deposit
+      await token.transfer(stargateStrategy.address, dustUsdt); // dust deposit
 
       const tokenBalance = await token.balanceOf(stargateStrategy.address);
       const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);

@@ -19,6 +19,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     error CallerUpgrader();
     error InvalidInput();
     error IncufitientPoolLiquidityToWithdraw();
+    error DepositAmountExceedsBalance();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
@@ -157,6 +158,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     function _deposit(uint256 amount) internal {
         if (amount == 0 || _amountLDtoSD(amount) == 0) return; // don't need to deposit dust
+        if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
 
         token.safeApprove(address(stargateRouter), amount);
         stargateRouter.addLiquidity(poolId, amount, address(this));
