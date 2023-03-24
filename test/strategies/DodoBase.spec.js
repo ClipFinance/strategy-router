@@ -9,16 +9,17 @@ const {
 } = require("../shared/forkHelper");
 const {
   getLpAmountFromAmount,
-  getAmountFromLpAmount,
+  getAmountFromLpAmount
 } = require("../shared/dodo");
 const { provider, deploy, skipBlocks } = require("../utils");
 
 describe("Test DodoBase", function () {
+
   let owner, nonReceiptOwner;
   // mainnet contracts
   let dodoMine, dodoPool;
   // mainnet tokens
-  let token, dodo, lpToken;
+  let usdtToken, dodoToken, lpToken;
   // core contracts
   let router, oracle, mockExchange, batch, receiptContract, sharesToken;
   // dodo strategy
@@ -28,7 +29,10 @@ describe("Test DodoBase", function () {
   // revert to fresh fork state
   let initialSnapshot;
 
-  const strategyInitialBalance = utils.parseEther("1000000");
+  let parseUsdt, parseDodo;
+
+  let testUsdtAmount;
+  let strategyInitialBalance;
 
   before(async function () {
     [owner, nonReceiptOwner] = await ethers.getSigners();
@@ -48,21 +52,20 @@ describe("Test DodoBase", function () {
       receiptContract.address
     );
 
-    token = (await getTokenContract(hre.networkVariables.usdt)).token;
-
-    dodo = (await getTokenContract(hre.networkVariables.dodo)).token;
+    ({token: usdtToken, parseToken: parseUsdt} = await getTokenContract(hre.networkVariables.usdt));
+    ({token: dodoToken, parseToken: parseDodo} = await getTokenContract(hre.networkVariables.dodo));
 
     lpToken = (await getTokenContract(hre.networkVariables.dodoUsdtLp)).token;
 
     await mintForkedToken(
-      dodo.address,
+      dodoToken.address,
       owner.address,
-      utils.parseEther("10000000000")
+      parseDodo("10000000000")
     );
     await mintForkedToken(
-      token.address,
+      usdtToken.address,
       owner.address,
-      utils.parseEther("10000000000")
+      parseUsdt("10000000000")
     );
 
     dodoMine = await getContract("IDodoMine", hre.networkVariables.dodoMine);
@@ -73,15 +76,16 @@ describe("Test DodoBase", function () {
 
     dodoStrategy = await deployDodoStrategy({
       router: router.address,
-      token: token.address,
+      token: usdtToken.address,
       lpToken: lpToken.address,
-      dodoToken: dodo.address,
+      dodoToken: dodoToken.address,
       pool: dodoPool.address,
       farm: dodoMine.address,
       upgrader: owner.address,
     });
 
-    await token.transfer(dodoStrategy.address, strategyInitialBalance);
+    testUsdtAmount = parseUsdt("10000");
+    strategyInitialBalance = parseUsdt("1000000");
   });
 
   beforeEach(async function () {
@@ -98,17 +102,26 @@ describe("Test DodoBase", function () {
 
   describe("constructor & initialize", function () {
     it("check initial values", async function () {
-      expect(await dodoStrategy.depositToken()).to.be.eq(token.address);
+      expect(await dodoStrategy.depositToken()).to.be.eq(usdtToken.address);
       expect(await dodoStrategy.owner()).to.be.eq(owner.address);
+
+      expect(await dodoStrategy.strategyRouter()).to.be.eq(router.address);
+      expect(await dodoStrategy.dodoToken()).to.be.eq(dodoToken.address);
+      expect(await dodoStrategy.pool()).to.be.eq(
+        dodoPool.address
+      );
+      expect(await dodoStrategy.farm()).to.be.eq(
+        dodoMine.address
+      );
+      expect(await dodoStrategy.lpToken()).to.be.eq(lpToken.address);
     });
   });
 
   describe("#deposit", function () {
-    const amount = utils.parseEther("10000");
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        dodoStrategy.connect(nonReceiptOwner).deposit(amount)
+        dodoStrategy.connect(nonReceiptOwner).deposit(testUsdtAmount)
       ).to.be.revertedWithCustomError(
         dodoStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -120,12 +133,13 @@ describe("Test DodoBase", function () {
         dodoPool.address,
         lpToken.address,
         true,
-        amount
+        testUsdtAmount
       );
-      await dodoStrategy.deposit(amount);
+      await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      await dodoStrategy.deposit(testUsdtAmount);
 
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount)
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
+        strategyInitialBalance.sub(testUsdtAmount)
       );
 
       expect(await lpToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
@@ -133,14 +147,22 @@ describe("Test DodoBase", function () {
       expect(
         await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
       ).to.be.equal(lpAmount);
+    });    
+
+    it("do not revert when amount is 0", async function () {
+      await dodoStrategy.deposit(0);
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+
+      await dodoStrategy.deposit(0);
+      await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(strategyInitialBalance);
     });
   });
 
   describe("#compound", function () {
-    const amount = utils.parseEther("10000");
-
     beforeEach(async () => {
-      await dodoStrategy.deposit(amount);
+      await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      await dodoStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
@@ -153,13 +175,14 @@ describe("Test DodoBase", function () {
     });
 
     it("Compound DODO reward", async function () {
+
       const stakedLpAmount = await dodoMine.getUserLpBalance(
         lpToken.address,
         dodoStrategy.address
       );
 
-      const exchangedTokenAmount = utils.parseEther("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      const exchangedTokenAmount = parseUsdt("100");
+      await usdtToken.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
       await skipBlocks(10);
@@ -182,12 +205,12 @@ describe("Test DodoBase", function () {
       await dodoStrategy.compound();
 
       // The Underlying token balance should be same after compound.
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount)
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
+        strategyInitialBalance.sub(testUsdtAmount)
       );
 
       // Mock Exchange contract should received DODO reward amount.
-      expect(await dodo.balanceOf(mockExchange.address)).to.be.greaterThan(
+      expect(await dodoToken.balanceOf(mockExchange.address)).to.be.greaterThan(
         dodoRewardAmount
       );
 
@@ -198,10 +221,9 @@ describe("Test DodoBase", function () {
   });
 
   describe("#withdrawAll", function () {
-    const amount = utils.parseEther("10000");
-
     beforeEach(async () => {
-      await dodoStrategy.deposit(amount);
+      await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      await dodoStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
@@ -219,11 +241,11 @@ describe("Test DodoBase", function () {
         dodoStrategy.address
       );
 
-      const exchangedTokenAmount = utils.parseEther("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      const exchangedTokenAmount = parseUsdt("100");
+      await usdtToken.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -242,12 +264,12 @@ describe("Test DodoBase", function () {
       await dodoStrategy.withdrawAll();
 
       // The Underlying token balance should zero
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
       // DODO token balance should zero
-      expect(await dodo.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await dodoToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
       // Mock Exchange contract should received DODO reward amount.
-      expect(await dodo.balanceOf(mockExchange.address)).to.be.greaterThan(
+      expect(await dodoToken.balanceOf(mockExchange.address)).to.be.greaterThan(
         dodoRewardAmount
       );
 
@@ -256,22 +278,21 @@ describe("Test DodoBase", function () {
       ).to.be.equal(0);
 
       // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.greaterThan(
+      expect(await usdtToken.balanceOf(owner.address)).to.be.greaterThan(
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
     });
   });
 
   describe("#withdraw", function () {
-    const amount = utils.parseEther("10000");
-
     beforeEach(async () => {
-      await dodoStrategy.deposit(amount);
+      await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      await dodoStrategy.deposit(testUsdtAmount);
     });
 
     it("revert if msg.sender is not owner", async function () {
       await expect(
-        dodoStrategy.connect(nonReceiptOwner).withdraw(amount)
+        dodoStrategy.connect(nonReceiptOwner).withdraw(testUsdtAmount)
       ).to.be.revertedWithCustomError(
         dodoStrategy,
         "Ownable__CallerIsNotTheOwner"
@@ -279,8 +300,8 @@ describe("Test DodoBase", function () {
     });
 
     it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
-      const withdrawAmount = utils.parseEther("100");
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const withdrawAmount = parseUsdt("100");
+      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
 
       const stakedLpAmount = await dodoMine.getUserLpBalance(
         lpToken.address,
@@ -290,8 +311,8 @@ describe("Test DodoBase", function () {
       await dodoStrategy.withdraw(withdrawAmount);
 
       // The Underlying token balance should zero
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(amount).sub(withdrawAmount)
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
+        strategyInitialBalance.sub(testUsdtAmount).sub(withdrawAmount)
       );
 
       // Should have same staked balance after withdraw
@@ -300,14 +321,14 @@ describe("Test DodoBase", function () {
       ).to.be.equal(stakedLpAmount);
 
       // Owner should have withdrawn token
-      expect(await token.balanceOf(owner.address)).to.be.equal(
+      expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
         currnetOwnerBal.add(withdrawAmount)
       );
     });
 
     it("Withdraw tokens when remaining token balance is less than withdraw amount", async function () {
-      const currentTokenBal = await token.balanceOf(dodoStrategy.address);
-      const extraWithdrwalAmount = utils.parseEther("100");
+      const currentTokenBal = await usdtToken.balanceOf(dodoStrategy.address);
+      const extraWithdrwalAmount = parseUsdt("100");
       const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
 
       const stakedLpAmount = await dodoMine.getUserLpBalance(
@@ -315,11 +336,11 @@ describe("Test DodoBase", function () {
         dodoStrategy.address
       );
 
-      const exchangedTokenAmount = utils.parseEther("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      const exchangedTokenAmount = parseUsdt("100");
+      await usdtToken.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -343,16 +364,16 @@ describe("Test DodoBase", function () {
       await dodoStrategy.withdraw(withdrawAmount);
 
       // The Underlying token balance should zero
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
       // DODO token balance should zero
-      expect(await dodo.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await dodoToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
       expect(
         await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
       ).to.be.greaterThan(stakedLpAmount.sub(lpAmountToWithdraw));
 
       // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.equal(
+      expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
         currnetOwnerBal.add(withdrawAmount)
       );
     });
@@ -363,11 +384,11 @@ describe("Test DodoBase", function () {
         dodoStrategy.address
       );
 
-      const exchangedTokenAmount = utils.parseEther("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
+      const exchangedTokenAmount = parseUsdt("100");
+      await usdtToken.transfer(mockExchange.address, exchangedTokenAmount);
       await mockExchange.setAmountReceived(exchangedTokenAmount);
 
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -388,12 +409,12 @@ describe("Test DodoBase", function () {
       );
 
       // The Underlying token balance should zero
-      expect(await token.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
       // DODO token balance should zero
-      expect(await dodo.balanceOf(dodoStrategy.address)).to.be.equal(0);
+      expect(await dodoToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
       // Mock Exchange contract should received DODO reward amount.
-      expect(await dodo.balanceOf(mockExchange.address)).to.be.greaterThan(
+      expect(await dodoToken.balanceOf(mockExchange.address)).to.be.greaterThan(
         dodoRewardAmount
       );
 
@@ -402,7 +423,7 @@ describe("Test DodoBase", function () {
       ).to.be.equal(0);
 
       // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.greaterThan(
+      expect(await usdtToken.balanceOf(owner.address)).to.be.greaterThan(
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
     });

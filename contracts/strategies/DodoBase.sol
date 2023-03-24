@@ -21,14 +21,14 @@ contract DodoBase is
 
     address internal upgrader;
 
-    IERC20 internal immutable token;
-    IERC20 internal immutable lpToken;
-    StrategyRouter internal immutable strategyRouter;
+    IERC20 public immutable token;
+    IERC20 public immutable lpToken;
+    StrategyRouter public immutable strategyRouter;
 
-    IERC20 internal immutable dodoToken;
-    IDodoSingleAssetPool internal immutable pool;
-    IDodoMine internal immutable farm;
-    bool internal immutable isBase;
+    IERC20 public immutable dodoToken;
+    IDodoSingleAssetPool public immutable pool;
+    IDodoMine public immutable farm;
+    bool public immutable isBase;
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
