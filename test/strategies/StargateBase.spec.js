@@ -394,6 +394,11 @@ describe("Test StargateBase", function () {
 
       const reinvestedLpAmount = await amountLDtoLP(reinvestedTokenAmountToFarm);
 
+      expect(
+        await stargateStrategy.callStatic.withdraw(withdrawAmount)
+      ).to.be.equal(withdrawAmount);
+
+      // perfom withdraw because of callStatic doesn't change any state
       await stargateStrategy.withdraw(withdrawAmount);
 
       // The Underlying token balance should be zero
@@ -434,6 +439,11 @@ describe("Test StargateBase", function () {
 
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
+      expect(
+        await stargateStrategy.callStatic.withdraw(stakedTokenAmount.add(parseUsdt("1000")))
+      ).to.be.equal(stakedTokenAmount.add(receivedTokenAmountForSoldReward));
+
+      // perfom withdraw because of callStatic doesn't change any state
       await stargateStrategy.withdraw(stakedTokenAmount.add(parseUsdt("1000")));
 
       // The Underlying token balance should zero
