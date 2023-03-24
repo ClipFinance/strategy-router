@@ -7,9 +7,6 @@ const {
   mintForkedToken,
   getContract,
 } = require("../shared/forkHelper");
-const {
-  getLpAmountFromAmount,
-} = require("../shared/stargate");
 const { provider, deploy, skipBlocks } = require("../utils");
 
 const {
@@ -175,7 +172,7 @@ describe("Test StargateBase", function () {
     });
 
     it("swap token to LP and deposit to stargate farm", async function () {
-      const lpAmount = await getLpAmountFromAmount(lpToken.address, testUsdtAmount);
+      const lpAmount = await amountLDtoLP(testUsdtAmount);
 
       await token.transfer(stargateStrategy.address, testUsdtAmount);
       await stargateStrategy.deposit(testUsdtAmount);
@@ -245,10 +242,7 @@ describe("Test StargateBase", function () {
       // Test when STG reward is greater than 0.
       expect(stgRewardAmount).to.greaterThan(0);
 
-      const newStakedLpAmount = await getLpAmountFromAmount(
-        lpToken.address,
-        exchangedTokenAmount
-      );
+      const newStakedLpAmount = await amountLDtoLP(exchangedTokenAmount);
 
       await stargateStrategy.compound();
 
@@ -267,7 +261,7 @@ describe("Test StargateBase", function () {
       ).to.be.equal(stakedLpAmount.add(newStakedLpAmount));
     });
 
-    it("check that accrued dust is deposited once its sum with compound reward", async function () {
+    it("the accrued dust should be deposited once its sum with compound reward", async function () {
       // set amount received as token amount with the dust to mock exchange
       await token.transfer(mockExchange.address, testUsdtAmountWithDust);
       await mockExchange.setAmountReceived(testUsdtAmountWithDust);
@@ -344,13 +338,13 @@ describe("Test StargateBase", function () {
       );
     });
 
-    it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
+    it("should take only the remaining token balance to withdraw if it is enough to cover the withdrawal amount", async function () {
       const withdrawAmount = parseUsdt("100");
-
       await token.transfer(stargateStrategy.address, withdrawAmount);
-      const currnetOwnerBal = await token.balanceOf(owner.address);
 
-      const stakedLpAmount = (
+      // save states before
+      const ownerBalanceBefore = await token.balanceOf(owner.address);
+      const stakedLpAmountBefore = (
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
@@ -364,45 +358,47 @@ describe("Test StargateBase", function () {
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.equal(stakedLpAmount);
+      ).to.be.equal(stakedLpAmountBefore);
 
       // Owner should have withdrawn token
       expect(await token.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(withdrawAmount)
+        ownerBalanceBefore.add(withdrawAmount)
       );
     });
 
-    it("Withdraw tokens when remaining token balance is less than withdraw amount", async function () {
-      const currentTokenBal = await token.balanceOf(stargateStrategy.address);
-      const extraWithdrwalAmount = parseUsdt("100");
-      const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
+    it("should take the staked balance to withdraw if the remaining token balance is not enough to cover the withdrawal amount", async function () {
+      // the strategy will receive 100 USDT from the mock exchange for reward tokens
+      // which it gets during withdrawal from the farm
+      const receivedTokenAmountForSwap = parseUsdt("100");
+      await token.transfer(mockExchange.address, receivedTokenAmountForSwap);
+      await mockExchange.setAmountReceived(receivedTokenAmountForSwap);
 
-      const stakedLpAmount = (
+      // prepare and save states before
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      const currentTokenBalance = await token.balanceOf(stargateStrategy.address);
+
+      const extraWithdrwalAmount = parseUsdt("100");
+      const withdrawAmount = currentTokenBalance.add(extraWithdrwalAmount);
+      console.log('withdrawAmount', withdrawAmount);
+
+      const ownerBalanceBefore = await token.balanceOf(owner.address);
+      const stakedLpAmountBefore = (
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      const exchangedTokenAmount = parseUsdt("100");
-      await token.transfer(mockExchange.address, exchangedTokenAmount);
-      await mockExchange.setAmountReceived(exchangedTokenAmount);
-
-      const currnetOwnerBal = await token.balanceOf(owner.address);
 
       await skipBlocks(10);
 
-      const lpAmountToWithdraw = await getLpAmountFromAmount(
-        lpToken.address,
-        extraWithdrwalAmount
-      );
-      const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw);
+      // calculate actual extra withdrawal amount, because of the division
+      // in the amountLDtoLP function the strategy will receive less than expected
+      const lpAmountToExtraWithdraw = await amountLDtoLP(extraWithdrwalAmount);
+      const actualExtraWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToExtraWithdraw);
 
-      const compoundAmount = exchangedTokenAmount.sub(
-        extraWithdrwalAmount.sub(actualWithdrawAmount)
+      const reinvestedTokenAmountToFarm = receivedTokenAmountForSwap.sub(
+        extraWithdrwalAmount.sub(actualExtraWithdrawAmount)
       );
 
-      const newStakedAmountFromCompound = await getLpAmountFromAmount(
-        lpToken.address,
-        compoundAmount
-      );
+      const reinvestedLpAmount = await amountLDtoLP(reinvestedTokenAmountToFarm);
 
       await stargateStrategy.withdraw(withdrawAmount);
 
@@ -415,13 +411,13 @@ describe("Test StargateBase", function () {
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.greaterThanOrEqual(
-        stakedLpAmount.sub(lpAmountToWithdraw).add(newStakedAmountFromCompound)
+      ).to.be.equal(
+        stakedLpAmountBefore.sub(lpAmountToExtraWithdraw).add(reinvestedLpAmount)
       );
 
       // Owner should have all tokens.
-      expect(await token.balanceOf(owner.address)).to.be.greaterThan(
-        currnetOwnerBal.add(actualWithdrawAmount)
+      expect(await token.balanceOf(owner.address)).to.be.equal(
+        ownerBalanceBefore.add(withdrawAmount)
       );
     });
 
@@ -536,7 +532,7 @@ describe("Test StargateBase", function () {
 
       // expect 0 when nothing to withdraw
       expect(
-       await stargateStrategy.callStatic.withdrawAll()
+        await stargateStrategy.callStatic.withdrawAll()
       ).to.be.equal(0);
     });
 
@@ -574,4 +570,13 @@ describe("Test StargateBase", function () {
     const amountSDinLD = amountLD.div(convertRate).mul(convertRate);
     return amountLD.sub(amountSDinLD);
   };
+
+  const amountLDtoLP = async (amountLD) => {
+    const totalSupply = await lpToken.totalSupply();
+    const totalLiquidity = await lpToken.totalLiquidity();
+    const convertRate = await lpToken.convertRate();
+
+    const amountSD = amountLD.div(convertRate);
+    return amountSD.mul(totalSupply).div(totalLiquidity);
+  }
 });
