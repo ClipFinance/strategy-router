@@ -195,6 +195,20 @@ describe("Test StargateBase", function () {
 
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
     });
+
+    it("should rest dust on the stargate strategy account and dust allowance decreased during the deposit", async () => {
+      // Deposit with the dust
+      await token.transfer(stargateStrategy.address, testUsdtAmountWithDust);
+      await stargateStrategy.deposit(testUsdtAmountWithDust);
+
+      // expect the dust to settle on the stargate strategy account
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustUsdt);
+
+      // expect the dust allowance has decreased and we can make another deposit without any errors
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      await stargateStrategy.deposit(testUsdtAmount);
+
+    });
   });
 
   describe("#compound", function () {
