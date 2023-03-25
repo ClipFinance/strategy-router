@@ -57,6 +57,7 @@ module.exports = function strategyTest(strategyName, needOracle) {
         constructorArgs: needOracle
           ? [router.address, oracle.address]
           : [router.address],
+        unsafeAllow: ['delegatecall']
       });
       await strategy.deployed();
 

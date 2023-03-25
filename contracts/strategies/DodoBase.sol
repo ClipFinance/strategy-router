@@ -84,33 +84,34 @@ contract DodoBase is
         onlyOwner
         returns (uint256 amountWithdrawn)
     {
-        uint256 currentBal = token.balanceOf(address(this));
+        uint256 currentTokenBalance = token.balanceOf(address(this));
 
-        if (currentBal < strategyTokenAmountToWithdraw) {
-            uint256 remainingBal = strategyTokenAmountToWithdraw - currentBal;
-            uint256 lpTokenTotalSupply = lpToken.totalSupply();
-
-            uint256 lpAmountToWithdraw = (remainingBal * lpTokenTotalSupply) /
-                _getExpectedTarget();
+        if (currentTokenBalance < strategyTokenAmountToWithdraw) {
+            uint256 tokenAmountToRetrieve = strategyTokenAmountToWithdraw - currentTokenBalance;
+            uint256 lpAmountToWithdraw = _getLpAmountFromAmount(tokenAmountToRetrieve);
 
             uint256 stakedLpBalance = farm.getUserLpBalance(
                 address(lpToken),
                 address(this)
             );
 
-            if (stakedLpBalance < lpAmountToWithdraw)
+            if (lpAmountToWithdraw > stakedLpBalance)
                 lpAmountToWithdraw = stakedLpBalance;
+
             farm.withdraw(address(lpToken), lpAmountToWithdraw);
 
-            uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw, false);
-            _withdrawFromDodoLp(receiveAmount);
-            _sellDodo();
+            if(lpAmountToWithdraw != 0) {
+                uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw, false);
+                _withdrawFromDodoLp(receiveAmount);
+                _sellDodo();
+                currentTokenBalance = token.balanceOf(address(this));
+            }
 
-            currentBal = token.balanceOf(address(this));
-
-            if (currentBal < strategyTokenAmountToWithdraw)
-                strategyTokenAmountToWithdraw = currentBal;
-            else _deposit(currentBal - strategyTokenAmountToWithdraw);
+            if (currentTokenBalance < strategyTokenAmountToWithdraw) {
+                strategyTokenAmountToWithdraw = currentTokenBalance;
+            } else {
+                _deposit(currentTokenBalance - strategyTokenAmountToWithdraw);
+            }
         }
 
         token.safeTransfer(msg.sender, strategyTokenAmountToWithdraw);
@@ -127,9 +128,9 @@ contract DodoBase is
     }
 
     function totalTokens() external view override returns (uint256) {
-        uint256 currentBal = token.balanceOf(address(this));
+        uint256 currentTokenBalance = token.balanceOf(address(this));
         return
-            currentBal +
+            currentTokenBalance +
             _getAmountFromLpAmount(
                 farm.getUserLpBalance(address(lpToken), address(this)),
                 true
@@ -157,16 +158,7 @@ contract DodoBase is
     function _getExpectedTarget() internal view returns (uint256) {
         (uint256 baseExpectedTarget, uint256 quoteExpectedTarget) = pool
             .getExpectedTarget();
-        if (isBase) return baseExpectedTarget;
-        return quoteExpectedTarget;
-    }
-
-    function getQuoteExpectedTarget()
-        private
-        view
-        returns (uint256 quoteExpectedTarget)
-    {
-        (, quoteExpectedTarget) = pool.getExpectedTarget();
+        return isBase ? baseExpectedTarget : quoteExpectedTarget;
     }
 
     function _deposit(uint256 amount) internal {
@@ -239,5 +231,15 @@ contract DodoBase is
             return amount - penalty;
 
         return amount;
+    }
+
+    function _getLpAmountFromAmount(uint256 amount)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 lpSupply = lpToken.totalSupply();
+        uint256 lpAmount = (amount * lpSupply) / _getExpectedTarget();
+        return lpAmount;
     }
 }
