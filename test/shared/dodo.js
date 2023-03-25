@@ -5,6 +5,7 @@ const { getContract } = require("./forkHelper");
 module.exports = {
   getLpAmountFromAmount,
   getAmountFromLpAmount,
+  getPenaltyAmount
 };
 
 async function getLpAmountFromAmount(poolAddr, lpTokenAddr, isQuote, amount) {
@@ -25,4 +26,13 @@ async function getAmountFromLpAmount(poolAddr, lpTokenAddr, isQuote, lpAmount) {
   const lpSupply = await lpToken.totalSupply();
 
   return lpAmount.mul(expectedTarget[isQuote ? 1 : 0]).div(lpSupply);
+}
+
+async function getPenaltyAmount(poolAddr, isQuote, amount) {
+  const dodoPool = await getContract("IDodoSingleAssetPool", poolAddr);
+
+  if(isQuote)
+    return await dodoPool.getWithdrawQuotePenalty(amount);
+  else
+    return await dodoPool.getWithdrawBasePenalty(amount);
 }

@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { utils } = require("ethers");
+const { utils, BigNumber } = require("ethers");
 const { setupCore, deployDodoStrategy } = require("../shared/commonSetup");
 const {
   getTokenContract,
@@ -9,7 +9,8 @@ const {
 } = require("../shared/forkHelper");
 const {
   getLpAmountFromAmount,
-  getAmountFromLpAmount
+  getAmountFromLpAmount,
+  getPenaltyAmount
 } = require("../shared/dodo");
 const { provider, deploy, skipBlocks } = require("../utils");
 
@@ -133,6 +134,7 @@ describe("Test DodoBase", function () {
         true,
         testUsdtAmount
       );
+
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
       await dodoStrategy.deposit(testUsdtAmount);
 
@@ -286,6 +288,37 @@ describe("Test DodoBase", function () {
         currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
       );
     });
+  }); 
+  
+  describe("#totalTokens", function () {
+    beforeEach(async () => {
+      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+      await dodoStrategy.deposit(testUsdtAmount);
+    });
+
+    it("should return correct amount of the locked and deposited tokens", async function () {
+
+      const stakedLpAmount = await dodoMine.getUserLpBalance(
+        lpToken.address,
+        dodoStrategy.address
+      );
+
+      const stakedTokenAmount = await getAmountFromLpAmount(
+        dodoPool.address,
+        lpToken.address,
+        true,
+        stakedLpAmount
+      );
+
+      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+
+      const tokenBalance = await usdtToken.balanceOf(dodoStrategy.address);
+      const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
+
+      expect(
+        await dodoStrategy.totalTokens()
+      ).to.be.equal(totalStrategyTokens);
+    });
   });
 
   describe("#withdraw", function () {
@@ -406,11 +439,11 @@ describe("Test DodoBase", function () {
       const stakedTokenAmount = await getAmountFromLpAmount(
         dodoPool.address,
         lpToken.address,
-        // TODO: this argument was 'true' before, and test was failing, I changed to 'false' so that test pass.
-        //       I've no idea how conversion formula works, someone should take a look
-        false, 
+        true, 
         stakedLpAmount
       );
+
+      let penalty = await getPenaltyAmount(dodoPool.address, true, stakedTokenAmount);
 
       await dodoStrategy.withdraw(
         testUsdtAmount.add(exchangedTokenAmount)
@@ -431,10 +464,11 @@ describe("Test DodoBase", function () {
       ).to.be.equal(0);
 
       // Owner should have all tokens.
-      expect(await usdtToken.balanceOf(owner.address)).to.be.greaterThan(
-        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount)
+      expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
+        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).sub(penalty)
       );
     });
+
   });
 
   const setReceivedAmountDuringSellReward = async (tokenAmount) => {

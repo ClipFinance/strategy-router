@@ -32,4 +32,9 @@ interface IDodoSingleAssetPool {
         external
         view
         returns (uint256);
+
+    function getLpQuoteBalance(address lp) 
+        external
+        view 
+        returns (uint256 lpBalance);
 }
