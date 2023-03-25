@@ -122,9 +122,9 @@ contract DodoBase is
     function compound() external override onlyOwner {
         farm.claim(address(lpToken));
 
-        uint256 tokenAmountToCompound = _sellDodo();
+        _sellDodo();
 
-        _deposit(tokenAmountToCompound);
+        _deposit(token.balanceOf(address(this)));
     }
 
     function totalTokens() external view override returns (uint256) {
@@ -162,6 +162,7 @@ contract DodoBase is
     }
 
     function _deposit(uint256 amount) internal {
+        if(amount == 0) return;
         token.safeApprove(address(pool), amount);
         uint256 lpTokens = _depositToDodoLp(amount);
 

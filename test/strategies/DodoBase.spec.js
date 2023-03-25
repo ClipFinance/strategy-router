@@ -153,8 +153,8 @@ describe("Test DodoBase", function () {
       await dodoStrategy.deposit(0);
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
-      await dodoStrategy.deposit(0);
       await usdtToken.transfer(dodoStrategy.address, strategyInitialBalance);
+      await dodoStrategy.deposit(0);
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(strategyInitialBalance);
     });
   });
@@ -195,19 +195,18 @@ describe("Test DodoBase", function () {
       // Test when DODO reward is greater than 0.
       expect(dodoRewardAmount).to.greaterThan(0);
 
+      const currentTokenBalance = await usdtToken.balanceOf(dodoStrategy.address);
       const newStakedLpAmount = await getLpAmountFromAmount(
         dodoPool.address,
         lpToken.address,
         true,
-        exchangedTokenAmount
+        exchangedTokenAmount.add(currentTokenBalance)
       );
 
       await dodoStrategy.compound();
 
-      // The Underlying token balance should be same after compound.
-      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
-        strategyInitialBalance.sub(testUsdtAmount)
-      );
+      // The Underlying token balance should be zero after compound.
+      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
       // Mock Exchange contract should received DODO reward amount.
       expect(await dodoToken.balanceOf(mockExchange.address)).to.be.greaterThan(
