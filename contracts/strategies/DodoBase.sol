@@ -18,6 +18,7 @@ contract DodoBase is
     using SafeERC20 for IERC20;
 
     error CallerUpgrader();
+    error DepositAmountExceedsBalance();
 
     address internal upgrader;
 
@@ -162,7 +163,9 @@ contract DodoBase is
 
     function _deposit(uint256 amount) internal {
         if(amount == 0) return;
+        if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
         token.safeApprove(address(pool), amount);
+        
         uint256 lpTokens = _depositToDodoLp(amount);
 
         if (lpTokens != 0) {
