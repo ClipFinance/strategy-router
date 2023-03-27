@@ -193,6 +193,24 @@ describe("Test StargateBase", function () {
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
     });
 
+    it("don't proceed if provided not enough amount to stake less than 1 LP token", async () => {
+      // Deposit the less than 1 LP token
+      const doubleDust = dustUsdt.mul(2); // 1.998 SD
+
+      const zeroLpAmount = await amountLDtoLP(doubleDust);
+      expect(zeroLpAmount).to.be.equal(await amountLDtoLP(parseUsdt("0")));
+
+      await token.transfer(stargateStrategy.address, doubleDust);
+      await stargateStrategy.deposit(dustUsdt);
+
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(doubleDust);
+      expect(
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
+      ).to.be.equal(zeroLpAmount);
+    });
+
     it("the remained dust should settle on the stargate strategy account and dust allowance decreased after the deposit", async () => {
       // Deposit with the dust
       await token.transfer(stargateStrategy.address, testUsdtAmountWithDust);
@@ -274,40 +292,63 @@ describe("Test StargateBase", function () {
     });
 
     it("the accrued dust should be deposited once its sum with compound reward", async function () {
+      const initialTokenBalance = await token.balanceOf(stargateStrategy.address);
       const initialStakedLpAmount = (
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
       // set amount received as token amount with the dust to mock exchange
       await setReceivedAmountDuringSellReward(dustUsdt);
+      await token.transfer(mockExchange.address, dustUsdt);
 
-      // make 1st compound
+      // make 1st compound when we can't sell the dust via mock exchange
       await skipBlocks(10);
       await stargateStrategy.compound();
 
-      // expect the staked LP amount not increased because we can't receive any amount of LP tokens from the dust
+      // expect the stargate strategy account balance not changed
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(initialTokenBalance);
+
+      // expect the staked LP amount not increased because we can't sell the dust from the mock exchange
       expect(
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
       ).to.be.equal(initialStakedLpAmount);
 
-      // make 2nd compound
-      const multipliedDust = dustUsdt.mul(3);
-      await setReceivedAmountDuringSellReward(multipliedDust);
-      await token.transfer(mockExchange.address, multipliedDust.sub(dustUsdt));
+      // make 2nd compound when we can sell the dust via mock exchange but the doubleDust is not enough to get the LP token
+      const doubleDust = dustUsdt.mul(2); // 1.998 SD
+      await setReceivedAmountDuringSellReward(doubleDust);
+      await token.transfer(mockExchange.address, doubleDust.sub(dustUsdt));
+
       await skipBlocks(10);
       await stargateStrategy.compound();
 
-      // expect the staked LP amount increased by the amount of LP tokens received from the multipliedDust
+      // expect the stargate strategy account balance increased by the amount of doubleDust
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(initialTokenBalance.add(doubleDust));
+
+      // expect the staked LP amount increased by the amount of LP tokens received from the doubleDust
       expect(
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.equal(initialStakedLpAmount.add(await amountLDtoLP(multipliedDust)));
+      ).to.be.equal(initialStakedLpAmount);
+
+      // make 3nd compound when we can sell the doubleDust via mock exchange
+      // and the balance of two doubleDust is enough to get the LP token
+      await setReceivedAmountDuringSellReward(doubleDust);
+      await token.transfer(mockExchange.address, doubleDust);
+      await skipBlocks(10);
+      await stargateStrategy.compound();
+
+      // expect the staked LP amount increased by the amount of LP tokens received from two doubleDust
+      expect(
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
+      ).to.be.equal(initialStakedLpAmount.add(await amountLDtoLP(doubleDust.mul(2))));
 
       // calculate the remained dust
-      const remainedDust = await getDustFromAmount(multipliedDust);
+      const remainedDust = await getDustFromAmount(doubleDust.mul(2));
 
       // expect the remaining dust to settle on the stargate strategy score after the 2nd connection
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(remainedDust);
