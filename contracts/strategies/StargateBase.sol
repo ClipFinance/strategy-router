@@ -18,7 +18,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     error CallerUpgrader();
     error InvalidInput();
-    error IncufitientPoolLiquidityToWithdraw();
+    error NotAllAssetsWithdrawn();
     error DepositAmountExceedsBalance();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
@@ -127,7 +127,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         _deposit(token.balanceOf(address(this)));
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() public view override returns (uint256) {
         (uint256 lpAmount, ) = stargateFarm.userInfo(farmId, address(this));
         uint256 stakedTokenAmount = IStargatePool(address(lpToken))
             .amountLPtoLD(lpAmount);
@@ -143,8 +143,6 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     {
         (uint256 amount, ) = stargateFarm.userInfo(farmId, address(this));
 
-        if (_amountSDtoLP(lpToken.deltaCredit()) < amount) revert IncufitientPoolLiquidityToWithdraw();
-
         if (amount != 0) {
             _withdrawFromFarm(amount);
         }
@@ -155,10 +153,12 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         if (amountWithdrawn == 0) return 0;
 
         token.safeTransfer(msg.sender, amountWithdrawn);
+
+        if (totalTokens() > 0) revert NotAllAssetsWithdrawn();
     }
 
     function _deposit(uint256 amount) internal {
-        if (amount == 0 || _amountLDtoSD(amount) == 0) return; // don't need to deposit dust
+        if (amount == 0 || _amountLDtoLP(amount) == 0) return; // don't proceed if provided not enough amount to stake less than 1 LP token
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
 
         token.safeApprove(address(stargateRouter), amount);
