@@ -162,13 +162,11 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         if (amount == 0 || _amountLDtoLP(amount) == 0) return; // don't proceed if provided not enough amount to stake less than 1 LP token
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
 
+        // remove dust allowance
+        token.safeApprove(address(stargateRouter), 0);
+
         token.safeApprove(address(stargateRouter), amount);
         stargateRouter.addLiquidity(poolId, amount, address(this));
-
-        // remove dust allowance
-        if (token.allowance(address(this), address(stargateRouter)) > 0) {
-            token.safeApprove(address(stargateRouter), 0);
-        }
 
         uint256 lpBalance = lpToken.balanceOf(address(this));
 
