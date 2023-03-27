@@ -297,28 +297,11 @@ describe("Test StargateBase", function () {
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
-      // set amount received as token amount with the dust to mock exchange
-      await setReceivedAmountDuringSellReward(dustUsdt);
-      await token.transfer(mockExchange.address, dustUsdt);
-
-      // make 1st compound when we can't sell the dust via mock exchange
-      await skipBlocks(10);
-      await stargateStrategy.compound();
-
-      // expect the stargate strategy account balance not changed
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(initialTokenBalance);
-
-      // expect the staked LP amount not increased because we can't sell the dust from the mock exchange
-      expect(
-        (
-          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
-        )[0]
-      ).to.be.equal(initialStakedLpAmount);
-
-      // make 2nd compound when we can sell the dust via mock exchange but the doubleDust is not enough to get the LP token
+      // make 1nd compound when it don't proceed deposit if provided not enough amount to stake less than 1 LP token
+      // and the dust balance should to settle on the stargate strategy account
       const doubleDust = dustUsdt.mul(2); // 1.998 SD
       await setReceivedAmountDuringSellReward(doubleDust);
-      await token.transfer(mockExchange.address, doubleDust.sub(dustUsdt));
+      await token.transfer(mockExchange.address, doubleDust);
 
       await skipBlocks(10);
       await stargateStrategy.compound();
@@ -333,8 +316,7 @@ describe("Test StargateBase", function () {
         )[0]
       ).to.be.equal(initialStakedLpAmount);
 
-      // make 3nd compound when we can sell the doubleDust via mock exchange
-      // and the balance of two doubleDust is enough to get the LP token
+      // make 2nd compound when the balance of two doubleDust is enough to get the LP tokens and stake these
       await setReceivedAmountDuringSellReward(doubleDust);
       await token.transfer(mockExchange.address, doubleDust);
       await skipBlocks(10);
@@ -350,7 +332,7 @@ describe("Test StargateBase", function () {
       // calculate the remained dust
       const remainedDust = await getDustFromAmount(doubleDust.mul(2));
 
-      // expect the remaining dust to settle on the stargate strategy score after the 2nd connection
+      // expect the remaining dust to settle on the stargate strategy account after the 2nd compound
       expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(remainedDust);
     });
   });

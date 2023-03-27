@@ -195,13 +195,6 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
         if (stgBalance != 0) {
             Exchange exchange = strategyRouter.getExchange();
-            uint256 amountOut = exchange.getAmountOut(
-                stgBalance,
-                address(stgToken),
-                address(token)
-            );
-
-            if (_amountLDtoSD(amountOut) == 0) return 0;
 
             stgToken.transfer(address(exchange), stgBalance);
             received = exchange.swap(
