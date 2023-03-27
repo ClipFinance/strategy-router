@@ -159,7 +159,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     }
 
     function _deposit(uint256 amount) internal {
-        if (amount == 0 || _amountLDtoLP(amount) == 0) return; // don't proceed if provided not enough amount to stake less than 1 LP token
+        if (amount == 0 || _amountLDtoLP(amount) == 0) return; // don't deposit when amount is not enough for 1 LP
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
 
         // remove dust allowance
