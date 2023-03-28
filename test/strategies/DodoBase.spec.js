@@ -1,7 +1,6 @@
 const { expect } = require("chai");
-const { ethers, artifacts } = require("hardhat");
-const { utils, BigNumber } = require("ethers");
-const { setupCore, deployDodoStrategy } = require("../shared/commonSetup");
+const { ethers } = require("hardhat");
+const { deployDodoStrategy } = require("../shared/commonSetup");
 const {
   getTokenContract,
   mintForkedToken,
@@ -20,7 +19,7 @@ describe("Test DodoBase", function () {
   // mainnet tokens
   let usdtToken, dodoToken, lpToken;
   // core contracts
-  let router, oracle, mockExchange, batch, receiptContract, sharesToken;
+  let router, mockExchange;
   // dodo strategy
   let dodoStrategy;
   // revert to test-ready state
@@ -89,17 +88,17 @@ describe("Test DodoBase", function () {
 
   describe("constructor & initialize", function () {
     it("revert if deposit token is invalid", async function () {
-          await expect(deployDodoStrategy({
-            router: router.address,
-            token: router.address, // set invalid deposit token
-            lpToken: lpToken.address,
-            dodoToken: dodoToken.address,
-            pool: dodoPool.address,
-            farm: dodoMine.address,
-            upgrader: owner.address,
-          })).to.be.rejectedWith("reverted with custom error 'InvalidInput()'");
+      await expect(deployDodoStrategy({
+        router: router.address,
+        token: router.address, // set invalid deposit token
+        lpToken: lpToken.address,
+        dodoToken: dodoToken.address,
+        pool: dodoPool.address,
+        farm: dodoMine.address,
+        upgrader: owner.address,
+      })).to.be.rejectedWith("reverted with custom error 'InvalidInput()'");
     });
-    
+
     it("check initial values", async function () {
       expect(await dodoStrategy.depositToken()).to.be.eq(usdtToken.address);
       expect(await dodoStrategy.owner()).to.be.eq(owner.address);
