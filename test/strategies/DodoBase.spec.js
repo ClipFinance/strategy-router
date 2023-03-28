@@ -125,7 +125,7 @@ describe("Test DodoBase", function () {
     });
 
     it("swap token to LP and deposit to DodoMine", async function () {
-      const lpAmount = await getLpAmountFromAmount(testUsdtAmount);
+      const lpAmount = await getLpAmountFromAmount(testUsdtAmount, false);
 
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
       await dodoStrategy.deposit(testUsdtAmount);
@@ -184,7 +184,7 @@ describe("Test DodoBase", function () {
       // Test when DODO reward is greater than 0.
       expect(dodoRewardAmount).to.greaterThan(0);
 
-      const newStakedLpAmount = await getLpAmountFromAmount(exchangedTokenAmount);
+      const newStakedLpAmount = await getLpAmountFromAmount(exchangedTokenAmount, false);
 
       await dodoStrategy.compound();
 
@@ -456,11 +456,16 @@ describe("Test DodoBase", function () {
 
   });
 
-  async function getLpAmountFromAmount(amount) {
+
+  async function getLpAmountFromAmount(amount, shouldCeil = true) {
     const expectedTarget = await dodoPool.getExpectedTarget();
     const lpSupply = await lpToken.totalSupply();
     const isQuote = !(await dodoStrategy.isBase());
-    return amount.mul(lpSupply).div(expectedTarget[isQuote ? 1 : 0]);
+    // should ceil when doing withdrawals, but not for deposit or compound 
+    if(shouldCeil)
+      return amount.mul(lpSupply).divCeil(expectedTarget[isQuote ? 1 : 0]);
+    else
+      return amount.mul(lpSupply).div(expectedTarget[isQuote ? 1 : 0]);
   }
 
   async function getAmountFromLpAmount(lpAmount) {
@@ -498,7 +503,7 @@ describe("Test DodoBase", function () {
     // simulation
     await dodoMine.connect(signer).withdraw(lpToken.address, lpAmountToWithdraw);
     await dodoPool.connect(signer).withdrawQuote(tokensToWithdraw);
-    const compoundAmountLP = await getLpAmountFromAmount(compoundAmount);
+    const compoundAmountLP = await getLpAmountFromAmount(compoundAmount, false);
 
     await stopImpersonatingAccount(dodoStrategy.address);
     await provider.send("evm_revert", [tmpSnapshot]);

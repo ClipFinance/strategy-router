@@ -7,6 +7,7 @@ import "../interfaces/IStrategy.sol";
 import "../interfaces/IDodoMine.sol";
 import "../interfaces/IDodoSingleAssetPool.sol";
 import "../StrategyRouter.sol";
+import "../lib/Math.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract DodoBase is
@@ -16,6 +17,7 @@ contract DodoBase is
     IStrategy
 {
     using SafeERC20 for IERC20;
+    using Math for uint256;
 
     error InvalidInput();
     error CallerUpgrader();
@@ -241,7 +243,7 @@ contract DodoBase is
         returns (uint256)
     {
         uint256 lpSupply = lpToken.totalSupply();
-        uint256 lpAmount = (amount * lpSupply) / _getExpectedTarget();
+        uint256 lpAmount = (amount * lpSupply).divCeil(_getExpectedTarget());
         return lpAmount;
     }
 }
