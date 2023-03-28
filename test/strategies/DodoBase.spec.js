@@ -217,12 +217,31 @@ describe("Test DodoBase", function () {
       // simulate dust
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
-      // make 1st compound
+      const stakedLpAmount = await dodoMine.getUserLpBalance(
+        lpToken.address,
+        dodoStrategy.address
+      );
+
+      const exchangedTokenAmount = parseUsdt("100");
+      await setReceivedAmountDuringSellReward(exchangedTokenAmount);
+
       await skipBlocks(10);
+
+      const newStakedLpAmount = await getLpAmountFromAmount(
+        exchangedTokenAmount.add(testUsdtAmount), 
+        false
+      );
+
+      // make compound
       await dodoStrategy.compound();
 
       // expect no dust to settle on the strategy account
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+
+      // LP balance should be increased after reward restake
+      expect(
+        await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+      ).to.be.equal(stakedLpAmount.add(newStakedLpAmount));
     });
   });
 
