@@ -17,6 +17,7 @@ contract DodoBase is
 {
     using SafeERC20 for IERC20;
 
+    error InvalidInput();
     error CallerUpgrader();
     error DepositAmountExceedsBalance();
 
@@ -46,6 +47,9 @@ contract DodoBase is
         IDodoSingleAssetPool _pool,
         IDodoMine _farm
     ) {
+        if(address(_token) != _pool._BASE_TOKEN_() 
+        && address(_token) != _pool._QUOTE_TOKEN_()) revert InvalidInput();
+
         strategyRouter = _strategyRouter;
         token = _token;
         lpToken = _lpToken;
