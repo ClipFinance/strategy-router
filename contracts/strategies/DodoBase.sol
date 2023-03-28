@@ -20,6 +20,7 @@ contract DodoBase is
     error InvalidInput();
     error CallerUpgrader();
     error DepositAmountExceedsBalance();
+    error NotAllAssetsWithdrawn();
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
@@ -131,7 +132,7 @@ contract DodoBase is
         _deposit(token.balanceOf(address(this)));
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() public view override returns (uint256) {
         uint256 currentTokenBalance = token.balanceOf(address(this));
         return
             currentTokenBalance +
@@ -156,6 +157,8 @@ contract DodoBase is
 
         if (amountWithdrawn != 0)
             token.safeTransfer(msg.sender, amountWithdrawn);
+
+        if (totalTokens() > 0) revert NotAllAssetsWithdrawn();
     }
 
     function _getExpectedTarget() internal view returns (uint256) {
