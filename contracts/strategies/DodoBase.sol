@@ -20,18 +20,17 @@ contract DodoBase is
     error CallerUpgrader();
     error DepositAmountExceedsBalance();
 
+    uint256 private constant PERCENT_DENOMINATOR = 10000;
+
     address internal upgrader;
 
-    IERC20 public immutable token;
+    IERC20 private immutable token;
     IERC20 public immutable lpToken;
     StrategyRouter public immutable strategyRouter;
-
     IERC20 public immutable dodoToken;
     IDodoSingleAssetPool public immutable pool;
     IDodoMine public immutable farm;
     bool public immutable isBase;
-
-    uint256 private constant PERCENT_DENOMINATOR = 10000;
 
     modifier onlyUpgrader() {
         if (msg.sender != address(upgrader)) revert CallerUpgrader();
