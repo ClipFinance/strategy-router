@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
+const { ethers, artifacts } = require("hardhat");
 const { utils, BigNumber } = require("ethers");
 const { setupCore, deployDodoStrategy } = require("../shared/commonSetup");
 const {
@@ -88,6 +88,18 @@ describe("Test DodoBase", function () {
   });
 
   describe("constructor & initialize", function () {
+    it("revert if deposit token is invalid", async function () {
+          await expect(deployDodoStrategy({
+            router: router.address,
+            token: router.address, // set invalid deposit token
+            lpToken: lpToken.address,
+            dodoToken: dodoToken.address,
+            pool: dodoPool.address,
+            farm: dodoMine.address,
+            upgrader: owner.address,
+          })).to.be.rejectedWith("reverted with custom error 'InvalidInput()'");
+    });
+    
     it("check initial values", async function () {
       expect(await dodoStrategy.depositToken()).to.be.eq(usdtToken.address);
       expect(await dodoStrategy.owner()).to.be.eq(owner.address);
@@ -453,7 +465,7 @@ describe("Test DodoBase", function () {
     const lpSupply = await lpToken.totalSupply();
     const isQuote = !(await dodoStrategy.isBase());
     // should ceil when doing withdrawals, but not for deposit or compound 
-    if(shouldCeil)
+    if (shouldCeil)
       return amount.mul(lpSupply).divCeil(expectedTarget[isQuote ? 1 : 0]);
     else
       return amount.mul(lpSupply).div(expectedTarget[isQuote ? 1 : 0]);
