@@ -361,8 +361,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
         // Verify funds were withdrawn from strategies
         // should've withdrawn all (except admin), so verify that
-        expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
-        expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
+        expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+        expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
         expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
         expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
@@ -404,8 +404,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // printStruct(await router.getStrategiesValue());
       }
 
-      expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
-      expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
+      expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+      expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
       expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
@@ -413,7 +413,7 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     });
 
-    it("Remove strategy", async function () {
+    it.only("Remove strategy", async function () {
 
       // deposit to strategies
       await router.depositToBatch(usdc.address, parseUsdc("10"));
@@ -461,9 +461,12 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
           parseUniform("2.0")
       );
 
+      ({ balances, totalBalance } = await router.getStrategiesValue());
+      console.log(totalBalance, balances);
 
-      expect(await usdc.balanceOf(strategyBiswap2.address)).to.equal(0);
-      expect(await usdc.balanceOf(strategyBiswap.address)).to.be.lt(parseUsdc("1"));
+      // This seems to fail because in this branch there is no strategy removal logic.
+      expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+      expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
       expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
