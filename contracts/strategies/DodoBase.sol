@@ -105,9 +105,8 @@ contract DodoBase is
             if (lpAmountToWithdraw > stakedLpBalance)
                 lpAmountToWithdraw = stakedLpBalance;
 
-            farm.withdraw(address(lpToken), lpAmountToWithdraw);
-
             if(lpAmountToWithdraw != 0) {
+                farm.withdraw(address(lpToken), lpAmountToWithdraw);
                 uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw);
                 _withdrawFromDodoLp(receiveAmount);
                 _sellDodo();
