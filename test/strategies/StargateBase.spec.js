@@ -69,7 +69,8 @@ describe("Test StargateBase", function () {
 
     dustLPinUSDT = parseUsdt("0.000001999"); // 1.999 SD
     remainingDust = parseUsdt("0.000000001"); // 0.001 SD
-    oneLPinUSDT = dustLPinUSDT.add(remainingDust); // 2 SD is 1 LP at the moment
+    // to get 2 SD is 1 LP at the moment, check amountLDtoLP function description
+    oneLPinUSDT = dustLPinUSDT.add(remainingDust);
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
 
@@ -521,6 +522,57 @@ describe("Test StargateBase", function () {
       // Owner should have all tokens
       expect(ownerBalanceAfter).to.be.equal(
         initialOwnerBalance.add(totalTokens).add(receivedTokenAmountForSoldReward)
+      );
+    });
+
+    it("should withdraw a less amount of tokens that expected with 2 SD delta due to standard decimals handling and calculating LP tokens on Stargate", async function () {
+      // reset the balance of the strategy for this test
+      await stargateStrategy.withdraw(await token.balanceOf(stargateStrategy.address));
+
+      // prepare and save states before
+      const initialOwnerBalance = await token.balanceOf(owner.address);
+      const initialStakedLpAmount = (
+        await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+      )[0];
+
+      // calculate actual extra withdrawal amount,
+      // check amountLDtoLP function description to get more details
+      const withdrawAmount = parseUsdt("33.333333333"); // 33333333.333 SD
+      const lpAmountToWithdraw = await amountLDtoLP(withdrawAmount);
+      const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw); // 33333332.000 SD
+
+      // actual withdraw amount should be less than the expected amount, delta is 2 SD
+      expect(
+        await stargateStrategy.callStatic.withdraw(withdrawAmount)
+      ).to.be.closeTo(actualWithdrawAmount, oneLPinUSDT);
+      expect(
+        await stargateStrategy.callStatic.withdraw(withdrawAmount)
+      ).to.be.equal(actualWithdrawAmount);
+
+      // perform withdraw because callStatic doesn't change any state
+      await stargateStrategy.withdraw(withdrawAmount);
+
+      // The Underlying token balance should be zero
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(0);
+      // STG token balance should be zero
+      expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
+
+      // expect the staked LP amount to be less than the initial amount by the amount of LP tokens that were withdrawn
+      expect(
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
+      ).to.be.equal(
+        initialStakedLpAmount.sub(lpAmountToWithdraw)
+      );
+
+      // Owner should have all tokens
+      expect(await token.balanceOf(owner.address)).to.be.closeTo(
+        initialOwnerBalance.add(actualWithdrawAmount),
+        oneLPinUSDT
+      );
+      expect(await token.balanceOf(owner.address)).to.be.equal(
+        initialOwnerBalance.add(actualWithdrawAmount)
       );
     });
   });
