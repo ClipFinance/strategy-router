@@ -364,8 +364,8 @@ describe("Test StargateBase", function () {
     });
 
     it("should return correct amount of the locked and deposited tokens", async function () {
-      const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
-      const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
+      const [stakedLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
       await token.transfer(stargateStrategy.address, testUsdtAmount);
 
@@ -378,8 +378,8 @@ describe("Test StargateBase", function () {
     });
 
     it("should return the correct amount of the locked and deposited dust amount of tokens", async function () {
-      const [stakeddLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
-      const stakedTokenAmount = await lpToken.amountLPtoLD(stakeddLpAmount);
+      const [stakedLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
       await token.transfer(stargateStrategy.address, dustSDinUSDT); // dust deposit
 
