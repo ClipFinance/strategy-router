@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { utils } = require("ethers");
+const { parseEther } = require("ethers/lib/utils");
 const { setupCore, deployStargateStrategy } = require("../shared/commonSetup");
 const {
   getTokenContract,
@@ -79,7 +79,7 @@ describe("Test StargateBase", function () {
     await mintForkedToken(
       stg.address,
       owner.address,
-      utils.parseEther("10000000000")
+      parseEther("10000000000")
     );
     await mintForkedToken(
       token.address,
@@ -604,12 +604,17 @@ describe("Test StargateBase", function () {
     });
 
     it("should revert if insufficient pool liquidity", async function () {
-      const deltaCreditBefore = await lpToken.deltaCredit();
+      const deltaCreditBefore = await lpToken.deltaCredit(); // in SD
+
+      const totalTokensInLP = await amountLDtoLP(await stargateStrategy.totalTokens());
+      const oneLP = await amountLDtoLP(oneLPinUSDT);
 
       // set custom delta credit
       const deltaCreditSlot = "0x15";
-      const customDeltaCredit = ethers.BigNumber.from(10000);
+      const customDeltaCredit = await amountLPtoSD(totalTokensInLP.sub(oneLP));
       await setStorageAt(lpToken.address, deltaCreditSlot, customDeltaCredit);
+
+      expect(customDeltaCredit).to.be.lessThan(deltaCreditBefore);
 
       await expect(
         stargateStrategy.withdrawAll()
@@ -658,5 +663,11 @@ describe("Test StargateBase", function () {
 
     const amountSD = amountLD.div(convertRate);
     return amountSD.mul(totalSupply).div(totalLiquidity);
+  }
+
+  const amountLPtoSD = async (amountLP) => {
+    const amountLD = await lpToken.amountLPtoLD(amountLP);
+    const convertRate = await lpToken.convertRate();
+    return amountLD.div(convertRate);
   }
 });
