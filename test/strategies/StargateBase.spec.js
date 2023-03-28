@@ -69,7 +69,7 @@ describe("Test StargateBase", function () {
 
     dustLPinUSDT = parseUsdt("0.000001999"); // 1.999 SD
     remainingDust = parseUsdt("0.000000001"); // 0.001 SD
-    // to get 2 SD is 1 LP at the moment, check amountLDtoLP function description
+    // to get 1 LP we need 2 SD at the moment, check amountLDtoLP function description
     oneLPinUSDT = dustLPinUSDT.add(remainingDust);
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
