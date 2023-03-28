@@ -10,6 +10,7 @@ const {
 const { provider, deploy, skipBlocks } = require("../utils");
 const { impersonateAccount, setBalance, stopImpersonatingAccount } = require("@nomicfoundation/hardhat-network-helpers");
 const { parseEther } = require("ethers/lib/utils");
+const { smock } = require("@defi-wonderland/smock");
 
 describe("Test DodoBase", function () {
 
@@ -35,19 +36,9 @@ describe("Test DodoBase", function () {
     [owner, nonReceiptOwner] = await ethers.getSigners();
     initialSnapshot = await provider.send("evm_snapshot");
 
-    // deploy core contracts
-    ({ router, oracle, batch, receiptContract, sharesToken } =
-      await setupCore());
-
     mockExchange = await deploy("MockExchange");
-
-    await router.setAddresses(
-      mockExchange.address,
-      oracle.address,
-      sharesToken.address,
-      batch.address,
-      receiptContract.address
-    );
+    router = await smock.fake("StrategyRouter");
+    router.getExchange.returns(mockExchange.address);
 
     ({ token: usdtToken, parseToken: parseUsdt } = await getTokenContract(hre.networkVariables.usdt));
     ({ token: dodoToken, parseToken: parseDodo } = await getTokenContract(hre.networkVariables.dodo));
