@@ -6,7 +6,7 @@ const {
   mintForkedToken,
   getContract,
 } = require("../shared/forkHelper");
-const { provider, deploy, skipBlocks } = require("../utils");
+const { provider, deploy, skipBlocks, MaxUint256 } = require("../utils");
 const { impersonateAccount, setBalance, stopImpersonatingAccount } = require("@nomicfoundation/hardhat-network-helpers");
 const { parseEther } = require("ethers/lib/utils");
 const { smock } = require("@defi-wonderland/smock");
@@ -124,6 +124,15 @@ describe("Test DodoBase", function () {
         dodoStrategy,
         "Ownable__CallerIsNotTheOwner"
       );
+    });
+
+    it("revert if the deposit amount exceeds the transferred tokens", async () => {
+      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+
+      await expect(
+        dodoStrategy.deposit(MaxUint256)
+      ).to.be.revertedWithCustomError(dodoStrategy, "DepositAmountExceedsBalance");
+
     });
 
     it("swap token to LP and deposit to DodoMine", async function () {
