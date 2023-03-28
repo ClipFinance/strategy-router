@@ -152,7 +152,7 @@ contract DodoBase is
         farm.withdrawAll(address(lpToken));
 
         if (lpToken.balanceOf(address(this)) != 0)
-            amountWithdrawn = _withdrawAllFromDodoLp();
+            _withdrawAllFromDodoLp();
 
         _sellDodo();
         amountWithdrawn = token.balanceOf(address(this));
@@ -184,25 +184,26 @@ contract DodoBase is
 
     function _depositToDodoLp(uint256 _amount) internal returns (uint256) {
         if (isBase) {
-            return pool.depositBase(_amount);
+            pool.depositBase(_amount);
         } else {
-            return pool.depositQuote(_amount);
+            pool.depositQuote(_amount);
+        }
+        return lpToken.balanceOf(address(this));
+    }
+
+    function _withdrawFromDodoLp(uint256 _amount) internal {
+        if (isBase) {
+            pool.withdrawBase(_amount);
+        } else {
+            pool.withdrawQuote(_amount);
         }
     }
 
-    function _withdrawFromDodoLp(uint256 _amount) internal returns (uint256) {
+    function _withdrawAllFromDodoLp() internal {
         if (isBase) {
-            return pool.withdrawBase(_amount);
+            pool.withdrawAllBase();
         } else {
-            return pool.withdrawQuote(_amount);
-        }
-    }
-
-    function _withdrawAllFromDodoLp() internal returns (uint256) {
-        if (isBase) {
-            return pool.withdrawAllBase();
-        } else {
-            return pool.withdrawAllQuote();
+            pool.withdrawAllQuote();
         }
     }
 
