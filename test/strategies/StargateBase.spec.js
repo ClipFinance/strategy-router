@@ -539,7 +539,7 @@ describe("Test StargateBase", function () {
 
       expect(
         await stargateStrategy.callStatic.withdraw(withdrawAmount)
-      ).to.be.closeTo(actualWithdrawAmount, oneLPinUSDT);
+      ).to.be.closeTo(withdrawAmount, oneLPinUSDT);
       expect(
         await stargateStrategy.callStatic.withdraw(withdrawAmount)
       ).to.be.equal(actualWithdrawAmount);
@@ -563,7 +563,7 @@ describe("Test StargateBase", function () {
 
       // Owner should have all tokens
       expect(await token.balanceOf(owner.address)).to.be.closeTo(
-        initialOwnerBalance.add(actualWithdrawAmount),
+        initialOwnerBalance.add(withdrawAmount),
         oneLPinUSDT
       );
       expect(await token.balanceOf(owner.address)).to.be.equal(
