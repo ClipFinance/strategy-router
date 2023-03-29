@@ -460,9 +460,10 @@ describe("Test DodoBase", function () {
 
       const penalty = await getPenaltyAmount(stakedTokenAmount);
 
-      await dodoStrategy.withdraw(
-        testUsdtAmount.add(exchangedTokenAmount)
-      );
+      let currentTokenBal = await dodoStrategy.totalTokens();
+      let amountToWithdraw = testUsdtAmount.add(exchangedTokenAmount);
+      expect(amountToWithdraw).to.be.gt(currentTokenBal)
+      await dodoStrategy.withdraw(amountToWithdraw);
 
       // The Underlying token balance should zero
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
