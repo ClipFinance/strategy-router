@@ -437,11 +437,11 @@ describe("Test StargateBase", function () {
     it("should take the staked balance to withdraw if the remaining token balance is not enough to cover the withdrawal amount", async function () {
       // prepare and save states before
       await token.transfer(stargateStrategy.address, testUsdtAmount);
-      const currentTokenBalance = await token.balanceOf(stargateStrategy.address);
+      const initialTokenBalance = await token.balanceOf(stargateStrategy.address);
 
-      const extraWithdrwalAmount = parseUsdt("100");
-      const withdrawAmount = currentTokenBalance.add(extraWithdrwalAmount);
-      const lpAmountToExtraWithdraw = await amountLDtoLP(extraWithdrwalAmount);
+      const extraWithdrawalAmount = parseUsdt("100");
+      const withdrawAmount = initialTokenBalance.add(extraWithdrawalAmount);
+      const extraWithdrawalLpAmount = await amountLDtoLP(extraWithdrawalAmount);
 
       const initialOwnerBalance = await token.balanceOf(owner.address);
       const initialStakedLpAmount = (
@@ -467,7 +467,7 @@ describe("Test StargateBase", function () {
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
       ).to.be.equal(
-        initialStakedLpAmount.sub(lpAmountToExtraWithdraw)
+        initialStakedLpAmount.sub(extraWithdrawalLpAmount)
       );
 
       // Owner should have all tokens, also with 1 SD delta
@@ -568,6 +568,63 @@ describe("Test StargateBase", function () {
       );
       expect(await token.balanceOf(owner.address)).to.be.equal(
         initialOwnerBalance.add(actualWithdrawAmount)
+      );
+    });
+
+    it("should withdraw and reinvest the correct amounts of LP tokens via withdraw ", async function () {
+      // prepare and save states before
+      const receivedTokenAmountForSoldReward = parseUsdt("534.400000546"); // add some dust to the reward
+      await setReceivedAmountDuringSellReward(receivedTokenAmountForSoldReward);
+
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      const initialTokenBalance = await token.balanceOf(stargateStrategy.address);
+
+      const initialOwnerBalance = await token.balanceOf(owner.address);
+      const initialStakedLpAmount = (
+        await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+      )[0];
+
+      const extraWithdrawalAmount = parseUsdt("100");
+      const withdrawAmount = initialTokenBalance.add(extraWithdrawalAmount);
+
+      // calculate dust token amount that will be left after withdrawal,
+      // check amountLDtoLP function description to get more details
+      const extraWithdrawalLpAmount= await amountLDtoLP(extraWithdrawalAmount);
+      const dustTokenAmount = extraWithdrawalAmount.sub(
+        await lpToken.amountLPtoLD(extraWithdrawalLpAmount)
+      );
+
+      // calculate reinvested LP amount
+      // rewards amount added the dust amount to withdraw amount and we need to subtract it
+      const reinvestedTokenAmountToFarm = receivedTokenAmountForSoldReward.sub(dustTokenAmount);
+      const reinvestedLpAmount = await amountLDtoLP(reinvestedTokenAmountToFarm);
+
+      await skipBlocks(10);
+
+      // expect the correct amount of tokens to be withdrawn without any dust
+      expect(
+        await stargateStrategy.callStatic.withdraw(withdrawAmount)
+      ).to.be.equal(withdrawAmount);
+      // perform withdraw because callStatic doesn't change any state
+      await stargateStrategy.withdraw(withdrawAmount);
+
+      // The Underlying token balance should be zero or a dust amount (less than 1 SD)
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(oneSD);
+      // STG token balance should be zero
+      expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
+
+      // Expect the correct amount of LP tokens to be withdrawn and reinvested to the farm
+      expect(
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
+      ).to.be.equal(
+        initialStakedLpAmount.sub(extraWithdrawalLpAmount).add(reinvestedLpAmount)
+      );
+
+      // Owner should have all tokens
+      expect(await token.balanceOf(owner.address)).to.be.equal(
+        initialOwnerBalance.add(withdrawAmount)
       );
     });
   });
