@@ -22,6 +22,7 @@ async function main() {
   // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
   busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
   usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
+  usdt = await ethers.getContractAt("ERC20", hre.networkVariables.usdt);
   const usdcDecimals = await usdc.decimals();
   const parseUsdc = (amount) => parseUnits(amount, usdcDecimals);
   const parseExchangeLimit = (amount) => parseUnits(amount, 12);
@@ -33,7 +34,7 @@ async function main() {
   MIN_DEPOSIT = parseUniform("0.0001");
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
   FEE_PERCENT = 1000;
-  INITIAL_DEPOSIT = parseUsdc("0.1");
+  INITIAL_DEPOSIT = parseUsdc("1");
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
   oracle = await deployProxy("ChainlinkOracle");
@@ -111,8 +112,12 @@ async function main() {
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");
-  let oracleTokens = [busd.address, usdc.address];
-  let priceFeeds = [hre.networkVariables.BusdUsdPriceFeed, hre.networkVariables.UsdcUsdPriceFeed];
+  let oracleTokens = [busd.address, usdc.address, usdt.address];
+  let priceFeeds = [
+    hre.networkVariables.BusdUsdPriceFeed,
+    hre.networkVariables.UsdcUsdPriceFeed,
+    hre.networkVariables.UsdtUsdPriceFeed,
+  ];
   await (await oracle.setPriceFeeds(oracleTokens, priceFeeds)).wait();
 
   // pancake plugin params
@@ -220,10 +225,13 @@ async function main() {
   console.log("Setting supported token...");
   await (await router.setSupportedToken(busd.address, true)).wait();
   await (await router.setSupportedToken(usdc.address, true)).wait();
+  await (await router.setSupportedToken(usdt.address, true)).wait();
 
   console.log("Adding strategies...");
   await (await router.addStrategy(strategyBusd.address, 5000)).wait();
   await (await router.addStrategy(strategyUsdc.address, 5000)).wait();
+  await (await router.addStrategy(stargateBusdStrategy.address, 5000)).wait();
+  await (await router.addStrategy(stargateUsdtStrategy.address, 5000)).wait();
 
 
   console.log("Approving for initial deposit...");

@@ -31,6 +31,7 @@ function bnbChain() {
 
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
+  bnb.UsdtUsdPriceFeed = "0xB97Ad0E74fa7d920791E90258A6E2085088b4320";
 
   bnb.stargateRouter = "0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8";
   bnb.stargateFarm = "0x3052A0F6ab15b4AE1df39962d5DdEFacA86DaB47";
