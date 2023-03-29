@@ -17,6 +17,8 @@ interface IDodoSingleAssetPool {
     function _BASE_TOKEN_() external returns (address);
 
     function _QUOTE_TOKEN_() external returns (address);
+    
+    function _R_STATUS_() external returns (address);
 
     function getExpectedTarget()
         external
@@ -37,4 +39,12 @@ interface IDodoSingleAssetPool {
         external
         view 
         returns (uint256 lpBalance);
+
+    function sellBaseToken(
+        uint256 amount,
+        uint256 minReceiveQuote,
+        bytes calldata data
+    ) 
+        external 
+        returns (uint256);
 }
