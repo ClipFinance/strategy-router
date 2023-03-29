@@ -272,7 +272,7 @@ describe("Test DodoBase", function () {
       const exchangedTokenAmount = parseUsdt("100");
       await setReceivedAmountDuringSellReward(exchangedTokenAmount);
 
-      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+      const currentOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -303,7 +303,7 @@ describe("Test DodoBase", function () {
 
       // Owner should have all tokens.
       expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(testUsdtAmount).sub(penalty),
+        currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(testUsdtAmount).sub(penalty),
       );
     });
   });
@@ -355,7 +355,7 @@ describe("Test DodoBase", function () {
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
       const withdrawAmount = parseUsdt("100");
-      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+      const currentOwnerBal = await usdtToken.balanceOf(owner.address);
 
       const stakedLpAmount = await dodoMine.getUserLpBalance(
         lpToken.address,
@@ -376,7 +376,7 @@ describe("Test DodoBase", function () {
 
       // Owner should have withdrawn token
       expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(withdrawAmount)
+        currentOwnerBal.add(withdrawAmount)
       );
     });
 
@@ -396,7 +396,7 @@ describe("Test DodoBase", function () {
       const exchangedTokenAmount = parseUsdt("100");
       await setReceivedAmountDuringSellReward(exchangedTokenAmount);
 
-      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+      const currentOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -434,7 +434,7 @@ describe("Test DodoBase", function () {
 
       // Owner should have all tokens.
       expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(withdrawAmount)
+        currentOwnerBal.add(withdrawAmount)
       );
     });
 
@@ -447,7 +447,7 @@ describe("Test DodoBase", function () {
       const exchangedTokenAmount = parseUsdt("100");
       await setReceivedAmountDuringSellReward(exchangedTokenAmount);
 
-      const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+      const currentOwnerBal = await usdtToken.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -480,7 +480,7 @@ describe("Test DodoBase", function () {
 
       // Owner should have all tokens.
       expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).sub(penalty)
+        currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).sub(penalty)
       );
     });
 
