@@ -47,4 +47,12 @@ interface IDodoSingleAssetPool {
     ) 
         external 
         returns (uint256);
+
+    function buyBaseToken(
+        uint256 amount,
+        uint256 maxPayQuote,
+        bytes calldata data
+    ) 
+        external 
+        returns (uint256);
 }
