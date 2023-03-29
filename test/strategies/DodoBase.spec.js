@@ -6,42 +6,27 @@ const {
   mintForkedToken,
   getContract,
 } = require("../shared/forkHelper");
-const { provider, deploy, skipBlocks, MaxUint256 } = require("../utils");
+const { deploy, skipBlocks, MaxUint256 } = require("../utils");
 const { smock } = require("@defi-wonderland/smock");
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+
+
 
 describe("Test DodoBase", function () {
 
-  let owner, nonReceiptOwner;
-  // mainnet contracts
-  let dodoMine, dodoPool;
-  // mainnet tokens
-  let usdtToken, busdToken, dodoToken, lpToken;
-  // core contracts
-  let router, mockExchange;
-  // dodo strategy
-  let dodoStrategy;
-  // revert to test-ready state
-  let snapshotId;
-  // revert to fresh fork state
-  let initialSnapshot;
+  async function initialState() {
 
-  let parseUsdt, parseDodo, parseBusd;
+    const [owner, nonReceiptOwner] = await ethers.getSigners();
 
-  let testUsdtAmount;
-
-  before(async function () {
-    [owner, nonReceiptOwner] = await ethers.getSigners();
-    initialSnapshot = await provider.send("evm_snapshot");
-
-    mockExchange = await deploy("MockExchange");
-    router = await smock.fake("StrategyRouter");
+    const mockExchange = await deploy("MockExchange");
+    const router = await smock.fake("StrategyRouter");
     router.getExchange.returns(mockExchange.address);
 
-    ({ token: usdtToken, parseToken: parseUsdt } = await getTokenContract(hre.networkVariables.usdt));
-    ({ token: busdToken, parseToken: parseBusd } = await getTokenContract(hre.networkVariables.busd));
-    ({ token: dodoToken, parseToken: parseDodo } = await getTokenContract(hre.networkVariables.dodo));
+    const { token: usdtToken, parseToken: parseUsdt } = await getTokenContract(hre.networkVariables.usdt);
+    const { token: busdToken, parseToken: parseBusd } = await getTokenContract(hre.networkVariables.busd);
+    const { token: dodoToken, parseToken: parseDodo } = await getTokenContract(hre.networkVariables.dodo);
 
-    lpToken = (await getTokenContract(hre.networkVariables.dodoUsdtLp)).token;
+    const lpToken = (await getTokenContract(hre.networkVariables.dodoUsdtLp)).token;
 
     await mintForkedToken(
       dodoToken.address,
@@ -59,13 +44,13 @@ describe("Test DodoBase", function () {
       parseBusd("10000000000")
     );
 
-    dodoMine = await getContract("IDodoMine", hre.networkVariables.dodoMine);
-    dodoPool = await getContract(
+    const dodoMine = await getContract("IDodoMine", hre.networkVariables.dodoMine);
+    const dodoPool = await getContract(
       "IDodoSingleAssetPool",
       hre.networkVariables.dodoBusdUsdtPool
     );
 
-    dodoStrategy = await deployDodoStrategy({
+    const dodoStrategy = await deployDodoStrategy({
       router: router.address,
       token: usdtToken.address,
       lpToken: lpToken.address,
@@ -75,23 +60,65 @@ describe("Test DodoBase", function () {
       upgrader: owner.address,
     });
 
-    testUsdtAmount = parseUsdt("10000");
-  });
+    async function unbalancePool() {
+      // sell baseToken to unbalance pool
+      await busdToken.approve(dodoPool.address, MaxUint256);
+      await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+    }
 
-  beforeEach(async function () {
-    snapshotId = await provider.send("evm_snapshot");
-  });
+    async function strategyDeposit(amount) {
+      await usdtToken.transfer(dodoStrategy.address, amount);
+      await dodoStrategy.deposit(amount);
+    }
 
-  afterEach(async function () {
-    await provider.send("evm_revert", [snapshotId]);
-  });
+    async function getLpAmountFromAmount(amount, shouldCeil = true) {
+      const expectedTarget = await dodoPool.getExpectedTarget();
+      const lpSupply = await lpToken.totalSupply();
+      const isQuote = !(await dodoStrategy.isBase());
+      // should ceil when doing withdrawals, but not for deposit or compound 
+      if (shouldCeil)
+        return amount.mul(lpSupply).divCeil(expectedTarget[isQuote ? 1 : 0]);
+      else
+        return amount.mul(lpSupply).div(expectedTarget[isQuote ? 1 : 0]);
+    }
 
-  after(async () => {
-    await provider.send("evm_revert", [initialSnapshot]);
-  });
+    async function getAmountFromLpAmount(lpAmount) {
+      const expectedTarget = await dodoPool.getExpectedTarget();
+      const lpSupply = await lpToken.totalSupply();
+
+      const isQuote = !(await dodoStrategy.isBase());
+      return lpAmount.mul(expectedTarget[isQuote ? 1 : 0]).div(lpSupply);
+    }
+
+    async function getPenaltyAmount(amount) {
+      const isQuote = !(await dodoStrategy.isBase());
+
+      if (isQuote)
+        return await dodoPool.getWithdrawQuotePenalty(amount);
+      else
+        return await dodoPool.getWithdrawBasePenalty(amount);
+    }
+
+    const setReceivedAmountDuringSellReward = async (tokenAmount) => {
+      // the strategy will receive tokenAmount from the mock exchange
+      // for selling reward tokens that it receives after claiming rewards
+      await usdtToken.transfer(mockExchange.address, tokenAmount);
+      await mockExchange.setAmountReceived(tokenAmount);
+    }
+
+    return {
+      owner, nonReceiptOwner,
+      router, dodoStrategy, mockExchange,
+      dodoToken, lpToken, usdtToken, busdToken, parseUsdt, parseBusd,
+      dodoPool, dodoMine,
+      getLpAmountFromAmount, strategyDeposit, setReceivedAmountDuringSellReward, unbalancePool,
+      getAmountFromLpAmount, getPenaltyAmount
+    };
+  }
 
   describe("constructor & initialize", function () {
     it("revert if deposit token is invalid", async function () {
+      const { owner, router, dodoToken, lpToken, dodoPool, dodoMine, } = await loadFixture(initialState);
       await expect(deployDodoStrategy({
         router: router.address,
         token: router.address, // set invalid deposit token
@@ -104,6 +131,8 @@ describe("Test DodoBase", function () {
     });
 
     it("check initial values", async function () {
+      const { owner, router, dodoStrategy, dodoToken, usdtToken, lpToken, dodoPool, dodoMine } = await loadFixture(initialState);
+
       expect(await dodoStrategy.depositToken()).to.be.eq(usdtToken.address);
       expect(await dodoStrategy.owner()).to.be.eq(owner.address);
 
@@ -122,6 +151,9 @@ describe("Test DodoBase", function () {
   describe("#deposit", function () {
 
     it("revert if msg.sender is not owner", async function () {
+      const { nonReceiptOwner, dodoStrategy, parseUsdt } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
       await expect(
         dodoStrategy.connect(nonReceiptOwner).deposit(testUsdtAmount)
       ).to.be.revertedWithCustomError(
@@ -131,6 +163,9 @@ describe("Test DodoBase", function () {
     });
 
     it("revert if the deposit amount exceeds the transferred tokens", async () => {
+      const { dodoStrategy, usdtToken, parseUsdt } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
       await expect(
@@ -140,10 +175,13 @@ describe("Test DodoBase", function () {
     });
 
     it("swap token to LP and deposit to DodoMine", async function () {
+      const { dodoStrategy, usdtToken, lpToken, parseUsdt, dodoMine,
+        getLpAmountFromAmount, strategyDeposit } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
       const lpAmount = await getLpAmountFromAmount(testUsdtAmount, false);
 
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
-      await dodoStrategy.deposit(testUsdtAmount);
+      await strategyDeposit(testUsdtAmount);
 
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
@@ -155,6 +193,9 @@ describe("Test DodoBase", function () {
     });
 
     it("do not revert when amount is 0", async function () {
+      const { dodoStrategy, usdtToken, parseUsdt, } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
       await dodoStrategy.deposit(0);
       expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
 
@@ -165,12 +206,13 @@ describe("Test DodoBase", function () {
   });
 
   describe("#compound", function () {
-    beforeEach(async () => {
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
-      await dodoStrategy.deposit(testUsdtAmount);
-    });
 
     it("revert if msg.sender is not owner", async function () {
+      const { nonReceiptOwner, dodoStrategy, parseUsdt, strategyDeposit } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
+
       await expect(
         dodoStrategy.connect(nonReceiptOwner).compound()
       ).to.be.revertedWithCustomError(
@@ -180,6 +222,12 @@ describe("Test DodoBase", function () {
     });
 
     it("Compound DODO reward", async function () {
+      const { dodoStrategy, lpToken, dodoMine, mockExchange, 
+        usdtToken, parseUsdt, dodoToken, getLpAmountFromAmount,
+        strategyDeposit, setReceivedAmountDuringSellReward } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
 
       const stakedLpAmount = await dodoMine.getUserLpBalance(
         lpToken.address,
@@ -218,6 +266,13 @@ describe("Test DodoBase", function () {
     });
 
     it("the accrued dust should be deposited once its sum with compound reward", async function () {
+      const { dodoStrategy, lpToken, dodoMine, mockExchange, 
+        usdtToken, parseUsdt, dodoToken, strategyDeposit, setReceivedAmountDuringSellReward,
+        getLpAmountFromAmount, } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
+
       // simulate dust
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
@@ -252,11 +307,14 @@ describe("Test DodoBase", function () {
   describe("#withdrawAll", function () {
 
     it("revert if msg.sender is not owner", async function () {
+      const { nonReceiptOwner, dodoStrategy, usdtToken, parseUsdt, strategyDeposit } = await loadFixture(initialState);
+
+      const testUsdtAmount = parseUsdt("10000");
       // 50% on strategy's USDT account
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
       // 50% deposit
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
-      await dodoStrategy.deposit(testUsdtAmount);
+
+      await strategyDeposit(testUsdtAmount);
 
       await expect(
         dodoStrategy.connect(nonReceiptOwner).withdrawAll()
@@ -269,18 +327,19 @@ describe("Test DodoBase", function () {
     describe("Withdraw all tokens", function () {
 
       it("when penalty applied", async function () {
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        const { owner, dodoStrategy, usdtToken, parseUsdt, strategyDeposit, 
+          getAmountFromLpAmount, getPenaltyAmount, setReceivedAmountDuringSellReward,
+          dodoMine, lpToken, dodoToken, mockExchange, unbalancePool } = await loadFixture(initialState);
 
+        // setup conditions to get penalty on withdraw
+        await unbalancePool();
+ 
         // amount that will trigger penalty
-        let bigTestUsdtAmount = parseUsdt("1000000");
+        let testUsdtAmount = parseUsdt("1000000");
         // 50% on strategy's USDT account
-        await usdtToken.transfer(dodoStrategy.address, bigTestUsdtAmount);
-
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
         // 50% deposit
-        await usdtToken.transfer(dodoStrategy.address, bigTestUsdtAmount);
-        await dodoStrategy.deposit(bigTestUsdtAmount);
+        await strategyDeposit(testUsdtAmount);
 
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
@@ -322,18 +381,21 @@ describe("Test DodoBase", function () {
 
         // Owner should have all tokens.
         expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-          currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(bigTestUsdtAmount).sub(penalty),
+          currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(testUsdtAmount).sub(penalty),
         );
       });
 
       it("without penalty", async function () {
+        const { owner, dodoStrategy, usdtToken, parseUsdt, strategyDeposit, 
+          getAmountFromLpAmount, getPenaltyAmount, setReceivedAmountDuringSellReward,
+          dodoMine, lpToken, dodoToken, mockExchange, unbalancePool } = await loadFixture(initialState);
+
         // amount that won't trigger penalty
-        let smallTestUsdtAmount = parseUsdt("10");
+        let testUsdtAmount = parseUsdt("10");
         // 50% on strategy's USDT account
-        await usdtToken.transfer(dodoStrategy.address, smallTestUsdtAmount);
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
         // 50% deposit
-        await usdtToken.transfer(dodoStrategy.address, smallTestUsdtAmount);
-        await dodoStrategy.deposit(smallTestUsdtAmount);
+        await strategyDeposit(testUsdtAmount);
 
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
@@ -374,19 +436,21 @@ describe("Test DodoBase", function () {
 
         // Owner should have all tokens.
         expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-          currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(smallTestUsdtAmount).sub(penalty),
+          currentOwnerBal.add(stakedTokenAmount).add(exchangedTokenAmount).add(testUsdtAmount).sub(penalty),
         );
       });
     });
   });
 
   describe("#totalTokens", function () {
-    beforeEach(async () => {
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
-      await dodoStrategy.deposit(testUsdtAmount);
-    });
 
     it("should return correct amount of the locked and deposited tokens", async function () {
+
+      const { dodoStrategy, usdtToken, parseUsdt, strategyDeposit, 
+        getAmountFromLpAmount, dodoMine, lpToken } = await loadFixture(initialState);
+
+      let testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
 
       const stakedLpAmount = await dodoMine.getUserLpBalance(
         lpToken.address,
@@ -407,12 +471,13 @@ describe("Test DodoBase", function () {
   });
 
   describe("#withdraw", function () {
-    beforeEach(async () => {
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
-      await dodoStrategy.deposit(testUsdtAmount);
-    });
 
     it("revert if msg.sender is not owner", async function () {
+      const { nonReceiptOwner, dodoStrategy, parseUsdt, strategyDeposit, } = await loadFixture(initialState);
+
+      let testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
+
       await expect(
         dodoStrategy.connect(nonReceiptOwner).withdraw(testUsdtAmount)
       ).to.be.revertedWithCustomError(
@@ -422,6 +487,12 @@ describe("Test DodoBase", function () {
     });
 
     it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
+
+      const { dodoStrategy, usdtToken, lpToken, parseUsdt, strategyDeposit, 
+        dodoMine, owner } = await loadFixture(initialState);
+
+      let testUsdtAmount = parseUsdt("10000");
+      await strategyDeposit(testUsdtAmount);
 
       // simulate 'remaining token balance' 
       await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
@@ -456,9 +527,14 @@ describe("Test DodoBase", function () {
 
       it("when penalty applied", async function () {
 
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        const { dodoStrategy, usdtToken,  parseUsdt, strategyDeposit, 
+          owner, unbalancePool, getPenaltyAmount, dodoToken } = await loadFixture(initialState);
+
+        let testUsdtAmount = parseUsdt("10000");
+        await strategyDeposit(testUsdtAmount);
+
+        // setup conditions to get penalty on withdraw
+        await unbalancePool();
 
         await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
@@ -491,6 +567,11 @@ describe("Test DodoBase", function () {
       });
 
       it("without penalty", async function () {
+        const { dodoStrategy, usdtToken,  parseUsdt, strategyDeposit, 
+          owner, getPenaltyAmount, dodoToken } = await loadFixture(initialState);
+
+        let testUsdtAmount = parseUsdt("10000");
+        await strategyDeposit(testUsdtAmount);
 
         await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
@@ -526,9 +607,15 @@ describe("Test DodoBase", function () {
     describe("Withdraw all tokens if requested amount is higher than total tokens", async function () {
 
       it("when penalty applied", async function () {
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        const { dodoStrategy, usdtToken,  parseUsdt, strategyDeposit, 
+          owner, getPenaltyAmount, dodoToken, dodoMine, lpToken, unbalancePool,
+          setReceivedAmountDuringSellReward, getAmountFromLpAmount, mockExchange } = await loadFixture(initialState);
+
+        let testUsdtAmount = parseUsdt("10000");
+        await strategyDeposit(testUsdtAmount);
+
+        // setup conditions to get penalty on withdraw
+        await unbalancePool();
 
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
@@ -577,6 +664,13 @@ describe("Test DodoBase", function () {
       });
 
       it("without penalty", async function () {
+        const { dodoStrategy, usdtToken,  parseUsdt, strategyDeposit, 
+          owner, getPenaltyAmount, dodoToken, dodoMine, lpToken,
+          setReceivedAmountDuringSellReward, getAmountFromLpAmount, mockExchange } = await loadFixture(initialState);
+
+        let testUsdtAmount = parseUsdt("10000");
+        await strategyDeposit(testUsdtAmount);
+
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
           dodoStrategy.address
@@ -624,40 +718,4 @@ describe("Test DodoBase", function () {
       });
     });
   });
-
-
-  async function getLpAmountFromAmount(amount, shouldCeil = true) {
-    const expectedTarget = await dodoPool.getExpectedTarget();
-    const lpSupply = await lpToken.totalSupply();
-    const isQuote = !(await dodoStrategy.isBase());
-    // should ceil when doing withdrawals, but not for deposit or compound 
-    if (shouldCeil)
-      return amount.mul(lpSupply).divCeil(expectedTarget[isQuote ? 1 : 0]);
-    else
-      return amount.mul(lpSupply).div(expectedTarget[isQuote ? 1 : 0]);
-  }
-
-  async function getAmountFromLpAmount(lpAmount) {
-    const expectedTarget = await dodoPool.getExpectedTarget();
-    const lpSupply = await lpToken.totalSupply();
-
-    const isQuote = !(await dodoStrategy.isBase());
-    return lpAmount.mul(expectedTarget[isQuote ? 1 : 0]).div(lpSupply);
-  }
-
-  async function getPenaltyAmount(amount) {
-    const isQuote = !(await dodoStrategy.isBase());
-
-    if (isQuote)
-      return await dodoPool.getWithdrawQuotePenalty(amount);
-    else
-      return await dodoPool.getWithdrawBasePenalty(amount);
-  }
-
-  const setReceivedAmountDuringSellReward = async (tokenAmount) => {
-    // the strategy will receive tokenAmount from the mock exchange
-    // for selling reward tokens that it receives after claiming rewards
-    await usdtToken.transfer(mockExchange.address, tokenAmount);
-    await mockExchange.setAmountReceived(tokenAmount);
-  }
 });
