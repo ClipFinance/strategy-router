@@ -537,9 +537,9 @@ describe("Test StargateBase", function () {
       const lpAmountToWithdraw = await amountLDtoLP(withdrawAmount);
       const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw); // 33333332.000 SD
 
-      expect(
-        await stargateStrategy.callStatic.withdraw(withdrawAmount)
-      ).to.be.closeTo(withdrawAmount, oneLPinUSDT);
+      // expect the actual withdraw amount to be close to the withdraw amount
+      expect(actualWithdrawAmount).to.be.closeTo(withdrawAmount, oneLPinUSDT);
+
       expect(
         await stargateStrategy.callStatic.withdraw(withdrawAmount)
       ).to.be.equal(actualWithdrawAmount);
@@ -562,10 +562,6 @@ describe("Test StargateBase", function () {
       );
 
       // Owner should have all tokens
-      expect(await token.balanceOf(owner.address)).to.be.closeTo(
-        initialOwnerBalance.add(withdrawAmount),
-        oneLPinUSDT
-      );
       expect(await token.balanceOf(owner.address)).to.be.equal(
         initialOwnerBalance.add(actualWithdrawAmount)
       );
