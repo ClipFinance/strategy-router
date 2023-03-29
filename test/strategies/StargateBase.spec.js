@@ -522,7 +522,7 @@ describe("Test StargateBase", function () {
     });
 
     it("should withdraw a less amount of tokens that expected with 2 SD delta due to standard decimals handling and calculating LP tokens on Stargate", async function () {
-      // reset the balance of the strategy for this test
+      // remove the dust balance of the strategy for this test
       await stargateStrategy.withdraw(await token.balanceOf(stargateStrategy.address));
 
       // prepare and save states before
@@ -537,7 +537,6 @@ describe("Test StargateBase", function () {
       const lpAmountToWithdraw = await amountLDtoLP(withdrawAmount);
       const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw); // 33333332.000 SD
 
-      // actual withdraw amount should be less than the expected amount, delta is 2 SD
       expect(
         await stargateStrategy.callStatic.withdraw(withdrawAmount)
       ).to.be.closeTo(actualWithdrawAmount, oneLPinUSDT);
@@ -590,10 +589,14 @@ describe("Test StargateBase", function () {
     });
 
     it("Withdraw all tokens", async function () {
+      // add unstaked balance
+      await token.transfer(stargateStrategy.address, testUsdtAmount);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.gt(0);
+
       const receivedTokenAmountForSoldReward = parseUsdt("100");
       await setReceivedAmountDuringSellReward(receivedTokenAmountForSoldReward);
 
-      const currnetOwnerBal = await token.balanceOf(owner.address);
+      const initialOwnerBalance = await token.balanceOf(owner.address);
 
       await skipBlocks(10);
 
@@ -603,10 +606,6 @@ describe("Test StargateBase", function () {
       );
 
       const totalTokens = await stargateStrategy.totalTokens();
-
-      // add unstaked balance
-      await token.transfer(stargateStrategy.address, testUsdtAmount);
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.gt(0);
 
       await stargateStrategy.withdrawAll();
 
@@ -628,7 +627,7 @@ describe("Test StargateBase", function () {
 
       // Owner should have all tokens
       expect(await token.balanceOf(owner.address)).to.be.equal(
-        currnetOwnerBal.add(totalTokens).add(receivedTokenAmountForSoldReward)
+        initialOwnerBalance.add(totalTokens).add(receivedTokenAmountForSoldReward)
       );
 
       // expect 0 when nothing to withdraw
