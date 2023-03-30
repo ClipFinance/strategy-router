@@ -598,9 +598,9 @@ describe("Test DodoBase", function () {
         const penalty = await getPenaltyAmount(stakedTokenAmount);
         expect(penalty).to.be.greaterThan(0);
 
-        let currentTokenBal = await dodoStrategy.totalTokens();
-        let amountToWithdraw = testUsdtAmount.add(exchangedTokenAmount);
-        expect(amountToWithdraw).to.be.gt(currentTokenBal)
+        let extraAmount = parseUsdt("10000");
+        let allAvailableBalance = testUsdtAmount.add(exchangedTokenAmount);
+        let amountToWithdraw = allAvailableBalance.add(extraAmount);
 
         await dodoStrategy.withdraw(amountToWithdraw);
 
@@ -645,9 +645,9 @@ describe("Test DodoBase", function () {
         const penalty = await getPenaltyAmount(stakedTokenAmount);
         expect(penalty).to.be.equal(0);
 
-        let currentTokenBal = await dodoStrategy.totalTokens();
-        let amountToWithdraw = testUsdtAmount.add(exchangedTokenAmount);
-        expect(amountToWithdraw).to.be.gt(currentTokenBal)
+        let extraAmount = parseUsdt("10000");
+        let allAvailableBalance = testUsdtAmount.add(exchangedTokenAmount);
+        let amountToWithdraw = allAvailableBalance.add(extraAmount);
 
         await dodoStrategy.withdraw(amountToWithdraw);
 
