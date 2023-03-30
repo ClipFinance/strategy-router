@@ -270,9 +270,7 @@ describe("Test DodoBase", function () {
     describe("Withdraw all tokens", function () {
 
       it("when penalty applied", async function () {
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        await setPenaltyOnWithdrawFromDODO();
 
         // amount that will trigger penalty
         let bigTestUsdtAmount = parseUsdt("1000000");
@@ -427,9 +425,7 @@ describe("Test DodoBase", function () {
 
       it("when penalty applied", async function () {
 
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        await setPenaltyOnWithdrawFromDODO();
 
         // simulate 'remaining token balance' 
         await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
@@ -505,9 +501,7 @@ describe("Test DodoBase", function () {
 
       it("when penalty applied", async function () {
 
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        await setPenaltyOnWithdrawFromDODO();
 
         await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
@@ -576,9 +570,7 @@ describe("Test DodoBase", function () {
     describe("Withdraw all tokens if requested amount is higher than total tokens", async function () {
 
       it("when penalty applied", async function () {
-        // sell baseToken to unbalance pool
-        await busdToken.approve(dodoPool.address, MaxUint256);
-        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
+        await setPenaltyOnWithdrawFromDODO();
 
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
@@ -704,6 +696,12 @@ describe("Test DodoBase", function () {
       return await dodoPool.getWithdrawQuotePenalty(amount);
     else
       return await dodoPool.getWithdrawBasePenalty(amount);
+  }
+
+  async function setPenaltyOnWithdrawFromDODO() {
+    // sell baseToken to unbalance pool
+    await busdToken.approve(dodoPool.address, MaxUint256);
+    await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
   }
 
   async function setZeroPenaltyForWithdrawOnDODO() {
