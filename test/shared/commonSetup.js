@@ -53,6 +53,7 @@ async function deployStargateStrategy({
   let StargateBase = await ethers.getContractFactory("StargateBase");
   let stargateStrategy = await upgrades.deployProxy(StargateBase, [upgrader], {
     kind: "uups",
+    unsafeAllow: ['delegatecall'],
     constructorArgs: [router, token, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
   });
 
