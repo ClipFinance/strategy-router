@@ -77,7 +77,7 @@ async function main() {
   let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt")
   strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
-    constructorArgs: [router.address, oracle.address],
+    constructorArgs: [router.address],
   });
   console.log("strategyBusd", strategyBusd.address);
   await (await strategyBusd.transferOwnership(router.address)).wait();
@@ -87,7 +87,7 @@ async function main() {
   StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt")
   strategyUsdc = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
-    constructorArgs: [router.address, oracle.address],
+    constructorArgs: [router.address],
   });
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();

@@ -26,8 +26,6 @@ function bnbChain() {
   };
 
   bnb.uniswapRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-  bnb.biswapFarm = "0xDbc1A13490deeF9c3C12b44FE77b503c1B061739";
-  bnb.biswapRouter = "0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8"
 
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
