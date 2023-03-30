@@ -421,35 +421,81 @@ describe("Test DodoBase", function () {
       );
     });
 
-    it("Withdraw tokens when remaining token balance is greater than withdraw amount", async function () {
+    describe("Withdraw tokens when remaining token balance is greater than withdraw amount", function () {
 
-      // simulate 'remaining token balance' 
-      await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+      it("when penalty applied", async function () {
 
-      const withdrawAmount = parseUsdt("100");
-      const currentOwnerBal = await usdtToken.balanceOf(owner.address);
+        // sell baseToken to unbalance pool
+        await busdToken.approve(dodoPool.address, MaxUint256);
+        await dodoPool.sellBaseToken(parseBusd("1000000"), 0, []);
 
-      const stakedLpAmount = await dodoMine.getUserLpBalance(
-        lpToken.address,
-        dodoStrategy.address
-      );
+        // simulate 'remaining token balance' 
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
 
-      await dodoStrategy.withdraw(withdrawAmount);
+        const withdrawAmount = parseUsdt("100");
+        const currentOwnerBal = await usdtToken.balanceOf(owner.address);
 
-      // Remaining token balance on strategy should decrease
-      expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
-        testUsdtAmount.sub(withdrawAmount)
-      );
+        const stakedLpAmount = await dodoMine.getUserLpBalance(
+          lpToken.address,
+          dodoStrategy.address
+        );
 
-      // Should have same staked balance after withdraw
-      expect(
-        await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
-      ).to.be.equal(stakedLpAmount);
+        // check that penalty exists
+        const penalty = await getPenaltyAmount(withdrawAmount);
+        expect(penalty).to.be.greaterThan(0);
 
-      // Owner should have withdrawn token
-      expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
-        currentOwnerBal.add(withdrawAmount)
-      );
+        await dodoStrategy.withdraw(withdrawAmount);
+
+        // Remaining token balance on strategy should decrease
+        expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
+          testUsdtAmount.sub(withdrawAmount)
+        );
+
+        // Should have same staked balance after withdraw
+        expect(
+          await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+        ).to.be.equal(stakedLpAmount);
+
+        // Owner should have withdrawn token
+        expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
+          currentOwnerBal.add(withdrawAmount)
+        );
+      });
+
+      it("without penalty", async function () {
+
+        // simulate 'remaining token balance' 
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+
+        const withdrawAmount = parseUsdt("100");
+        const currentOwnerBal = await usdtToken.balanceOf(owner.address);
+
+        const stakedLpAmount = await dodoMine.getUserLpBalance(
+          lpToken.address,
+          dodoStrategy.address
+        );
+
+        // check that there is no penalty 
+        const penalty = await getPenaltyAmount(withdrawAmount);
+        expect(penalty).to.be.equal(0);
+
+        await dodoStrategy.withdraw(withdrawAmount);
+
+        // Remaining token balance on strategy should decrease
+        expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(
+          testUsdtAmount.sub(withdrawAmount)
+        );
+
+        // Should have same staked balance after withdraw
+        expect(
+          await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+        ).to.be.equal(stakedLpAmount);
+
+        // Owner should have withdrawn token
+        expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
+          currentOwnerBal.add(withdrawAmount)
+        );
+      });
     });
 
     describe("Withdraw tokens when remaining token balance is less than withdraw amount", function () {
