@@ -1,407 +1,384 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestParams, deployFakeStrategy } = require("../shared/commonSetup");
-const { skipTimeAndBlocks, provider, parseUniform } = require("../utils");
+const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
+const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
+const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 
-describe("StrategyRouter upkeep automation", function () {
 
-  let owner, user1, user2;
+
+describe("Test StrategyRouter", function () {
+
+  let owner, nonReceiptOwner, feeAddress;
   // mock tokens with different decimals
   let usdc, usdt, busd;
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
-  let cycleAllocationWindowTime = 3600;
+  let allocationWindowTime;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
   let initialSnapshot;
-  // Globally accessed vars, reset after every test case
-  let depositor1, depositor2, assetA, assetB;
 
   before(async function () {
 
-      [owner, user1, user2] = await ethers.getSigners();
-      initialSnapshot = await provider.send("evm_snapshot");
+    [owner, nonReceiptOwner,,,,,,,,feeAddress] = await ethers.getSigners();
+    initialSnapshot = await provider.send("evm_snapshot");
 
-      // deploy core contracts
-      ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
+    // deploy core contracts
+    ({ router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore());
+    allocationWindowTime = await router.allocationWindowTime();
 
-      // deploy mock tokens 
-      ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+    // deploy mock tokens 
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
 
-      // setup fake token liquidity
-      let amount = (1_000_000).toString();
-      await setupTokensLiquidityOnPancake(usdc, busd, amount);
-      await setupTokensLiquidityOnPancake(usdc, usdt, amount);
+    // setup fake token liquidity
+    let amount = (1_000_000).toString();
+    await setupTokensLiquidityOnPancake(usdc, busd, amount);
+    await setupTokensLiquidityOnPancake(busd, usdt, amount);
+    await setupTokensLiquidityOnPancake(usdc, usdt, amount);
 
-      // setup params for testing
-      await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
+    // setup params for testing
+    await setupTestParams(router, oracle, exchange, usdc, usdt, busd);
 
-      // setup infinite allowance
-      await usdc.approve(router.address, parseUsdc("1000000"));
-      await usdt.approve(router.address, parseUsdt("1000000"));
+    // setup infinite allowance
+    await busd.approve(router.address, parseBusd("1000000"));
+    await usdc.approve(router.address, parseUsdc("1000000"));
+    await usdt.approve(router.address, parseUsdt("1000000"));
 
-      // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(usdt.address, true);
+    // setup supported tokens
+    await router.setSupportedToken(usdc.address, true);
+    await router.setSupportedToken(busd.address, true);
+    await router.setSupportedToken(usdt.address, true);
 
-      // add fake strategies
-      await deployFakeStrategy({ router, token: usdc });
-      await deployFakeStrategy({ router, token: usdt });
+    // add fake strategies
+    await deployFakeStrategy({ router, token: busd });
+    await deployFakeStrategy({ router, token: usdc });
+    await deployFakeStrategy({ router, token: usdt });
 
-      await usdc.transfer(user1.address, parseUsdc("1500"));
+    await saturateTokenBalancesInStrategies(router);
+
+    // admin initial deposit to set initial shares and pps
+    await router.depositToBatch(busd.address, parseBusd("1"));
+    await router.allocateToStrategies();
   });
 
   beforeEach(async function () {
-      snapshotId = await provider.send("evm_snapshot");
+    snapshotId = await provider.send("evm_snapshot");
   });
 
   afterEach(async function () {
-      depositor1 = undefined;
-      depositor2 = undefined;
-      assetA = undefined;
-      assetB = undefined;
-      await provider.send("evm_revert", [snapshotId]);
+    await provider.send("evm_revert", [snapshotId]);
   });
 
   after(async () => {
-      await provider.send("evm_revert", [initialSnapshot]);
+    await provider.send("evm_revert", [initialSnapshot]);
   });
 
-  const itBehavesLikeInitialState = () => {
-    it("Countdown not started", async () => {
-        const currentCycleFirstDepositAt = await router.currentCycleFirstDepositAt([]);
-        expect(currentCycleFirstDepositAt).to.be.equal(0);
-    });
+  it("should allocateToStrategies", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
 
-    it("Deposits count is zero", async () => {
-      const currentCycleDepositsCount = await router.currentCycleDepositsCount();
-      expect(currentCycleDepositsCount).to.be.equal(0);
-    });
-
-    it("checkUpkeep returns false", async () => {
-        const [upkeepRunning, ] = await router.checkUpkeep([]);
-        expect(upkeepRunning).to.be.equal(false);
-    });
-
-    it("performUpkeep execution fails", async () => {
-      await expect(router.performUpkeep([])).to.be.reverted;
-    });
-  }
-
-  const verifyProtocolStateForSingleDeposit = () => {
-    it("Countdown has started", async () => {
-      const currentCycleFirstDepositAt = await router.currentCycleFirstDepositAt([]);
-      expect(currentCycleFirstDepositAt).to.not.be.equal(0);
-    });
-
-    it("Deposits count is 1", async () => {
-      const currentCycleDepositsCount = await router.currentCycleDepositsCount();
-      expect(currentCycleDepositsCount).to.be.equal(1);
-    });
-
-    it("performUpkeep execution is successful", async () => {
-      await expect(router.performUpkeep([])).to.not.be.reverted;
-    });
-  }
-
-  const verifyProtocolStateForTwoDeposit = () => {
-    it("Countdown has started", async () => {
-      const currentCycleFirstDepositAt = await router.currentCycleFirstDepositAt([]);
-      expect(currentCycleFirstDepositAt).to.not.be.equal(0);
-    });
-
-    it("Deposits count is 2", async () => {
-      const currentCycleDepositsCount = await router.currentCycleDepositsCount();
-      expect(currentCycleDepositsCount).to.be.equal(2);
-    });
-
-    it("performUpkeep execution is successful", async () => {
-      await expect(router.performUpkeep([])).to.not.be.reverted;
-    });
-  }
-
-  const verifyProtocolBehaviorInTimeWithTwoDeposits = () => {
-    describe("Current cycle is active", function() {
-      // No preset
-
-      verifyProtocolStateForTwoDeposit();
-      it("checkUpkeep returns false", async () => {
-        const [upkeepRunning, ] = await router.checkUpkeep([]);
-        expect(upkeepRunning).to.be.equal(false);
-      });
-
-      describe("User triggers allocateToStrategies", function() {
-          beforeEach(async function () {
-              // call allocateToStrategy on behalf of depositor 2
-              await router.connect(depositor2).performUpkeep([]);
-          });
-
-          itBehavesLikeInitialState();
-      });
-
-      describe("First deposit withdrawn", function() {
-        beforeEach(async function () {
-          // depositor 1 withdraws deposit 1
-          let receipts = await receiptContract.getTokensOfOwner(depositor1.address);
-          await router.connect(depositor1).withdrawFromBatch([receipts[receipts.length-1]]);
-        });
-
-        verifyProtocolStateForSingleDeposit();
-      });
-
-      describe("Second deposit withdrawn", function() {
-        beforeEach(async function () {
-          // depositor 2 withdraws deposit 2, deposits are returned in LIFO order
-          let receipts = await receiptContract.getTokensOfOwner(depositor2.address);
-          await router.connect(depositor2).withdrawFromBatch([receipts[0]]);
-        });
-
-        verifyProtocolStateForSingleDeposit();
-      });
-
-      describe("Both deposits withdrawn", function() {
-        beforeEach(async function () {
-          // depositor 1 withdraws deposit 1
-          // depositor 2 withdraws deposit 2
-          let receipts;
-
-          receipts = await receiptContract.getTokensOfOwner(depositor1.address);
-          await router.connect(depositor1).withdrawFromBatch([receipts[receipts.length-1]]);
-
-          receipts = await receiptContract.getTokensOfOwner(depositor2.address);
-          await router.connect(depositor2).withdrawFromBatch([receipts[receipts.length-1]]);
-        });
-
-        itBehavesLikeInitialState();
-      });
-    });
-
-    describe("Allocation window time has passed", function() {
-      before(async function () {
-          // move on the time to cycleDuration + 1 min
-          const timeToSkip = cycleAllocationWindowTime  + 60;
-          await skipTimeAndBlocks(timeToSkip, timeToSkip/3); 
-      });
-
-      verifyProtocolStateForTwoDeposit();
-
-      it("checkUpkeep returns false", async () => {
-        const [upkeepRunning, ] = await router.checkUpkeep([]);
-        expect(upkeepRunning).to.be.equal(false);
-      });
-
-      describe("User triggers allocateToStrategies", function() {
-          beforeEach(async function () {
-              // call allocateToStrategy on behalf of user 1
-              await router.connect(depositor1).performUpkeep([]);
-          });
-
-          itBehavesLikeInitialState();
-      });
-    });
-  }
-
-  // This test only tests behavior of automation mechanic (checkUpkeep and performUpkeep methods)
-  // All other accompanied functionality (i.e allocatedToStrategies() business logic like its currentCycle 
-  // increment mechanics) is tested elsewhere 
-  describe("Test automation of allocation to strategies", function() {
-      beforeEach(async () => {
-        depositor1 = user1;
-        assetA = usdc;
-
-        // Set allocation window time to 1 hour
-        await router.setAllocationWindowTime(cycleAllocationWindowTime);
-      });
-
-      describe("No deposit", function() {
-        itBehavesLikeInitialState();
-      });
-
-      describe("First deposit to batch by user #1 asset A", function() {
-        beforeEach(async function () {
-            // Make deposit from user 1 to protocol in assetA
-            await assetA.connect(depositor1).approve(router.address, parseUsdc("1500"));
-            await router.connect(depositor1).depositToBatch(assetA.address, parseUsdc("1500"));
-        });
-
-        describe("Current cycle is active", function() {
-          // No preset
-          verifyProtocolStateForSingleDeposit();
-
-          it("checkUpkeep returns false", async () => {
-            const [upkeepRunning, ] = await router.checkUpkeep([]);
-            expect(upkeepRunning).to.be.equal(false);
-          });
-
-          describe("User triggers allocateToStrategies", function() {
-              beforeEach(async function () {
-                  // call allocateToStrategy on behalf of user 1
-                  await router.connect(depositor1).performUpkeep([]);
-              });
-
-              itBehavesLikeInitialState();
-          });
-        });
-
-        describe("First deposit is withdrawn from batch", function() {
-            beforeEach(async function () {
-                // user 1 withdraws deposit 1
-                let receipts = await receiptContract.getTokensOfOwner(depositor1.address);
-                await router.connect(depositor1).withdrawFromBatch(receipts);
-            });
-
-            itBehavesLikeInitialState();
-        });
-
-        describe("Allocation window time has passed", function() {
-            beforeEach(async function () {
-                // move on the time to cycleDuration + 1 min
-                const timeToSkip = cycleAllocationWindowTime  + 60;
-                await skipTimeAndBlocks(timeToSkip, timeToSkip/3);
-            });
-
-            verifyProtocolStateForSingleDeposit();
-            it("checkUpkeep returns true", async () => {
-              const [upkeepRunning, ] = await router.checkUpkeep([]);
-              expect(upkeepRunning).to.be.equal(true);
-            });
-
-            describe("User triggers allocateToStrategies", function() {
-                beforeEach(async function () {
-                    // call allocateToStrategy on behalf of user 1
-                    await router.connect(depositor1).performUpkeep([]);
-                });
-
-                itBehavesLikeInitialState();
-            });
-        });
-
-        describe("Second deposit", function() {
-            describe("From user #1 in asset A", function() {  
-                beforeEach(async function () {
-                    depositor2 = user1;
-                    assetB = usdc;
-
-                    // Make deposit from user 1 to protocol in asset A
-                    await assetA.transfer(depositor2.address, parseUsdc("5000"));
-                    await assetA.connect(depositor2).approve(router.address, parseUsdc("5000"));
-                    await router.connect(depositor2).depositToBatch(assetA.address, parseUsdc("5000"));
-                });
-                
-                verifyProtocolBehaviorInTimeWithTwoDeposits();
-            });
-
-            describe("From user #1 in asset B", function() {  
-                beforeEach(async function () {
-                  depositor2 = user1;
-                  assetB = usdt;
-
-                  // Make deposit from user 1 to protocol in assetB
-                  await assetB.transfer(depositor2.address, parseUsdt("5000"));
-                  await assetB.connect(depositor2).approve(router.address, parseUsdt("5000"));
-                  await router.connect(depositor2).depositToBatch(assetB.address, parseUsdt("5000"));
-                });
-                
-                verifyProtocolBehaviorInTimeWithTwoDeposits();
-            });
-
-            describe("From user #2 in asset A", function() {
-                beforeEach(async function () {
-                  depositor2 = user2;
-                  assetB = usdc;
-
-                  // Make deposit from user 2 to protocol in assetA
-                  await assetB.transfer(depositor2.address, parseUsdc("5000"));
-                  await assetB.connect(depositor2).approve(router.address, parseUsdc("5000"));
-                  await router.connect(depositor2).depositToBatch(assetB.address, parseUsdc("5000"));
-                });
-                
-                verifyProtocolBehaviorInTimeWithTwoDeposits(user2, assetA);
-            });
-
-            describe("From user #2 in asset B", function() {
-                beforeEach(async function () {
-                  depositor2 = user2;
-                  assetB = usdt;
-
-                  // Make deposit from user 2 to protocol in assetB
-                  await assetB.transfer(depositor2.address, parseUsdt("5000"));
-                  await assetB.connect(depositor2).approve(router.address, parseUsdt("5000"));
-                  await router.connect(depositor2).depositToBatch(assetB.address, parseUsdt("5000"));
-                });
-                
-                verifyProtocolBehaviorInTimeWithTwoDeposits(user2, assetB);
-            });
-        });
-      });
+    await router.allocateToStrategies()
+    let strategiesBalance = await router.getStrategiesValue()
+    expect(strategiesBalance.totalBalance).to.be.closeTo(parseUniform("100"), parseUniform("2"));
   });
 
+  it("should withdrawFromStrategies only receipts", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
 
-  describe("AllocationWindowTime affects upkeep", function() {
-    beforeEach(async () => {
-      depositor1 = user1;
-      assetA = usdc;
-    });
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
 
-    it('default allocation window time is minimum', async () => {
-      const allocationWindowTime = await router.allocationWindowTime();
-      expect(allocationWindowTime).to.be.equal(1);
-    })
-
-    describe("AllocationWindowTime affects upkeep", function() {
-      beforeEach(async function () {
-        // Set allocation window time to 1 hour
-        await router.setAllocationWindowTime(cycleAllocationWindowTime);
-      });
-
-      it('allocation window time is one hour', async () => {
-        const allocationWindowTime = await router.allocationWindowTime();
-        expect(allocationWindowTime).to.be.equal(cycleAllocationWindowTime);
-      })
-
-      describe("User deposit funds and starts timer", function() {  
-        beforeEach(async function () {
-            // Make deposit from user 1 to protocol in asset A
-            await assetA.transfer(user1.address, parseUsdc("5000"));
-            await assetA.connect(user1).approve(router.address, parseUsdc("5000"));
-            await router.connect(user1).depositToBatch(assetA.address, parseUsdc("5000"));
-        });
-        
-        it("checkUpkeep returns false", async () => {
-          const [upkeepRunning, ] = await router.checkUpkeep([]);
-          expect(upkeepRunning).to.be.equal(false);
-        });
-
-        describe("Allocation window time has NOT passed", function() {
-          beforeEach(async function () {
-              // move on the time to cycleDuration + 1 min
-              const timeToSkip = cycleAllocationWindowTime/3;
-              await skipTimeAndBlocks(timeToSkip, timeToSkip/3);
-          });
-
-          it("checkUpkeep returns false", async () => {
-            const [upkeepRunning, ] = await router.checkUpkeep([]);
-            expect(upkeepRunning).to.be.equal(false);
-          });
-        });
-
-        describe("Allocation window time has passed", function() {
-          beforeEach(async function () {
-              // move on the time to cycleDuration + 1 min
-              const timeToSkip = cycleAllocationWindowTime  + 60;
-              await skipTimeAndBlocks(timeToSkip, timeToSkip/3);
-          });
-
-          it("checkUpkeep returns false", async () => {
-            const [upkeepRunning, ] = await router.checkUpkeep([]);
-            expect(upkeepRunning).to.be.equal(true);
-          });
-        });
-
-      });
-    });
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
   });
+
+  it("should withdrawFromStrategies only shares", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    await router.redeemReceiptsToShares([1]);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies(
+      [],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
+  });
+
+  it("should withdrawFromStrategies both nft and shares", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    await router.redeemReceiptsToShares([1]);
+
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([2]);
+    let withdrawShares = sharesBalance.add(receiptsShares);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies(
+      [2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
+  });
+
+  it("should withdrawFromStrategies not burn extra receipts", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
+    // if this call not revert, that means receipt still exists and not burned
+    await expect(receiptContract.getReceipt(1)).to.be.not.reverted;
+  });
+
+  it("should withdrawFromStrategies update receipt that is withdrawn partly", async function () {
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.depositToBatch(busd.address, parseBusd("100"))
+    await router.allocateToStrategies()
+
+    let sharesBalance = await sharesToken.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+    let withdrawShares = sharesBalance
+      .add(receiptsShares)
+      .div(2)
+    ;
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(withdrawShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    let oldBalance = await usdc.balanceOf(owner.address);
+    await router.withdrawFromStrategies(
+      [1, 2],
+      usdc.address,
+      withdrawShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
+    // if this not revert, means receipt still exists and not burned
+    let receipt = await receiptContract.getReceipt(1);
+    expect(receipt.tokenAmountUniform).to.be.closeTo(parseUniform("50"), parseUniform("1"));
+  });
+
+  it("Remove strategy", async function () {
+
+    // deposit to strategies
+    await router.depositToBatch(busd.address, parseBusd("10"));
+    await router.allocateToStrategies();
+
+    // deploy new farm
+    const Farm = await ethers.getContractFactory("MockStrategy");
+    farm2 = await Farm.deploy(usdc.address, 10000);
+    await farm2.deployed();
+    await farm2.transferOwnership(router.address);
+
+    // add new farm
+    await router.addStrategy(farm2.address, 1000);
+
+    // remove 2nd farm with index 1
+    await router.removeStrategy(1);
+    await router.rebalanceStrategies();
+
+    // withdraw user shares
+    let oldBalance = await usdc.balanceOf(owner.address);
+    let receiptsShares = await router.calculateSharesFromReceipts([1]);
+
+    let sharesValueUsd = await router.calculateSharesUsdValue(receiptsShares);
+    let expectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        usdc,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    await router.withdrawFromStrategies(
+      [1],
+      usdc.address,
+      receiptsShares,
+      expectedWithdrawAmount
+    );
+    let newBalance = await usdc.balanceOf(owner.address);
+    expect(newBalance.sub(oldBalance)).to.be.closeTo(
+      parseUsdc("10"),
+      parseUniform("1")
+    );
+
+  });
+
+  describe("redeemReceiptsToSharesByModerators", function () {
+    it("should revert when caller not whitelisted unlocker", async function () {
+      [, nonModerator] = await ethers.getSigners();
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.allocateToStrategies();
+      await expect(router.connect(nonModerator).redeemReceiptsToSharesByModerators([1]))
+        .to.be.revertedWithCustomError(router, "NotModerator");
+    });
+
+    it("should unlock list of 1 receipt", async function () {
+      await router.setModerator(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      await router.redeemReceiptsToSharesByModerators([1]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      expect(receipts.toString()).to.be.equal("0");
+    });
+
+    it("should unlock list of 2 receipt same owner", async function () {
+      await router.setModerator(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      await router.redeemReceiptsToSharesByModerators([1, 2]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares.add(receiptsShares2));
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      expect(receipts.toString()).to.be.equal("0");
+    });
+
+    it("should unlock list of 2 receipt with different owners", async function () {
+      [, , , , owner2] = await ethers.getSigners();
+      await router.setModerator(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await busd.transfer(owner2.address, parseBusd("10"));
+      await busd.connect(owner2).approve(router.address, parseBusd("10"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([2]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      let oldBalance2 = await sharesToken.balanceOf(owner2.address);
+      await router.redeemReceiptsToSharesByModerators([1, 2]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      let newBalance2 = await sharesToken.balanceOf(owner2.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      expect(newBalance2.sub(oldBalance2)).to.be.equal(receiptsShares2);
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      let receipts2 = await receiptContract.getTokensOfOwner(owner2.address);
+      expect(receipts.toString()).to.be.equal("0");
+      expect(receipts2.toString()).to.be.equal("");
+    });
+
+    it("should unlock list of 4 receipt, two different owners", async function () {
+      [, , , , owner2] = await ethers.getSigners();
+      await router.setModerator(owner.address, true);
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"));
+      await busd.transfer(owner2.address, parseBusd("100"));
+      await busd.connect(owner2).approve(router.address, parseBusd("100"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.connect(owner2).depositToBatch(busd.address, parseBusd("10"));
+      await router.allocateToStrategies();
+      let receiptsShares = await router.calculateSharesFromReceipts([1, 2]);
+      let receiptsShares2 = await router.calculateSharesFromReceipts([3, 4]);
+
+      let oldBalance = await sharesToken.balanceOf(owner.address);
+      let oldBalance2 = await sharesToken.balanceOf(owner2.address);
+      await router.redeemReceiptsToSharesByModerators([1, 2, 3, 4]);
+      let newBalance = await sharesToken.balanceOf(owner.address);
+      let newBalance2 = await sharesToken.balanceOf(owner2.address);
+      expect(newBalance.sub(oldBalance)).to.be.equal(receiptsShares);
+      expect(newBalance2.sub(oldBalance2)).to.be.equal(receiptsShares2);
+
+      let receipts = await receiptContract.getTokensOfOwner(owner.address);
+      let receipts2 = await receiptContract.getTokensOfOwner(owner2.address);
+      expect(receipts.toString()).to.be.equal("0");
+      expect(receipts2.toString()).to.be.equal("");
+    });
+
+  }); 
 });
