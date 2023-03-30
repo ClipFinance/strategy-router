@@ -5,10 +5,8 @@ const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber } = require("ethers");
 
-
 module.exports = function strategyTest(strategyName) {
   describe(`Test ${strategyName} strategy`, function () {
-
     let owner;
     // core contracts
     let router, oracle, exchange;
@@ -38,9 +36,10 @@ module.exports = function strategyTest(strategyName) {
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
-      let StrategyFactory = await ethers.getContractFactory(strategyName)
+      let StrategyFactory = await ethers.getContractFactory(strategyName);
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-        kind: 'uups',
+        kind: "uups",
+        unsafeAllow: ['delegatecall'],
         constructorArgs: [router.address],
       });
       await strategy.deployed();
@@ -59,7 +58,7 @@ module.exports = function strategyTest(strategyName) {
       amountDeposit = parseAmount("10000");
 
       let balanceBefore = await depositToken.balanceOf(owner.address);
-      await depositToken.transfer(strategy.address, amountDeposit)
+      await depositToken.transfer(strategy.address, amountDeposit);
       await strategy.deposit(amountDeposit);
       let balanceAfter = await depositToken.balanceOf(owner.address);
       let totalTokens = await strategy.totalTokens();
@@ -76,12 +75,17 @@ module.exports = function strategyTest(strategyName) {
       let balanceAfter = await depositToken.balanceOf(owner.address);
       let totalTokens = await strategy.totalTokens();
 
-      expect(totalTokens).to.be.closeTo(amountDeposit.sub(amountWithdraw), parseAmount("100"));
-      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(amountWithdraw, parseAmount("100"));
+      expect(totalTokens).to.be.closeTo(
+        amountDeposit.sub(amountWithdraw),
+        parseAmount("100")
+      );
+      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(
+        amountWithdraw,
+        parseAmount("100")
+      );
     });
 
     it("Withdraw all", async function () {
-
       amountWithdraw = await strategy.totalTokens();
       let balanceBefore = await depositToken.balanceOf(owner.address);
       await strategy.withdraw(amountWithdraw);
@@ -89,12 +93,14 @@ module.exports = function strategyTest(strategyName) {
       let totalTokens = await strategy.totalTokens();
 
       expect(totalTokens).to.be.closeTo(BigNumber.from(0), parseAmount("1"));
-      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(amountWithdraw, parseAmount("100"));
+      expect(balanceAfter.sub(balanceBefore)).to.be.closeTo(
+        amountWithdraw,
+        parseAmount("100")
+      );
     });
 
     it("compound function, and protocol commissions", async function () {
-
-      await depositToken.transfer(strategy.address, amountDeposit)
+      await depositToken.transfer(strategy.address, amountDeposit);
       await strategy.deposit(amountDeposit);
 
       // skip blocks
@@ -113,7 +119,10 @@ module.exports = function strategyTest(strategyName) {
       newBalance = await depositToken.balanceOf(owner.address);
 
       expect(await strategy.totalTokens()).to.be.within(0, parseAmount("1"));
-      expect(newBalance.sub(oldBalance)).to.be.closeTo(amountDeposit, parseAmount("100"));
+      expect(newBalance.sub(oldBalance)).to.be.closeTo(
+        amountDeposit,
+        parseAmount("100")
+      );
     });
   });
-}
+};
