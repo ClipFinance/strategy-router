@@ -33,7 +33,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
-    error NotERC20Token();
+    error InvalidToken();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
 
@@ -391,9 +391,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
         // attempt to check that token address is valid
-        try IERC20(tokenAddress).totalSupply() {}
+        try oracle.isTokenSupported(tokenAddress) {}
         catch {
-            revert NotERC20Token();
+            revert InvalidToken();
         }
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 

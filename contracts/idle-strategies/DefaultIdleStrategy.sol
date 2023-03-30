@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/";
 import "../interfaces/IIdleStrategy.sol";
 import "../StrategyRouter.sol";
 import "../deps/Initializable.sol";
@@ -11,6 +13,8 @@ import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeable, IIdleStrategy {
+    using SafeERC20 for IERC20;
+
     error CallerUpgrader();
 
     address internal upgrader;
@@ -54,7 +58,7 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Withdraw tokens from strategy.
     /// @dev Max withdrawable amount is returned by totalTokens.
     function withdraw(uint256 amount) external override onlyOwner returns (uint256 amountWithdrawn) {
-        token.transfer(msg.sender, amount);
+        token.safeTransfer(msg.sender, amount);
 
         return amount;
     }
@@ -67,6 +71,6 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Withdraw all tokens from strategy.
     function withdrawAll() external override onlyOwner returns (uint256 amountWithdrawn) {
         amountWithdrawn = token.balanceOf(address(this));
-        token.transfer(msg.sender, amountWithdrawn);
+        token.safeTransfer(msg.sender, amountWithdrawn);
     }
 }
