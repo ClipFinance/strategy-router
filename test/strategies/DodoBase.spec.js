@@ -8,6 +8,7 @@ const {
 } = require("../shared/forkHelper");
 const { provider, deploy, skipBlocks, MaxUint256 } = require("../utils");
 const { smock } = require("@defi-wonderland/smock");
+const { getStorageAt, setStorageAt } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("Test DodoBase", function () {
 
@@ -352,6 +353,7 @@ describe("Test DodoBase", function () {
           dodoStrategy.address
         );
 
+        await setZeroPenaltyForWithdrawOnDODO();
         const stakedTokenAmount = await getAmountFromLpAmount(stakedLpAmount);
         const penalty = await getPenaltyAmount(stakedTokenAmount);
         expect(penalty).to.be.equal(0);
@@ -475,6 +477,7 @@ describe("Test DodoBase", function () {
           dodoStrategy.address
         );
 
+        await setZeroPenaltyForWithdrawOnDODO();
         // check that there is no penalty 
         const penalty = await getPenaltyAmount(withdrawAmount);
         expect(penalty).to.be.equal(0);
@@ -548,6 +551,7 @@ describe("Test DodoBase", function () {
 
         await skipBlocks(10);
 
+        await setZeroPenaltyForWithdrawOnDODO();
         const penalty = await getPenaltyAmount(extraWithdrwalAmount);
         expect(penalty).to.be.equal(0);
 
@@ -623,6 +627,7 @@ describe("Test DodoBase", function () {
       });
 
       it("without penalty", async function () {
+
         const stakedLpAmount = await dodoMine.getUserLpBalance(
           lpToken.address,
           dodoStrategy.address
@@ -639,7 +644,8 @@ describe("Test DodoBase", function () {
           lpToken.address,
           dodoStrategy.address
         );
-
+        
+        await setZeroPenaltyForWithdrawOnDODO();
         const stakedTokenAmount = await getAmountFromLpAmount(stakedLpAmount);
 
         const penalty = await getPenaltyAmount(stakedTokenAmount);
@@ -698,6 +704,11 @@ describe("Test DodoBase", function () {
       return await dodoPool.getWithdrawQuotePenalty(amount);
     else
       return await dodoPool.getWithdrawBasePenalty(amount);
+  }
+
+  async function setZeroPenaltyForWithdrawOnDODO() {
+    const slot = 0xE; // _R_STATUS_
+    await setStorageAt(dodoPool.address, slot, 0x0); // we want "ONE" from "Types {ONE, BELOW, ABOVE}"
   }
 
   const setReceivedAmountDuringSellReward = async (tokenAmount) => {
