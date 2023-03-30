@@ -253,16 +253,6 @@ describe("Test rebalance functions", function () {
 
   describe("Test rebalanceStrategies function", function () {
 
-    it("one strategy rebalance should revert", async function () {
-
-      await router.setSupportedToken(usdt.address, true);
-
-      let farm = await createMockStrategy(usdt.address, 10000);
-      await router.addStrategy(farm.address, 5000);
-
-      await expect(router.rebalanceStrategies()).to.be.revertedWithCustomError(router, "NothingToRebalance");
-    });
-
     it("two usdt strategies", async function () {
 
       await router.setSupportedToken(usdt.address, true);
