@@ -193,6 +193,7 @@ async function setupCore() {
   });
   let router = await upgrades.deployProxy(StrategyRouter, [], {
     kind: "uups",
+    unsafeAllow: ["delegatecall"],
   });
   await router.deployed();
   // Deploy SharesToken
