@@ -33,14 +33,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
+    error MaxDepositFeeAboveThreshold();
+    error MaxDepositFeeLessThanMinDepositFee();
+    error InvalidDepositFeePercentage();
+    error InvalidDepositFeeTreasury();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
+    event DepositFee(
+        address indexed user,
+        address indexed token,
+        uint256 feeAmount,
+        uint256 feeValue
+    );
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
+    uint256 public constant DEPOSIT_FEE_THRESHOLD = 10e18; // 10 USD
 
     uint256 public minDeposit;
+    uint256 public minDepositFee;
+    uint256 public maxDepositFee;
+    uint256 public depositFeePercentage;
+    address public depositFeeTreasury;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -169,6 +184,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
     /// @param _amount Amount to deposit.
+    /// @dev Returns deposited token amount.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function deposit(
@@ -176,15 +192,39 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address depositToken,
         uint256 _amount,
         uint256 _currentCycleId
-    ) external onlyStrategyRouter {
+    ) external onlyStrategyRouter returns (uint256) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
         uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
+
         if (minDeposit > depositedUsd) revert DepositUnderMinimum();
+
+        // Calculate and transfer deposit fee
+        if (depositFeePercentage > 0) {
+            uint256 depositFeeAmount = 0;
+            uint256 depositFeeValue = 0;
+
+            depositFeeValue = depositedUsd * depositFeePercentage / 10000;
+            if (depositFeeValue < minDepositFee) {
+                depositFeeValue = minDepositFee;
+            } else if (depositFeeValue > maxDepositFee) {
+                depositFeeValue = maxDepositFee;
+            }
+
+            depositFeeAmount = _amount - (_amount * (depositedUsd - depositFeeValue)) / depositedUsd;
+            _amount -= depositFeeAmount;
+
+            depositedUsd -= depositFeeValue;
+
+            IERC20(depositToken).transfer(depositFeeTreasury, depositFeeAmount);
+            emit DepositFee(depositor, depositToken, depositFeeAmount, depositFeeValue);
+        }
 
         uint256 amountUniform = toUniform(_amount, depositToken);
 
         receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
+
+        return _amount;
     }
 
     function transfer(
@@ -202,6 +242,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Admin function.
     function setMinDepositUsd(uint256 amount) external onlyStrategyRouter {
         minDeposit = amount;
+    }
+
+    /// @notice The deposit fee is a percentage of the deposit amount.
+    /// @param _minDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
+    /// @param _maxDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
+    /// @param _depositFeePercentage Percentage of deposit fee, must be between 1 and 10000.
+    /// @param _depositFeeTreasury Address to send deposit fees to.
+    /// @dev Admin function.
+    function setDepositFee(
+        uint256 _minDepositFee,
+        uint256 _maxDepositFee,
+        uint256 _depositFeePercentage,
+        address _depositFeeTreasury
+    ) external onlyStrategyRouter {
+        if (_maxDepositFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeAboveThreshold();
+        if (_maxDepositFee < _minDepositFee) revert MaxDepositFeeLessThanMinDepositFee();
+        if (_depositFeePercentage == 0 || _depositFeePercentage > 10000) revert InvalidDepositFeePercentage();
+        if (_depositFeeTreasury == address(0)) revert InvalidDepositFeeTreasury();
+
+        minDepositFee = _minDepositFee;
+        maxDepositFee = _maxDepositFee;
+        depositFeePercentage = _depositFeePercentage;
+        depositFeeTreasury = _depositFeeTreasury;
     }
 
     function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {

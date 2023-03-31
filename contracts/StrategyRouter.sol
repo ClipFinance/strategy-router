@@ -56,6 +56,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     // Events for setters.
     event SetMinDeposit(uint256 newAmount);
+    event SetDepositFee(
+        uint256 newMinDepositFee,
+        uint256 newMaxDepositFee,
+        uint256 newDepositFeePercent,
+        address newDepositFeeTreasury
+    );
     event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
@@ -513,13 +519,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     function depositToBatch(address depositToken, uint256 _amount) external {
-        batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
+
+        uint256 depositedAmount = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
 
         currentCycleDepositsCount++;
         if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
 
-        emit Deposit(msg.sender, depositToken, _amount);
+        emit Deposit(msg.sender, depositToken, depositedAmount);
     }
 
     // Admin functions
@@ -558,6 +565,22 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function setMinDepositUsd(uint256 amount) external onlyOwner {
         batch.setMinDepositUsd(amount);
         emit SetMinDeposit(amount);
+    }
+
+    /// @notice The deposit fee is a percentage of the deposit amount.
+    /// @param minDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
+    /// @param maxDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
+    /// @param depositFeePercentage Percentage of deposit fee, must be between 1 and 10000.
+    /// @param depositFeeTreasury Address to send deposit fees to.
+    /// @dev Admin function.
+    function setDepositFee(
+        uint256 minDepositFee,
+        uint256 maxDepositFee,
+        uint256 depositFeePercentage,
+        address depositFeeTreasury
+    ) external onlyOwner {
+        batch.setDepositFee(minDepositFee, maxDepositFee, depositFeePercentage, depositFeeTreasury);
+        emit SetDepositFee(minDepositFee, maxDepositFee, depositFeePercentage, depositFeeTreasury);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
