@@ -143,7 +143,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
     }
 
     async function initialStateWithPenalty() {
-      let state = await initialState();
+      let state = await loadFixture(initialState);
       const { turnonWithdrawalPenaltyOnPool } = state;
       await turnonWithdrawalPenaltyOnPool();
       return state;
