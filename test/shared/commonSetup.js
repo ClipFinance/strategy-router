@@ -103,6 +103,7 @@ async function setupIdleStrategies(owner, router, ...tokens) {
     const idleSTrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
       kind: 'uups',
       constructorArgs: [router.address, token.address],
+      unsafeAllow: ['delegatecall'],
     });
     await idleSTrategy.transferOwnership(router.address);
 

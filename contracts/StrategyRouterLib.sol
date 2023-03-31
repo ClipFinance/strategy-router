@@ -64,7 +64,7 @@ library StrategyRouterLib {
         }
 
         uint256 idleStrategiesLength = idleStrategies.length;
-        idleBalances = new uint256[](idleStrategies.length);
+        idleBalances = new uint256[](idleStrategiesLength);
         for (uint256 i; i < idleStrategiesLength; i++) {
             address token = idleStrategies[i].depositToken;
 

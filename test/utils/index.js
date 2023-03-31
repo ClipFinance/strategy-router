@@ -42,6 +42,7 @@ async function deployProxyIdleStrategy(owner, router, token) {
     {
       kind: 'uups',
       constructorArgs: [router.address, token.address],
+      unsafeAllow: ['delegatecall'],
     }
   );
   await idleStrategy.transferOwnership(router.address);

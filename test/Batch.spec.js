@@ -297,7 +297,7 @@ describe("Test Batch", function () {
             await expect(router.setSupportedToken(busd.address, false, constants.ZERO_ADDRESS)).to.be.reverted;
         });
 
-        it("reverts on an address that is not a token", async function () {
+        it("reverts on an address that is not a token and has no oracle configured for it", async function () {
             const ownerIdleStrategy = await deployProxyIdleStrategy(owner, router, owner)
             await expect(
               router.setSupportedToken(owner.address, true, ownerIdleStrategy.address)

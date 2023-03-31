@@ -35,7 +35,7 @@ contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function isTokenSupported(address base) external override returns (bool isTokenSupported)
+    function isTokenSupported(address base) external view override returns (bool isTokenSupported)
     {
         return feeds[base] != address(0);
     }

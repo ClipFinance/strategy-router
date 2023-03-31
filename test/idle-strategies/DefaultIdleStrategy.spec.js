@@ -40,6 +40,7 @@ describe("Test DefaultIdleStrategy API", function () {
           {
             kind: 'uups',
             constructorArgs: [user1.address, user1.address],
+            unsafeAllow: ['delegatecall'],
           }
         )
       ).to.be.revertedWithCustomError(idleStrategy, 'CallerUpgrader');
@@ -63,6 +64,7 @@ describe("Test DefaultIdleStrategy API", function () {
         {
           kind: 'uups',
           constructorArgs: [owner.address, owner.address],
+          unsafeAllow: ['delegatecall'],
         }
       );
 

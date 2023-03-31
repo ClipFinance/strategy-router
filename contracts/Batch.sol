@@ -391,8 +391,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
         // attempt to check that token address is valid
-        try oracle.isTokenSupported(tokenAddress) {}
-        catch {
+        if (!oracle.isTokenSupported(tokenAddress)) {
             revert InvalidToken();
         }
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();

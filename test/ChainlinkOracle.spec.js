@@ -82,6 +82,35 @@ describe("Test ChainlinkOracle", function () {
         expect(returnData.decimals).to.be.equal(decimals);
     });
 
+    describe('#isTokenSupported', async function () {
+        it('return false on unsuppported token', async function () {
+            expect(
+              await oracle.isTokenSupported(fakeToken2.address)
+            ).to.be.false;
+
+            const mockFeed = await getMockFeed();
+            const tokens = [fakeToken1.address];
+            const feeds = [mockFeed.address];
+
+            await oracle.setPriceFeeds(tokens, feeds);
+
+            expect(
+              await oracle.isTokenSupported(fakeToken2.address)
+            ).to.be.false;
+        });
+        it('return true for supported token', async function () {
+            const mockFeed = await getMockFeed();
+            const tokens = [fakeToken1.address];
+            const feeds = [mockFeed.address];
+
+            await oracle.setPriceFeeds(tokens, feeds);
+
+            expect(
+              await oracle.isTokenSupported(fakeToken1.address)
+            ).to.be.true;
+        });
+    });
+
     async function getMockFeed() {
         const abi = (await artifacts.readArtifact("AggregatorV3Interface")).abi;
         const mock = await smock.fake(abi);

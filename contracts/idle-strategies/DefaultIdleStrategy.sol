@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/";
 import "../interfaces/IIdleStrategy.sol";
 import "../StrategyRouter.sol";
 import "../deps/Initializable.sol";

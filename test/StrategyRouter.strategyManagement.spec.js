@@ -18,10 +18,12 @@ function expectPercentValueEqualsTo(actualPercentUniform, expectedPercent) {
 describe("Test StrategyRouter manages strategies correctly", function () {
   async function loadStateNoStrategies() {
     // deploy core contracts
-    const { router } = await setupCore();
+    const { router, oracle } = await setupCore();
 
     // deploy mock tokens
-    const { usdc } = await setupFakeTokens(router);
+    const { usdc, parseUsdc } = await setupFakeTokens(router);
+
+    await oracle.setPrice(usdc.address, parseUsdc('1'));
 
     // setup supported tokens
     await router.setSupportedToken(usdc.address, true, usdc.idleStrategy.address);
