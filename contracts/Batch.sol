@@ -33,9 +33,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
-    error MaxDepositFeeAboveThreshold();
+    error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
-    error InvalidDepositFeePercentage();
+    error DepositFeePercentExceedsMaxPercentage();
     error InvalidDepositFeeTreasury();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
@@ -50,6 +50,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
     uint256 public constant DEPOSIT_FEE_THRESHOLD = 10e18; // 10 USD
+    uint256 public constant MAX_DEPOSIT_FEE_PERCENTAGE = 300; // 3%
 
     uint256 public minDeposit;
     uint256 public minDepositFee;
@@ -256,9 +257,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _depositFeePercentage,
         address _depositFeeTreasury
     ) external onlyStrategyRouter {
-        if (_maxDepositFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeAboveThreshold();
+        if (_maxDepositFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
         if (_maxDepositFee < _minDepositFee) revert MinDepositFeeExceedsMax();
-        if (_depositFeePercentage == 0 || _depositFeePercentage > 10000) revert InvalidDepositFeePercentage();
+        if (_depositFeePercentage > MAX_DEPOSIT_FEE_PERCENTAGE) revert DepositFeePercentExceedsMaxPercentage();
         if (_depositFeeTreasury == address(0)) revert InvalidDepositFeeTreasury();
 
         minDepositFee = _minDepositFee;

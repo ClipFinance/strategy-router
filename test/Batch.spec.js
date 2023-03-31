@@ -17,6 +17,8 @@ describe("Test Batch", function () {
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
+  // deposit fee params
+  let minDepositFee, maxDepositFee, depositFeePercentage, depositFeeTreasury;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -29,6 +31,11 @@ describe("Test Batch", function () {
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } =
       await setupCore());
+
+    minDepositFee = parseUniform("0.15");
+    maxDepositFee = parseUniform("1");
+    depositFeePercentage = 1; // 0.01%
+    depositFeeTreasury = hre.networkVariables.depositFeeTreasuryForTests;
 
     // deploy mock tokens
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } =
@@ -59,6 +66,93 @@ describe("Test Batch", function () {
 
   after(async () => {
     await provider.send("evm_revert", [initialSnapshot]);
+  });
+
+  describe("setDepositFee", function () {
+    // snapshot to revert state changes that are made in this scope
+    let _snapshot;
+
+    before(async () => {
+      _snapshot = await provider.send("evm_snapshot");
+
+      // setup supported tokens
+      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdt.address, true);
+
+      // add fake strategies
+      await deployFakeStrategy({ router, token: busd });
+      await deployFakeStrategy({ router, token: usdc });
+      await deployFakeStrategy({ router, token: usdt });
+
+      // admin initial deposit to set initial shares and pps
+      await router.depositToBatch(busd.address, parseBusd("1"));
+      await router.allocateToStrategies();
+    });
+
+    after(async () => {
+      await provider.send("evm_revert", [_snapshot]);
+    });
+
+    it("should revert when if set max deposit fee exceeds trheshold", async function () {
+      await expect(
+        router.setDepositFee(
+          minDepositFee,
+          parseUniform("11"), // deposit fee trheshold is 10 USD
+          depositFeePercentage,
+          depositFeeTreasury
+        )
+      ).to.be.revertedWithCustomError(batch, "MaxDepositFeeExceedsThreshold");
+    });
+
+    it("should revert when if set min deposit fee exceeds max", async function () {
+      // use changed order of min and max deposit fees to expect revert
+      await expect(
+        router.setDepositFee(
+          maxDepositFee,
+          minDepositFee,
+          depositFeePercentage,
+          depositFeeTreasury
+        )
+      ).to.be.revertedWithCustomError(batch, "MinDepositFeeExceedsMax");
+    });
+
+    it("should revert when if set deposit fee percentage exceeds max percentage (3% at the moment)", async function () {
+      await expect(
+        router.setDepositFee(
+          minDepositFee,
+          maxDepositFee,
+          301, // 3,01%
+          depositFeeTreasury
+        )
+      ).to.be.revertedWithCustomError(batch, "DepositFeePercentExceedsMaxPercentage");
+    });
+
+    it("should revert when if set invalid deposit fee treasury address", async function () {
+      await expect(
+        router.setDepositFee(
+          minDepositFee,
+          maxDepositFee,
+          depositFeePercentage,
+          ethers.constants.AddressZero
+        )
+      ).to.be.revertedWithCustomError(batch, "InvalidDepositFeeTreasury");
+    });
+
+    it("should set deposit params fee with correct values", async function () {
+      await router.setDepositFee(
+        minDepositFee,
+        maxDepositFee,
+        depositFeePercentage,
+        depositFeeTreasury
+      );
+
+      expect(await batch.minDepositFee()).to.equal(minDepositFee);
+      expect(await batch.maxDepositFee()).to.equal(maxDepositFee);
+      expect(await batch.depositFeePercentage()).to.equal(depositFeePercentage);
+      expect(await batch.depositFeeTreasury()).to.equal(depositFeeTreasury);
+    });
+
   });
 
   describe("deposit", function () {
@@ -119,16 +213,6 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositUnderMinimum");
     });
 
-    it("should revert when if set min deposit fee exceeds max", async function () {
-      await expect(
-        router.setDepositFee(
-          minDepositFee,
-          maxDepositFee,
-          depositFeePercentage,
-          depositFeeTreasury
-        )
-      ).to.be.revertedWithCustomError(router, "MinDepositFeeExceedsMax");
-    });
   });
 
   describe("deposit in other tokens than strategy tokens", function () {
