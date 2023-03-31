@@ -22,6 +22,7 @@ async function main() {
   // ~~~~~~~~~~~ GET TOKENS ADDRESSES ON MAINNET ~~~~~~~~~~~ 
   busd = await ethers.getContractAt("ERC20", hre.networkVariables.busd);
   usdc = await ethers.getContractAt("ERC20", hre.networkVariables.usdc);
+  usdt = await ethers.getContractAt("ERC20", hre.networkVariables.usdt);
   const usdcDecimals = await usdc.decimals();
   const parseUsdc = (amount) => parseUnits(amount, usdcDecimals);
   const parseExchangeLimit = (amount) => parseUnits(amount, 12);
@@ -103,8 +104,12 @@ async function main() {
 
   // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
   console.log("oracle setup...");
-  let oracleTokens = [busd.address, usdc.address];
-  let priceFeeds = [hre.networkVariables.BusdUsdPriceFeed, hre.networkVariables.UsdcUsdPriceFeed];
+  let oracleTokens = [busd.address, usdc.address, usdt.address];
+  let priceFeeds = [
+    hre.networkVariables.BusdUsdPriceFeed, 
+    hre.networkVariables.UsdcUsdPriceFeed,
+    hre.networkVariables.UsdtUsdPriceFeed
+  ];
   await (await oracle.setPriceFeeds(oracleTokens, priceFeeds)).wait();
 
   // pancake plugin params
@@ -147,6 +152,7 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
+      hre.networkVariables.dodo,
     ],
     [
       hre.networkVariables.usdt,
@@ -155,12 +161,14 @@ async function main() {
       hre.networkVariables.busd,
       hre.networkVariables.usdt,
       hre.networkVariables.usdc,
+      hre.networkVariables.usdt,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
     ]
