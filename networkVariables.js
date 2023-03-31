@@ -35,6 +35,7 @@ function bnbChain() {
 
   bnb.dodoMine = "0x01f9BfAC04E6184e90bD7eaFD51999CE430Cc750";
   bnb.dodoUsdtLp = "0x56ce908EeBafea026ab047CEe99a3afF039B4a33";
+  bnb.dodoBusdLp = "0xBEb34A9d23E0fe41d7b08AE3A4cbAD9A63ce0aea";
   bnb.dodoBusdUsdtPool = "0xBe60d4c4250438344bEC816Ec2deC99925dEb4c7";
 
   return bnb;
