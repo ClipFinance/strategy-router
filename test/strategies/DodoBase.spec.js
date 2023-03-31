@@ -8,7 +8,8 @@ const {
 } = require("../shared/forkHelper");
 const { provider, deploy, skipBlocks, MaxUint256 } = require("../utils");
 const { smock } = require("@defi-wonderland/smock");
-const { getStorageAt, setStorageAt } = require("@nomicfoundation/hardhat-network-helpers");
+const { getStorageAt, setStorageAt, impersonateAccount, stopImpersonatingAccount, setBalance } = require("@nomicfoundation/hardhat-network-helpers");
+const { parseEther } = require("ethers/lib/utils");
 
 describe("Test DodoBase", function () {
 
@@ -667,6 +668,133 @@ describe("Test DodoBase", function () {
         );
       });
     });
+
+    describe("should reinvest exceeding amount", async function () {
+      it("without penalty", async function () {
+
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+
+        const currentTokenBal = await usdtToken.balanceOf(dodoStrategy.address);
+        const extraWithdrwalAmount = parseUsdt("100");
+        const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
+
+        const stakedLpAmount = await dodoMine.getUserLpBalance(
+          lpToken.address,
+          dodoStrategy.address
+        );
+
+        const exchangedTokenAmount = parseUsdt("100");
+        await setReceivedAmountDuringSellReward(exchangedTokenAmount);
+
+        const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+
+        await skipBlocks(10);
+
+        await setZeroPenaltyForWithdrawOnDODO();
+
+        const lpAmountToWithdraw = await getLpAmountFromAmount(extraWithdrwalAmount);
+
+        const penalty = await getPenaltyAmount(extraWithdrwalAmount);
+        expect(penalty).to.be.equal(0);
+
+        let actualWithdrawAmount = extraWithdrwalAmount.sub(penalty);
+
+        const compoundAmount = exchangedTokenAmount.sub(
+          extraWithdrwalAmount.sub(actualWithdrawAmount)
+        );
+
+        const compoundAmountLP = await getAmountInLPAtFutureLPPrice(
+          lpAmountToWithdraw,
+          actualWithdrawAmount.add(penalty),
+          compoundAmount
+        );
+
+        // check return value is correct
+        expect(
+          await dodoStrategy.callStatic.withdraw(withdrawAmount)
+        ).to.be.equal(withdrawAmount);
+
+        await dodoStrategy.withdraw(withdrawAmount);
+
+        // The Underlying token balance should be zero
+        expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+        // DODO token balance should zero
+        expect(await dodoToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+
+        // correct amount of LP tokens after withdraw & reinvest 
+        expect(
+          await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+        ).to.be.equal(stakedLpAmount.sub(lpAmountToWithdraw).add(compoundAmountLP));
+
+        // Owner should have all tokens.
+        expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
+          currnetOwnerBal.add(withdrawAmount)
+        );
+      });
+
+      it("when penalty applied", async function () {
+
+        await setPenaltyOnWithdrawFromDODO();
+
+        await usdtToken.transfer(dodoStrategy.address, testUsdtAmount);
+
+        const currentTokenBal = await usdtToken.balanceOf(dodoStrategy.address);
+        const extraWithdrwalAmount = parseUsdt("100");
+        const withdrawAmount = currentTokenBal.add(extraWithdrwalAmount);
+
+        const stakedLpAmount = await dodoMine.getUserLpBalance(
+          lpToken.address,
+          dodoStrategy.address
+        );
+
+        const exchangedTokenAmount = parseUsdt("100");
+        await setReceivedAmountDuringSellReward(exchangedTokenAmount);
+
+        const currnetOwnerBal = await usdtToken.balanceOf(owner.address);
+
+        await skipBlocks(10);
+
+        const lpAmountToWithdraw = await getLpAmountFromAmount(extraWithdrwalAmount);
+
+        const penalty = await getPenaltyAmount(extraWithdrwalAmount);
+        expect(penalty).to.be.greaterThan(0);
+
+        let actualWithdrawAmount = extraWithdrwalAmount.sub(penalty);
+
+        const compoundAmount = exchangedTokenAmount.sub(
+          extraWithdrwalAmount.sub(actualWithdrawAmount)
+        );
+
+        const compoundAmountLP = await getAmountInLPAtFutureLPPrice(
+          lpAmountToWithdraw,
+          actualWithdrawAmount.add(penalty),
+          compoundAmount
+        );
+
+        // check return value is correct
+        expect(
+          await dodoStrategy.callStatic.withdraw(withdrawAmount)
+        ).to.be.equal(withdrawAmount);
+
+        await dodoStrategy.withdraw(withdrawAmount);
+
+        // The Underlying token balance should be zero
+        expect(await usdtToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+        // DODO token balance should zero
+        expect(await dodoToken.balanceOf(dodoStrategy.address)).to.be.equal(0);
+
+        // correct amount of LP tokens after withdraw & reinvest 
+        expect(
+          await dodoMine.getUserLpBalance(lpToken.address, dodoStrategy.address)
+        ).to.be.equal(stakedLpAmount.sub(lpAmountToWithdraw).add(compoundAmountLP));
+
+        // Owner should have all tokens.
+        expect(await usdtToken.balanceOf(owner.address)).to.be.equal(
+          currnetOwnerBal.add(withdrawAmount)
+        );
+      });
+    });
+
   });
 
 
@@ -714,5 +842,23 @@ describe("Test DodoBase", function () {
     // for selling reward tokens that it receives after claiming rewards
     await usdtToken.transfer(mockExchange.address, tokenAmount);
     await mockExchange.setAmountReceived(tokenAmount);
+  }  
+  
+  const getAmountInLPAtFutureLPPrice = async (lpAmountToWithdraw, tokensToWithdraw, compoundAmount) => {
+    // 'withdraw' function changes the 'expectedTarget' value before reinvesting leftovers
+    // so here we obtain that value off-chain by simulating part of the contract code
+    let tmpSnapshot = await provider.send("evm_snapshot");
+    await impersonateAccount(dodoStrategy.address);
+    let signer = await ethers.getSigner(dodoStrategy.address);
+    await setBalance(signer.address, parseEther("1"))
+
+    // simulation
+    await dodoMine.connect(signer).withdraw(lpToken.address, lpAmountToWithdraw);
+    await dodoPool.connect(signer).withdrawQuote(tokensToWithdraw);
+    const compoundAmountLP = await getLpAmountFromAmount(compoundAmount, false);
+
+    await stopImpersonatingAccount(dodoStrategy.address);
+    await provider.send("evm_revert", [tmpSnapshot]);
+    return compoundAmountLP;
   }
 });
