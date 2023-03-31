@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "./idle-strategies/DefaultIdleStrategy.sol";
 import "./interfaces/IIdleStrategy.sol";
@@ -18,6 +19,8 @@ import "./StrategyRouter.sol";
 // import "hardhat/console.sol";
 
 library StrategyRouterLib {
+    using SafeERC20 for IERC20;
+
     error CycleNotClosed();
 
     uint8 private constant UNIFORM_DECIMALS = 18;
@@ -30,7 +33,6 @@ library StrategyRouterLib {
         address tokenAddress;
         uint256 tokenIndexInSupportedTokens;
         uint256 weight;
-        bool saturated;
         uint256 toDeposit;
     }
 
@@ -71,7 +73,7 @@ library StrategyRouterLib {
         }
 
         uint256 idleStrategiesLength = idleStrategies.length;
-        idleBalances = new uint256[](idleStrategies.length);
+        idleBalances = new uint256[](idleStrategiesLength);
         for (uint256 i; i < idleStrategiesLength; i++) {
             address token = idleStrategies[i].depositToken;
 
@@ -133,7 +135,7 @@ library StrategyRouterLib {
         address to
     ) internal returns (uint256 result) {
         if (from != to) {
-            IERC20(from).transfer(address(exchange), amount);
+            IERC20(from).safeTransfer(address(exchange), amount);
             result = exchange.swap(amount, from, to, address(this));
             return result;
         }
@@ -242,7 +244,6 @@ library StrategyRouterLib {
                     tokenAddress: strategies[i].depositToken,
                     tokenIndexInSupportedTokens: 0,
                     weight: strategies[i].weight,
-                    saturated: false,
                     toDeposit: 0
                 });
                 totalBalanceUniform += toUniform(balances[i], strategyDatas[i].tokenAddress);
@@ -279,7 +280,6 @@ library StrategyRouterLib {
                 // if current balance is greater than desired – withdraw excessive tokens
                 // add them up to total unallocated balance
                 if (desiredBalance < balances[i]) {
-                    strategyDatas[i].saturated = true;
                     uint256 balanceToWithdraw = balances[i] - desiredBalance;
                     if (toUniform(balanceToWithdraw, strategyDatas[i].tokenAddress) >= ALLOCATION_THRESHOLD) {
                         // withdraw is called only once
@@ -306,8 +306,6 @@ library StrategyRouterLib {
                     if (balanceToAddUniform >= ALLOCATION_THRESHOLD) {
                         remainingToAllocateUnderflowStrategiesWeightSum += balanceToAddUniform;
                         underflowedStrategyWeights[i] = balanceToAddUniform;
-                    } else {
-                        strategyDatas[i].saturated = true;
                     }
                 }
             }
@@ -329,7 +327,7 @@ library StrategyRouterLib {
         // available at Router
         // that aims to avoid swaps
         for (uint256 i; i < strategyDatas.length; i++) {
-            if (strategyDatas[i].saturated) {
+            if (underflowedStrategyWeights[i] == 0) {
                 continue;
             }
 
@@ -339,7 +337,6 @@ library StrategyRouterLib {
                 / remainingToAllocateUnderflowStrategiesWeightSum;
 
             if (desiredAllocationUniform < ALLOCATION_THRESHOLD) {
-                strategyDatas[i].saturated = true;
                 remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
                 underflowedStrategyWeights[i] = 0;
                 continue;
@@ -357,7 +354,6 @@ library StrategyRouterLib {
 
             // allocation logic
             if (currentTokenBalanceUniform >= desiredAllocationUniform) {
-                strategyDatas[i].saturated = true;
                 remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
                 underflowedStrategyWeights[i] = 0;
 
@@ -366,7 +362,7 @@ library StrategyRouterLib {
                 // then send leftover with the desired balance
                 if (currentTokenBalanceUniform - desiredAllocationUniform < ALLOCATION_THRESHOLD) {
                     IERC20(strategyTokenAddress)
-                        .transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
+                        .safeTransfer(strategyDatas[i].strategyAddress, currentTokenBalance);
                     // memoise how much was deposited to strategy
                     // optimisation to call deposit method only once per strategy
                     strategyDatas[i].toDeposit = currentTokenBalance;
@@ -385,7 +381,7 @@ library StrategyRouterLib {
                     // while real token allocated value desiredStrategyBalance = 33333333 (10**8 real token precision)
                     // therefore should subtract 333333330000000000 from total unallocated token balance
                     desiredAllocationUniform = fromUniform(desiredAllocationUniform, strategyTokenAddress);
-                    IERC20(strategyTokenAddress).transfer(
+                    IERC20(strategyTokenAddress).safeTransfer(
                         strategyDatas[i].strategyAddress,
                         desiredAllocationUniform
                     );
@@ -418,7 +414,7 @@ library StrategyRouterLib {
                 remainingToAllocateUnderflowStrategiesWeightSum -= saturatedWeightPoints;
                 totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
-                IERC20(strategyTokenAddress).transfer(strategyDatas[i].strategyAddress, currentTokenBalance);
+                IERC20(strategyTokenAddress).safeTransfer(strategyDatas[i].strategyAddress, currentTokenBalance);
                 // memoise how much was deposited to strategy
                 // optimisation to call deposit method only once per strategy
                 strategyDatas[i].toDeposit = currentTokenBalance;
@@ -434,7 +430,7 @@ library StrategyRouterLib {
         // if not enough tokens in a strategy deposit token available
         // then try to saturate desired balance swapping other tokens
         for (uint256 i; i < strategyDatas.length; i++) {
-            if (strategyDatas[i].saturated) {
+            if (underflowedStrategyWeights[i] == 0) {
                 if (strategyDatas[i].toDeposit > 0) {
                     // if the strategy was completely saturated at the previous step
                     // call deposit
@@ -473,7 +469,7 @@ library StrategyRouterLib {
                         desiredAllocationUniform = 0;
                         totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
-                        IERC20(supportedTokens[j]).transfer(
+                        IERC20(supportedTokens[j]).safeTransfer(
                             address(exchange),
                             currentTokenDatas[j].currentBalance
                         );
@@ -501,7 +497,7 @@ library StrategyRouterLib {
                         desiredAllocationUniform = fromUniform(desiredAllocationUniform, supportedTokens[j]);
                         totalUnallocatedBalanceUniform -= toUniform(desiredAllocationUniform, supportedTokens[j]);
 
-                        IERC20(supportedTokens[j]).transfer(
+                        IERC20(supportedTokens[j]).safeTransfer(
                             address(exchange),
                             desiredAllocationUniform
                         );
@@ -524,7 +520,7 @@ library StrategyRouterLib {
                     desiredAllocationUniform -= currentTokenBalanceUniform;
                     totalUnallocatedBalanceUniform -= currentTokenBalanceUniform;
 
-                    IERC20(supportedTokens[j]).transfer(
+                    IERC20(supportedTokens[j]).safeTransfer(
                         address(exchange),
                         currentTokenDatas[j].currentBalance
                     );
@@ -575,7 +571,7 @@ library StrategyRouterLib {
                 IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
                 if (currentIdleStrategy.totalTokens() != 0) {
                     uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
-                    IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
+                    IERC20(tokenAddress).safeTransfer(idleStrategy, withdrawnAmount);
                     IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
                 }
 

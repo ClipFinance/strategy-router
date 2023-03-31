@@ -9,6 +9,7 @@ function bnbChain() {
     dai: "0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3",
 
     bsw: "0x965f527d9159dce6288a2219db51fc6eef120dd1",
+    stg: "0xB0D502E938ed5f4df2E681fE6E419ff29631d62b",
 
     // current token holders for tests, 
     // may not work based on block number used in forking, in such case try find other holders
@@ -28,6 +29,12 @@ function bnbChain() {
 
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
+  bnb.UsdtUsdPriceFeed = "0xB97Ad0E74fa7d920791E90258A6E2085088b4320";
+
+  bnb.stargateRouter = "0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8";
+  bnb.stargateFarm = "0x3052A0F6ab15b4AE1df39962d5DdEFacA86DaB47";
+  bnb.stargateUsdtLpPool = "0x9aA83081AA06AF7208Dcc7A4cB72C94d057D2cda";
+  bnb.stargateBusdLpPool = "0x98a5737749490856b401DB5Dc27F522fC314A4e1";
 
   return bnb;
 }

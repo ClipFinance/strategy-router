@@ -55,6 +55,7 @@ async function main() {
   });
   router = await upgrades.deployProxy(StrategyRouter, [], {
     kind: 'uups',
+    unsafeAllow: ['delegatecall'],
   });
   await router.deployed();
   console.log("StrategyRouter", router.address);
