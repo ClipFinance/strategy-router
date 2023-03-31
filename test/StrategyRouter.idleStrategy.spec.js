@@ -2,8 +2,6 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
-const { BigNumber, FixedNumber } = require("ethers");
-const { constants } = require("@openzeppelin/test-helpers");
 const { deployProxyIdleStrategy, parseUniform } = require("./utils");
 
 describe("Test StrategyRouter Idle API", function () {
@@ -89,7 +87,7 @@ describe("Test StrategyRouter Idle API", function () {
       // only 1 token is supported, index 0
       await router.addSupportedToken(usdc);
 
-      await expect(router.setIdleStrategy(0, constants.ZERO_ADDRESS))
+      await expect(router.setIdleStrategy(0, ethers.constants.AddressZero))
         .to
         .be
         .revertedWithCustomError(router, 'InvalidIdleStrategy');
@@ -501,7 +499,7 @@ describe("Test StrategyRouter Idle API", function () {
         } = await loadFixture(loadStateWithZeroSwapFee);
 
         await expect(
-          router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS)
+          router.setSupportedToken(usdc.address, true, ethers.constants.AddressZero)
         ).to.be.reverted;
       });
       it('idle strategy is added correctly', async function () {
@@ -524,7 +522,7 @@ describe("Test StrategyRouter Idle API", function () {
       } = await loadFixture(loadStateWithZeroSwapFee);
 
       await router.setSupportedToken(usdc.address, true, usdc.idleStrategy.address);
-      await router.setSupportedToken(usdc.address, false, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, false, ethers.constants.AddressZero);
 
       const idleStrategies = await router.getIdleStrategies();
 

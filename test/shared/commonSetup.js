@@ -26,6 +26,7 @@ module.exports = {
   setupFakeExchangePlugin,
   mintFakeToken,
   setupIdleStrategies,
+  deployStargateStrategy,
 };
 
 async function deployFakeStrategy({
@@ -269,7 +270,7 @@ async function setupCore() {
     return await router.setSupportedToken(token.address, true, token.idleStrategy.address);
   };
   router.removeSupportedToken = async function (token) {
-    return await router.setSupportedToken(token.address, false, constants.ZERO_ADDRESS);
+    return await router.setSupportedToken(token.address, false, ethers.constants.AddressZero);
   };
 
   return {

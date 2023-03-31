@@ -563,7 +563,7 @@ library StrategyRouterLib {
                 IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
                 if (currentIdleStrategy.totalTokens() != 0) {
                     uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
-                    IERC20(tokenAddress).transfer(idleStrategy, withdrawnAmount);
+                    IERC20(tokenAddress).safeTransfer(idleStrategy, withdrawnAmount);
                     IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
                 }
 
