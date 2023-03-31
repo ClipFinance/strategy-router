@@ -7,6 +7,7 @@ require("@nomiclabs/hardhat-etherscan");
 require('hardhat-contract-sizer');
 require('@openzeppelin/hardhat-upgrades');
 require('solidity-docgen');
+require('solidity-coverage');
 
 require('@nomicfoundation/hardhat-chai-matchers');
 require('@nomiclabs/hardhat-ethers')
@@ -41,7 +42,7 @@ module.exports = {
     hardhat: {
       forking: {
         url: process.env.BNB_URL,
-        // blockNumber: 22455358, // use this only with archival node
+        blockNumber: Number(process.env.FORK_BLOCK_NUMBER) || undefined, 
         enabled: true
       },
       // allowUnlimitedContractSize: true,

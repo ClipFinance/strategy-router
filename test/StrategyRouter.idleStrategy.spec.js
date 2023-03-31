@@ -2,8 +2,6 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
-const { BigNumber, FixedNumber } = require("ethers");
-const { constants } = require("@openzeppelin/test-helpers");
 const { deployProxyIdleStrategy, parseUniform } = require("./utils");
 
 describe("Test StrategyRouter Idle API", function () {
@@ -89,7 +87,7 @@ describe("Test StrategyRouter Idle API", function () {
       // only 1 token is supported, index 0
       await router.addSupportedToken(usdc);
 
-      await expect(router.setIdleStrategy(0, constants.ZERO_ADDRESS))
+      await expect(router.setIdleStrategy(0, ethers.constants.AddressZero))
         .to
         .be
         .revertedWithCustomError(router, 'InvalidIdleStrategy');
@@ -356,6 +354,61 @@ describe("Test StrategyRouter Idle API", function () {
       expect(await strategy.totalTokens()).to.be.equal(parseBusd('10000'));
       expect((await router.getStrategiesValue()).totalBalance).to.be.equal(parseUniform('10000'));
     });
+    it('removes token correctly when idle strategy is empty', async function () {
+      const {
+        router, oracle,
+        usdc, parseUsdc,
+        busd, parseBusd,
+        usdt, parseUsdt,
+        deployStrategy,
+        owner,
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
+
+      const idleStrategiesFormer = await router.getIdleStrategies();
+      expect(idleStrategiesFormer.length)
+        .to.be.equal(3);
+      expect(idleStrategiesFormer[0].strategyAddress)
+        .to.be.equal(usdc.idleStrategy.address);
+      expect(idleStrategiesFormer[1].strategyAddress)
+        .to.be.equal(busd.idleStrategy.address);
+      expect(idleStrategiesFormer[2].strategyAddress)
+        .to.be.equal(usdt.idleStrategy.address);
+
+      const strategy = await deployStrategy({
+        token: usdc,
+      });
+
+      // ensure idle strategy balance is empty
+      expect(
+        await busd.balanceOf(busd.idleStrategy.address)
+      ).to.be.equal(0);
+
+      await router.removeSupportedToken(busd);
+
+      const idleStrategiesLatter = await router.getIdleStrategies();
+      expect(idleStrategiesLatter.length)
+        .to.be.equal(2);
+      expect(idleStrategiesLatter[0].strategyAddress)
+        .to.be.equal(usdc.idleStrategy.address);
+      expect(idleStrategiesLatter[1].strategyAddress)
+        .to.be.equal(usdt.idleStrategy.address);
+
+      expect(await busd.balanceOf(busd.idleStrategy.address))
+        .to.be.equal(0);
+      expect(await busd.idleStrategy.owner())
+        .to.be.equal(owner.address);
+
+      expect(await strategy.totalTokens()).to.be.equal(0);
+      expect((await router.getStrategiesValue()).totalBalance).to.be.equal(0);
+    });
   });
   describe('#getStrategiesValue', async function () {
     it('returns correct value when no idle strategies exist', async function () {
@@ -446,7 +499,7 @@ describe("Test StrategyRouter Idle API", function () {
         } = await loadFixture(loadStateWithZeroSwapFee);
 
         await expect(
-          router.setSupportedToken(usdc.address, true, constants.ZERO_ADDRESS)
+          router.setSupportedToken(usdc.address, true, ethers.constants.AddressZero)
         ).to.be.reverted;
       });
       it('idle strategy is added correctly', async function () {
@@ -469,7 +522,7 @@ describe("Test StrategyRouter Idle API", function () {
       } = await loadFixture(loadStateWithZeroSwapFee);
 
       await router.setSupportedToken(usdc.address, true, usdc.idleStrategy.address);
-      await router.setSupportedToken(usdc.address, false, constants.ZERO_ADDRESS);
+      await router.setSupportedToken(usdc.address, false, ethers.constants.AddressZero);
 
       const idleStrategies = await router.getIdleStrategies();
 

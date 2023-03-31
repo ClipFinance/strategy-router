@@ -718,14 +718,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             }
         }
 
-        IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll();
-        address[] memory supportedTokens = getSupportedTokens();
-        address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
-        supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
-        for (uint256 i; i < supportedTokens.length; i++) {
-            supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+        if (IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll() != 0) {
+            address[] memory supportedTokens = getSupportedTokens();
+            address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
+            supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
+            for (uint256 i; i < supportedTokens.length; i++) {
+                supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+            }
+            StrategyRouterLib.rebalanceStrategies(
+                exchange,
+                strategies,
+                allStrategiesWeightSum,
+                supportedTokensWithRemovedToken
+            );
         }
-        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, supportedTokensWithRemovedToken);
 
         // TODO test
         Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);

@@ -2,7 +2,6 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTokensLiquidityOnPancake, setupTestParams, deployFakeStrategy } = require("./shared/commonSetup");
 const { provider, parseUniform, deployProxyIdleStrategy } = require("./utils");
-const { constants } = require('@openzeppelin/test-helpers');
 
 describe("Test Batch", function () {
 
@@ -279,7 +278,7 @@ describe("Test Batch", function () {
 
         it("should be idempotent", async function () {
             await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
-            await router.setSupportedToken(usdt.address, false, constants.ZERO_ADDRESS);
+            await router.setSupportedToken(usdt.address, false, ethers.constants.AddressZero);
             await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${usdt.address}`
@@ -294,10 +293,10 @@ describe("Test Batch", function () {
         it("should revert when removing token that is in use by strategy", async function () {
             await router.setSupportedToken(busd.address, true, busd.idleStrategy.address);
             await deployFakeStrategy({ router, token: busd });
-            await expect(router.setSupportedToken(busd.address, false, constants.ZERO_ADDRESS)).to.be.reverted;
+            await expect(router.setSupportedToken(busd.address, false, ethers.constants.AddressZero)).to.be.reverted;
         });
 
-        it("reverts on an address that is not a token", async function () {
+        it("reverts on an address that is not a token and has no oracle configured for it", async function () {
             const ownerIdleStrategy = await deployProxyIdleStrategy(owner, router, owner)
             await expect(
               router.setSupportedToken(owner.address, true, ownerIdleStrategy.address)
