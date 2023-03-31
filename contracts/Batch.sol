@@ -39,10 +39,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InvalidDepositFeeTreasury();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
-    event DepositFee(
+    event DepositWithFee(
         address indexed user,
         address indexed token,
+        uint256 amount,
         uint256 feeAmount,
+        uint256 value,
         uint256 feeValue
     );
 
@@ -196,29 +198,40 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     ) external onlyStrategyRouter returns (uint256) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
+        uint256 value = toUniform((_amount * price) / 10**priceDecimals, depositToken);
 
-        if (minDeposit > depositedUsd) revert DepositUnderMinimum();
+        if (minDeposit > value) revert DepositUnderMinimum();
 
         // Calculate and transfer deposit fee
         if (depositFeePercentage > 0) {
             uint256 depositFeeAmount = 0;
             uint256 depositFeeValue = 0;
 
-            depositFeeValue = depositedUsd * depositFeePercentage / 10000;
+            depositFeeValue = value * depositFeePercentage / 10000;
             if (depositFeeValue < minDepositFee) {
                 depositFeeValue = minDepositFee;
             } else if (depositFeeValue > maxDepositFee) {
                 depositFeeValue = maxDepositFee;
             }
 
-            depositFeeAmount = _amount - (_amount * (depositedUsd - depositFeeValue)) / depositedUsd;
-            _amount -= depositFeeAmount;
+            uint256 depositValue = value - depositFeeValue;
+            uint256 depositAmount = (_amount * depositValue) / value;
 
-            depositedUsd -= depositFeeValue;
+            // calculate deposit fee amount
+            depositFeeAmount = _amount - depositAmount;
+
+            // set amount as deposited amount
+            _amount = depositAmount;
 
             IERC20(depositToken).transfer(depositFeeTreasury, depositFeeAmount);
-            emit DepositFee(depositor, depositToken, depositFeeAmount, depositFeeValue);
+            emit DepositWithFee(
+                depositor,
+                depositToken,
+                depositAmount,
+                depositFeeAmount,
+                depositValue,
+                depositFeeValue
+            );
         }
 
         uint256 amountUniform = toUniform(_amount, depositToken);

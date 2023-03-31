@@ -13,7 +13,7 @@ const parseUniform = (args) => parseUnits(args, 18);
 module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
   printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
-  parseUniform, provider, getUSDC, getBUSD, getUSDT,
+  parseUniform, provider, getUSDC, getBUSD, getUSDT, fromUniform, toUniform,
   deploy, deployProxy, saturateTokenBalancesInStrategies,
   convertFromUsdToTokenAmount, applySlippageInBps,
 }
@@ -212,4 +212,25 @@ function applySlippageInBps(amount, slippageInBps)
     .mul(10000 - slippageInBps)
     .div(10000)
   ;
+}
+
+async function toUniform(amount, tokenAddress) {
+  let decimals = await (await ethers.getContractAt("ERC20", tokenAddress)).decimals();
+  return await changeDecimals(amount, Number(decimals), Number(18));
+}
+
+async function fromUniform(amount, tokenAddress) {
+  let decimals = await (await ethers.getContractAt("ERC20", tokenAddress)).decimals();
+  return await changeDecimals(amount, Number(18), Number(decimals));
+}
+
+async function changeDecimals(amount, oldDecimals, newDecimals) {
+  if (oldDecimals < (newDecimals)) {
+    return amount.mul(BigNumber.from(10).pow(newDecimals - oldDecimals));
+    // return amount * (10 ** (newDecimals - oldDecimals));
+  } else if (oldDecimals > (newDecimals)) {
+    return amount.div(BigNumber.from(10).pow(oldDecimals - newDecimals));
+    // return amount / (10 ** (oldDecimals - newDecimals));
+  }
+  return amount;
 }

@@ -2,6 +2,7 @@ const { expect, assert } = require("chai");
 const { BigNumber } = require("ethers");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake } = require("./shared/commonSetup");
+const { toUniform } = require("./utils");
 
 describe("Test rebalance functions", function () {
 
@@ -380,21 +381,6 @@ describe("Test rebalance functions", function () {
       const percentBalance = balances[i] * 100 / totalDeposit;
       expect(percentBalance).to.be.closeTo(percentWeight, ERROR_THRESHOLD);
     }
-  }
-  async function toUniform(amount, tokenAddress) {
-    let decimals = await (await ethers.getContractAt("ERC20", tokenAddress)).decimals();
-    return await changeDecimals(amount, Number(decimals), Number(18));
-  }
-
-  async function changeDecimals(amount, oldDecimals, newDecimals) {
-    if (oldDecimals < (newDecimals)) {
-      return amount.mul(BigNumber.from(10).pow(newDecimals - oldDecimals));
-      // return amount * (10 ** (newDecimals - oldDecimals));
-    } else if (oldDecimals > (newDecimals)) {
-      return amount.div(BigNumber.from(10).pow(oldDecimals - newDecimals));
-      // return amount / (10 ** (oldDecimals - newDecimals));
-    }
-    return amount;
   }
 
   // weights order should match 'tokens' order

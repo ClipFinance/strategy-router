@@ -7,7 +7,7 @@ const {
   setupTestParams,
   deployFakeStrategy,
 } = require("./shared/commonSetup");
-const { provider, parseUniform } = require("./utils");
+const { provider, parseUniform, toUniform } = require("./utils");
 
 describe("Test Batch", function () {
   let owner, nonReceiptOwner;
@@ -215,6 +215,61 @@ describe("Test Batch", function () {
 
   });
 
+  describe("deposit with fee", function () {
+    // snapshot to revert state changes that are made in this scope
+    let _snapshot;
+
+    before(async () => {
+      _snapshot = await provider.send("evm_snapshot");
+
+      // setup supported tokens
+      await router.setSupportedToken(usdc.address, true);
+      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(usdt.address, true);
+
+      // add fake strategies
+      await deployFakeStrategy({ router, token: busd });
+      await deployFakeStrategy({ router, token: usdc });
+      await deployFakeStrategy({ router, token: usdt });
+
+      // admin initial deposit to set initial shares and pps
+      await router.depositToBatch(busd.address, parseBusd("1"));
+      await router.allocateToStrategies();
+
+      // set deposit fee
+      await router.setDepositFee(
+        minDepositFee,
+        maxDepositFee,
+        depositFeePercentage,
+        depositFeeTreasury
+      );
+    });
+
+    after(async () => {
+      await provider.send("evm_revert", [_snapshot]);
+    });
+
+    it("should depositToBatch create receipt with correct values", async function () {
+      let amount = parseBusd("100");
+
+      const {
+        depositAmount,
+        depositAmountUniform,
+        depositFeeAmount,
+      } = await calculateExpectedDepositStates(amount, busd.address);
+
+      await router.depositToBatch(busd.address, amount);
+
+      let newReceipt = await receiptContract.getReceipt(1);
+      expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
+      expect(newReceipt.token).to.be.equal(busd.address);
+      expect(newReceipt.tokenAmountUniform).to.be.equal(depositAmountUniform);
+      expect(newReceipt.cycleId).to.be.equal(1);
+      expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
+      expect(await busd.balanceOf(depositFeeTreasury)).to.be.equal(depositFeeAmount);
+    });
+  });
+
   describe("deposit in other tokens than strategy tokens", function () {
     // snapshot to revert state changes that are made in this scope
     let _snapshot;
@@ -411,4 +466,50 @@ describe("Test Batch", function () {
       expect((await router.getSupportedTokens()).toString()).to.be.equal(``);
     });
   });
+
+  const calculateExpectedDepositStates = async (amount, depositTokenAddress) => {
+    const depositFeePercentage = await batch.depositFeePercentage();
+
+    const [price, priceDecimals] = await oracle.getTokenUsdPrice(depositTokenAddress);
+    const pricePrecision = ethers.BigNumber.from(10).pow(priceDecimals);
+
+    const value = await toUniform(
+      amount.mul(price).div(pricePrecision),
+      depositTokenAddress
+    );
+
+    if (depositFeePercentage == 0) return {
+      depositAmount: amount,
+      depositAmountUniform: await toUniform(amount, depositTokenAddress),
+      depositFeeAmount: ethers.BigNumber.from(0),
+      depositValue: value,
+      depositFeeValue: ethers.BigNumber.from(0)
+    };
+
+    const minDepositFee = await batch.minDepositFee();
+    const maxDepositFee = await batch.maxDepositFee();
+
+    const MAX_BPS = ethers.BigNumber.from(10000);
+
+    let depositFeeValue = value.mul(depositFeePercentage).div(MAX_BPS);
+
+    if (depositFeeValue.lt(minDepositFee)) {
+        depositFeeValue = minDepositFee;
+    } else if (depositFeeValue.gt(maxDepositFee)) {
+        depositFeeValue = maxDepositFee;
+    }
+
+    const depositValue = value.sub(depositFeeValue);
+
+    const depositAmount = amount.mul(depositValue).div(value);
+    const depositFeeAmount = amount.sub(depositAmount);
+
+    return {
+      depositAmount,
+      depositAmountUniform: await toUniform(depositAmount, depositTokenAddress),
+      depositFeeAmount,
+      depositValue,
+      depositFeeValue
+    };
+  }
 });
