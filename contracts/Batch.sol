@@ -34,7 +34,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
     error MaxDepositFeeAboveThreshold();
-    error MaxDepositFeeLessThanMinDepositFee();
+    error MinDepositFeeExceedsMax();
     error InvalidDepositFeePercentage();
     error InvalidDepositFeeTreasury();
 
@@ -257,7 +257,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address _depositFeeTreasury
     ) external onlyStrategyRouter {
         if (_maxDepositFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeAboveThreshold();
-        if (_maxDepositFee < _minDepositFee) revert MaxDepositFeeLessThanMinDepositFee();
+        if (_maxDepositFee < _minDepositFee) revert MinDepositFeeExceedsMax();
         if (_depositFeePercentage == 0 || _depositFeePercentage > 10000) revert InvalidDepositFeePercentage();
         if (_depositFeeTreasury == address(0)) revert InvalidDepositFeeTreasury();
 
