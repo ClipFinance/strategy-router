@@ -15,6 +15,7 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     using SafeERC20 for IERC20;
 
     error CallerUpgrader();
+    error NotAllAssetsWithdrawn();
 
     address internal upgrader;
 
@@ -57,6 +58,10 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     /// @notice Withdraw tokens from strategy.
     /// @dev Max withdrawable amount is returned by totalTokens.
     function withdraw(uint256 amount) external override onlyOwner returns (uint256 amountWithdrawn) {
+        uint256 totalTokens = _totalTokens();
+        if (totalTokens < amount) {
+            amount = totalTokens;
+        }
         token.safeTransfer(msg.sender, amount);
 
         return amount;
@@ -64,6 +69,10 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
 
     /// @notice Approximated amount of token on the strategy.
     function totalTokens() external view override returns (uint256) {
+        return _totalTokens();
+    }
+
+    function _totalTokens() internal view returns (uint256) {
         return token.balanceOf(address(this));
     }
 
@@ -71,5 +80,8 @@ contract DefaultIdleStrategy is Initializable, UUPSUpgradeable, OwnableUpgradeab
     function withdrawAll() external override onlyOwner returns (uint256 amountWithdrawn) {
         amountWithdrawn = token.balanceOf(address(this));
         token.safeTransfer(msg.sender, amountWithdrawn);
+        if (_totalTokens() != 0) {
+            revert NotAllAssetsWithdrawn();
+        }
     }
 }

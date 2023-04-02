@@ -189,7 +189,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
         });
       })
-    })
+    });
 
     describe( "Price per share varies", function () {
       beforeEach(async function () {
@@ -328,7 +328,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.005"));
         });
       })
-    })
+    });
 
     describe( "Specific scenarion" , function () {
       it("Rate-goes-up scenario", async function () {
@@ -448,6 +448,6 @@ describe("Test StrategyRouter protocol fee collection", function () {
         let tokenWithdrawn = tokenBalanceAfter.sub(tokenBalanceBefore);
         expect(tokenWithdrawn.toString()).to.be.closeTo(parseBusd("997"), parseBusd("1"));
       })
-    })
+    });
   })
 });

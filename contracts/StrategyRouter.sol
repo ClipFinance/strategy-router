@@ -18,7 +18,7 @@ import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 import "./idle-strategies/DefaultIdleStrategy.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -262,6 +262,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 6
         for (uint256 i; i < strategiesLength; i++) {
+            console.log('depositAmountsInTokens[i]', i, depositAmountsInTokens[i]);
             address strategyDepositToken = strategies[i].depositToken;
 
             if (depositAmountsInTokens[i] > 0) {
@@ -442,6 +443,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
         (uint256 strategiesLockedUsd, , , , ) = getStrategiesValue();
+//        console.log('strategiesLockedUsd', strategiesLockedUsd);
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / sharesToken.totalSupply();
         shares = (amount * PRECISION) / currentPricePerShare;
     }
@@ -477,6 +479,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 shares,
         uint256 minTokenAmountToWithdraw
     ) external returns (uint256 withdrawnAmount) {
+//        console.log('withdrawToken', withdrawToken);
+//        console.log('shares', shares);
+//        console.log('minTokenAmountToWithdraw', minTokenAmountToWithdraw);
         if (shares == 0) revert AmountNotSpecified();
         uint256 supportedTokenIndex = type(uint256).max;
         address[] memory supportedTokens = getSupportedTokens();
@@ -524,6 +529,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             }
             if (unlockedShares == shares) break;
         }
+//        console.log('unlockedShares', unlockedShares);
+//        console.log('shares', shares);
 
         // if receipts didn't fulfilled requested shares amount, then try to take more from caller
         if (unlockedShares < shares) {
@@ -817,6 +824,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         ) = getStrategiesValue();
 
         if (totalIdleStrategyBalance != 0) {
+//            console.log('totalIdleStrategyBalance', totalIdleStrategyBalance);
+//            console.log('idleStrategyTokenBalancesUsd[supportedTokenIndex]', supportedTokenIndex, idleStrategyTokenBalancesUsd[supportedTokenIndex]);
+//            console.log('withdrawAmountUsd', withdrawAmountUsd);
             if (idleStrategyTokenBalancesUsd[supportedTokenIndex] != 0) {
                 // at this moment its in USD
                 uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[supportedTokenIndex] < withdrawAmountUsd
@@ -841,40 +851,45 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     .withdraw(tokenAmountToSwap);
             }
 
-            for (uint256 i; i < idleStrategies.length; i++) {
-                if (idleStrategyTokenBalancesUsd[i] == 0) {
-                    continue;
+            if (withdrawAmountUsd != 0) {
+                for (uint256 i; i < idleStrategies.length; i++) {
+                    if (i == supportedTokenIndex) {
+                        continue;
+                    }
+                    if (idleStrategyTokenBalancesUsd[i] == 0) {
+                        continue;
+                    }
+
+                    // at this moment its in USD
+                    uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[i] < withdrawAmountUsd
+                        ? idleStrategyTokenBalancesUsd[i]
+                        : withdrawAmountUsd;
+
+                    unchecked {
+                        // we assume that the whole requested amount was withdrawn
+                        // we on purpose do not adjust for slippage, fees, etc
+                        // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
+                        // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
+                        withdrawAmountUsd -= tokenAmountToSwap;
+                    }
+
+                    (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(idleStrategies[i].depositToken);
+
+                    // convert usd value into token amount
+                    tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
+                    // adjust decimals of the token amount
+                    tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, idleStrategies[i].depositToken);
+                    tokenAmountToSwap = IStrategy(idleStrategies[i].strategyAddress).withdraw(tokenAmountToSwap);
+                    // swap for requested token
+                    tokenAmountToWithdraw += StrategyRouterLib.trySwap(
+                        exchange,
+                        tokenAmountToSwap,
+                        idleStrategies[i].depositToken,
+                        withdrawToken
+                    );
+
+                    if (withdrawAmountUsd == 0) break;
                 }
-
-                // at this moment its in USD
-                uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[i] < withdrawAmountUsd
-                    ? idleStrategyTokenBalancesUsd[i]
-                    : withdrawAmountUsd;
-
-                unchecked {
-                    // we assume that the whole requested amount was withdrawn
-                    // we on purpose do not adjust for slippage, fees, etc
-                    // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
-                    // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
-                    withdrawAmountUsd -= tokenAmountToSwap;
-                }
-
-                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(idleStrategies[i].depositToken);
-
-                // convert usd value into token amount
-                tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
-                // adjust decimals of the token amount
-                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, idleStrategies[i].depositToken);
-                tokenAmountToSwap = IStrategy(idleStrategies[i].strategyAddress).withdraw(tokenAmountToSwap);
-                // swap for requested token
-                tokenAmountToWithdraw += StrategyRouterLib.trySwap(
-                    exchange,
-                    tokenAmountToSwap,
-                    idleStrategies[i].depositToken,
-                    withdrawToken
-                );
-
-                if (withdrawAmountUsd == 0) break;
             }
         }
 
