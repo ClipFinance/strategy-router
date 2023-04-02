@@ -59,11 +59,20 @@ async function deployStargateStrategy({
   upgrader,
 }) {
   let StargateBase = await ethers.getContractFactory("StargateBase");
-  let stargateStrategy = await upgrades.deployProxy(StargateBase, [upgrader], {
-    kind: "uups",
-    unsafeAllow: ['delegatecall'],
-    constructorArgs: [router, token, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
-  });
+  let stargateStrategy = await upgrades.deployProxy(
+    StargateBase,
+    [
+      upgrader,
+      token.parse((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: "uups",
+      unsafeAllow: ['delegatecall'],
+      constructorArgs: [router, token.address, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
 
   return stargateStrategy;
 }

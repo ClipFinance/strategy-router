@@ -112,21 +112,39 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   StrategyFactory = await ethers.getContractFactory("StargateUsdt")
-  stargateUsdtStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    unsafeAllow: ['delegatecall'],
-    constructorArgs: [router.address],
-  });
+  stargateUsdtStrategy = await upgrades.deployProxy(
+    StrategyFactory,
+    [
+      owner.address,
+      parseUsdt((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: 'uups',
+      unsafeAllow: ['delegatecall'],
+      constructorArgs: [router.address],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
   console.log("stargateUsdtStrategy", stargateUsdtStrategy.address);
   await (await stargateUsdtStrategy.transferOwnership(router.address)).wait();
 
    // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   StrategyFactory = await ethers.getContractFactory("StargateBusd")
-  stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    unsafeAllow: ['delegatecall'],
-    constructorArgs: [router.address],
-  });
+  stargateBusdStrategy = await upgrades.deployProxy(
+    StrategyFactory,
+    [
+      owner.address,
+      parseBusd((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: 'uups',
+      unsafeAllow: ['delegatecall'],
+      constructorArgs: [router.address],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
   console.log("stargateBusdStrategy", stargateBusdStrategy.address);
   await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
 

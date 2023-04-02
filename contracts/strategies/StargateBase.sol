@@ -8,11 +8,12 @@ import "../interfaces/IStargateRouter.sol";
 import "../interfaces/IStargateFarm.sol";
 import "../interfaces/IStargatePool.sol";
 import "../StrategyRouter.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
 
 // import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
+contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy, AbstractBaseStrategyWithHardcap {
     using SafeERC20 for IERC20;
     using SafeERC20 for IStargatePool;
 
@@ -63,8 +64,12 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         _disableInitializers();
     }
 
-    function initialize(address _upgrader) external initializer {
-        __Ownable_init();
+    function initialize(
+        address _upgrader,
+        uint256 _hardcapTargetInToken,
+        uint16 _hardcapDeviationInBps
+    ) external initializer {
+        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
     }
@@ -77,10 +82,6 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
 
     function depositToken() external view override returns (address) {
         return address(token);
-    }
-
-    function deposit(uint256 amount) external override onlyOwner {
-        _deposit(amount);
     }
 
     function withdraw(uint256 strategyTokenAmountToWithdraw)
@@ -128,9 +129,13 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
     }
 
     function totalTokens() public view override returns (uint256) {
+        return _totalTokens();
+    }
+
+    function _totalTokens() internal view override returns (uint256) {
         (uint256 lpAmount, ) = stargateFarm.userInfo(farmId, address(this));
         uint256 stakedTokenAmount = IStargatePool(address(lpToken))
-            .amountLPtoLD(lpAmount);
+        .amountLPtoLD(lpAmount);
 
         return token.balanceOf(address(this)) + stakedTokenAmount;
     }
@@ -158,7 +163,7 @@ contract StargateBase is UUPSUpgradeable, OwnableUpgradeable, IStrategy {
         if (totalTokens() > 0) revert NotAllAssetsWithdrawn();
     }
 
-    function _deposit(uint256 amount) internal {
+    function _deposit(uint256 amount) internal override {
         if (amount == 0 || _amountLDtoLP(amount) == 0) return; // don't deposit when amount is not enough for 1 LP
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
 

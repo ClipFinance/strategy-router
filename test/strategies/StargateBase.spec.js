@@ -7,7 +7,7 @@ const {
   mintForkedToken,
   getContract,
 } = require("../shared/forkHelper");
-const { provider, deploy, skipBlocks } = require("../utils");
+const { provider, deploy, skipBlocks, parseUniform } = require("../utils");
 
 const {
   setStorageAt,
@@ -61,6 +61,7 @@ describe("Test StargateBase", function () {
 
     const tokenInfo = await getTokenContract(hre.networkVariables.usdt);
     token = tokenInfo.token;
+    token.parse = tokenInfo.parseToken;
     parseUsdt = tokenInfo.parseToken;
     testUsdtAmount = parseUsdt("10000");
     oneSD = parseUsdt("0.000001"); // 1 SD
@@ -73,6 +74,7 @@ describe("Test StargateBase", function () {
     oneLPinUSDT = dustLPinUSDT.add(remainingDust);
 
     stg = (await getTokenContract(hre.networkVariables.stg)).token;
+    stg.parse = parseUniform;
 
     lpToken = (await getTokenContract(hre.networkVariables.stargateUsdtLpPool))
       .token;
@@ -103,7 +105,7 @@ describe("Test StargateBase", function () {
 
     stargateStrategy = await deployStargateStrategy({
       router: router.address,
-      token: token.address,
+      token: token,
       lpToken: lpToken.address,
       stgToken: stg.address,
       stargateRouter: stargateRouter.address,
@@ -131,7 +133,7 @@ describe("Test StargateBase", function () {
     it("revert if deposit token is invalid", async function () {
       await expect(deployStargateStrategy({
         router: router.address,
-        token: stg.address, // set invalid deposit token
+        token: stg, // set invalid deposit token
         lpToken: lpToken.address,
         stgToken: stg.address,
         stargateRouter: stargateRouter.address,
