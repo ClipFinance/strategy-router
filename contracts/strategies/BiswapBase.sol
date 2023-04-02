@@ -7,9 +7,9 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
 
 import "hardhat/console.sol";
-import "./AbstractBaseStrategyWithHardcap.sol";
 
 // Base contract to be inherited, works with biswap MasterChef:
 // address on BNB Chain: 0xDbc1A13490deeF9c3C12b44FE77b503c1B061739
@@ -77,7 +77,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return address(tokenA);
     }
 
-    function _deposit(uint256 amount) internal override onlyOwner {
+    function _deposit(uint256 amount) internal override {
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
