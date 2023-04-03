@@ -34,7 +34,7 @@ describe("Test Batch", function () {
 
     minDepositFee = parseUniform("0.15");
     maxDepositFee = parseUniform("1");
-    depositFeePercentage = 1; // 0.01%
+    depositFeePercentage = 1; // is 0.01% in BPS
     depositFeeTreasury = hre.networkVariables.depositFeeTreasuryForTests;
 
     // deploy mock tokens
@@ -486,6 +486,30 @@ describe("Test Batch", function () {
       expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdc("100"));
     });
 
+    it("should withdraw whole amount without deposit fee", async function () {
+      // set deposit fee
+      await router.setDepositFee(
+        minDepositFee,
+        maxDepositFee,
+        depositFeePercentage,
+        depositFeeTreasury
+      );
+
+      const value = parseUniform("100"); // 100 USD
+      const amount = await getTokenAmount(usdt.address, value);
+      const amountFee = await getTokenAmount(usdt.address, minDepositFee); // minDepositFee in usdt
+
+      await router.depositToBatch(usdt.address, amount);
+
+      let oldBalance = await usdt.balanceOf(owner.address);
+      await router.withdrawFromBatch([1]);
+      let newBalance = await usdt.balanceOf(owner.address);
+
+      const expectedAmount = amount.sub(amountFee);
+      // use closeTo with 1 delta because of division in the getTokenAmount function
+      expect(newBalance.sub(oldBalance)).to.be.closeTo(expectedAmount, 1);
+    });
+
     it("should withdraw two receipts and receive tokens noted in them", async function () {
       await router.depositToBatch(busd.address, parseBusd("100"));
       await router.depositToBatch(usdt.address, parseUsdt("100"));
@@ -586,7 +610,7 @@ describe("Test Batch", function () {
     const minDepositFee = await batch.minDepositFee();
     const maxDepositFee = await batch.maxDepositFee();
 
-    const MAX_BPS = ethers.BigNumber.from(10000);
+    const MAX_BPS = ethers.BigNumber.from(10000); // is 100% in BPS
 
     let depositFeeValue = value.mul(depositFeePercentage).div(MAX_BPS);
 
