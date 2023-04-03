@@ -36,6 +36,11 @@ async function main() {
   FEE_PERCENT = 1000;
   INITIAL_DEPOSIT = parseUsdc("1");
 
+  MIN_DEPOSIT_FEE = parseUniform("0.15"); // 0.15 USD
+  MAX_DEPOSIT_FEE = parseUniform("1"); // 1 USD
+  DEPOSIT_FEE_PERCENTAGE = 1; // 0.01%
+  DEPOSIT_FEE_ADDRESS = FEE_ADDRESS; // TODO: set another address if needed
+
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
   oracle = await deployProxy("ChainlinkOracle");
   console.log("ChainlinkOracle", oracle.address);
@@ -224,6 +229,13 @@ async function main() {
   await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
+
+  await (await router.setDepositFee(
+    MIN_DEPOSIT_FEE,
+    MAX_DEPOSIT_FEE,
+    DEPOSIT_FEE_PERCENTAGE,
+    DEPOSIT_FEE_ADDRESS
+  )).wait();
 
   console.log("Setting supported token...");
   await (await router.setSupportedToken(busd.address, true)).wait();
