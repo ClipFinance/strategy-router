@@ -93,6 +93,16 @@ async function main() {
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+  StrategyFactory = await ethers.getContractFactory("DodoUsdt")
+  dodoUsdt = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+    unsafeAllow: ['delegatecall']
+  });
+  console.log("dodoUsdt", strategyUsdc.address);
+  await (await dodoUsdt.transferOwnership(router.address)).wait();
+
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   StrategyFactory = await ethers.getContractFactory("StargateUsdt")
   stargateUsdtStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
@@ -179,6 +189,7 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.stg,
       hre.networkVariables.stg,
+      hre.networkVariables.dodo,
     ],
     [
       hre.networkVariables.usdt,
@@ -189,12 +200,14 @@ async function main() {
       hre.networkVariables.usdc,
       hre.networkVariables.usdt,
       hre.networkVariables.busd,
+      hre.networkVariables.usdt,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
@@ -236,6 +249,7 @@ async function main() {
   console.log("Adding strategies...");
   await (await router.addStrategy(strategyBusd.address, 5000)).wait();
   await (await router.addStrategy(strategyUsdc.address, 5000)).wait();
+  await (await router.addStrategy(dodoUsdt.address, 5000)).wait();
   await (await router.addStrategy(stargateBusdStrategy.address, 5000)).wait();
   await (await router.addStrategy(stargateUsdtStrategy.address, 5000)).wait();
 
@@ -281,6 +295,7 @@ async function main() {
     sharesToken,
     strategyBusd,
     strategyUsdc,
+    dodoUsdt
   ]);
 }
 

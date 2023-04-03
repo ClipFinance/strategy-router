@@ -11,6 +11,8 @@ function bnbChain() {
     bsw: "0x965f527d9159dce6288a2219db51fc6eef120dd1",
     stg: "0xB0D502E938ed5f4df2E681fE6E419ff29631d62b",
 
+    dodo: "0x67ee3Cb086F8a16f34beE3ca72FAD36F7Db929e2",
+
     // current token holders for tests, 
     // may not work based on block number used in forking, in such case try find other holders
     busdHolder: "0xf977814e90da44bfa03b6295a0616a897441acec",
@@ -30,6 +32,11 @@ function bnbChain() {
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
   bnb.UsdtUsdPriceFeed = "0xB97Ad0E74fa7d920791E90258A6E2085088b4320";
+
+  bnb.dodoMine = "0x01f9BfAC04E6184e90bD7eaFD51999CE430Cc750";
+  bnb.dodoUsdtLp = "0x56ce908EeBafea026ab047CEe99a3afF039B4a33";
+  bnb.dodoBusdLp = "0xBEb34A9d23E0fe41d7b08AE3A4cbAD9A63ce0aea";
+  bnb.dodoBusdUsdtPool = "0xBe60d4c4250438344bEC816Ec2deC99925dEb4c7";
 
   bnb.stargateRouter = "0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8";
   bnb.stargateFarm = "0x3052A0F6ab15b4AE1df39962d5DdEFacA86DaB47";
