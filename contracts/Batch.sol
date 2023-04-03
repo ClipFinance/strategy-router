@@ -33,6 +33,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
+    error InvalidToken();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
 
@@ -48,6 +49,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private supportedTokens;
+
+    struct TokenInfo {
+        address tokenAddress;
+        uint256 balance;
+        bool insufficientBalance;
+    }
 
     modifier onlyStrategyRouter() {
         if (msg.sender != address(router)) revert CallerIsNotStrategyRouter();
@@ -198,148 +205,195 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         minDeposit = amount;
     }
 
-    /// @notice Rebalance batch, so that token balances will match strategies weight.
-    /// @return balances Amounts to be deposited in strategies, balanced according to strategies weights.
-    function rebalance() public onlyStrategyRouter returns (uint256[] memory balances) {
-        /*
-        1 store supported-tokens (set of unique addresses)
-            [a,b,c]
-        2 store their balances
-            [10, 6, 8]
-        3 store their sum with uniform decimals
-            24
-        4 create array of length = supported_tokens + strategies_tokens (e.g. [a])
-            [a, b, c] + [a] = 4
-        5 store in that array balances from step 2, duplicated tokens should be ignored
-            [10, 0, 6, 8] (instead of [10,10...] we got [10,0...] because first two are both token a)
-        6a get desired balance for every strategy using their weights
-            [12, 0, 4.8, 7.2] (our 1st strategy will get 50%, 2nd and 3rd will get 20% and 30% respectively)
-        6b store amounts that we need to sell or buy for each balance in order to match desired balances
-            toSell [0, 0, 1.2, 0.8]
-            toBuy  [2, 0, 0, 0]
-            these arrays contain amounts with tokens' original decimals
-        7 now sell 'toSell' amounts of respective tokens for 'toBuy' tokens
-            (token to amount connection is derived by index in the array)
-            (also track new strategies balances for cases where 1 token is shared by multiple strategies)
-        */
-        uint256 totalInBatch;
+    function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {
+        uint256 totalBatchUnallocatedTokens;
 
         // point 1
-        uint256 supportedTokensCount = supportedTokens.length();
-        address[] memory _tokens = new address[](supportedTokensCount);
-        uint256[] memory _balances = new uint256[](supportedTokensCount);
+        TokenInfo[] memory tokenInfos = new TokenInfo[](supportedTokens.length());
 
         // point 2
-        for (uint256 i; i < supportedTokensCount; i++) {
-            _tokens[i] = supportedTokens.at(i);
-            _balances[i] = ERC20(_tokens[i]).balanceOf(address(this));
+        for (uint256 i; i < tokenInfos.length; i++) {
+            tokenInfos[i].tokenAddress = supportedTokens.at(i);
+            tokenInfos[i].balance = ERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
+
+            uint tokenBalanceUniform = toUniform(
+                tokenInfos[i].balance,
+                tokenInfos[i].tokenAddress
+            );
 
             // point 3
-            totalInBatch += toUniform(_balances[i], _tokens[i]);
+            if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
+                totalBatchUnallocatedTokens += tokenBalanceUniform;
+            } else {
+                tokenInfos[i].insufficientBalance = true;
+            }
         }
 
-        // point 4
-        uint256 strategiesCount = router.getStrategiesCount();
+        (StrategyRouter.StrategyInfo[] memory strategies, uint256 remainingToAllocateStrategiesWeightSum)
+            = router.getStrategies();
 
-        uint256[] memory _strategiesAndSupportedTokensBalances = new uint256[](strategiesCount + supportedTokensCount);
+        balancesPendingAllocationToStrategy = new uint256[](strategies.length);
+        uint256[] memory strategyToSupportedTokenIndexMap = new uint256[](strategies.length);
+        // first traversal over strategies
+        // 1. collect info: supported token index that corresponds to a strategy
+        // 2. try to allocate funds to a strategy if a batch has balance in strategy's deposit token
+        // that minimises swaps between tokens – prefer to put a token to strategy that natively support it
+        for (uint256 i; i < strategies.length; i++) {
+            // necessary check in assumption that some strategies could have 0 weight
+            if (remainingToAllocateStrategiesWeightSum == 0) {
+                break;
+            }
+            address strategyToken = strategies[i].depositToken;
+            uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
+                / remainingToAllocateStrategiesWeightSum;
 
-        // point 5
-        // We fill in strategies balances with tokens that strategies are accepting and ignoring duplicates
-        for (uint256 i; i < strategiesCount; i++) {
-            address depositToken = router.getStrategyDepositToken(i);
-            for (uint256 j; j < supportedTokensCount; j++) {
-                if (depositToken == _tokens[j] && _balances[j] > 0) {
-                    _strategiesAndSupportedTokensBalances[i] = _balances[j];
-                    _balances[j] = 0;
+            // nothing to deposit to this strategy
+            if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                continue;
+            }
+
+            // figure out corresponding token index in supported tokens list
+            // TODO corresponding token index in supported tokens list should be known upfront
+            for (uint256 j; j < tokenInfos.length; j++) {
+                if (strategyToken == tokenInfos[j].tokenAddress) {
+                    strategyToSupportedTokenIndexMap[i] = j;
                     break;
                 }
             }
-        }
 
-        // we fill in strategies balances with balances of remaining tokens that are supported as deposits but are not
-        // accepted in strategies
-        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
-            _strategiesAndSupportedTokensBalances[i] = _balances[i - strategiesCount];
-        }
+            if (tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance) {
+                continue;
+            }
 
-        // point 6a
-        uint256[] memory toBuy = new uint256[](strategiesCount);
-        uint256[] memory toSell = new uint256[](_strategiesAndSupportedTokensBalances.length);
-        for (uint256 i; i < strategiesCount; i++) {
-            uint256 desiredBalance = (totalInBatch * router.getStrategyPercentWeight(i)) / 1e18;
-            desiredBalance = fromUniform(desiredBalance, router.getStrategyDepositToken(i));
-            // we skip safemath check since we already do comparison in if clauses
-            unchecked {
-                // point 6b
-                if (desiredBalance > _strategiesAndSupportedTokensBalances[i]) {
-                    toBuy[i] = desiredBalance - _strategiesAndSupportedTokensBalances[i];
-                } else if (desiredBalance < _strategiesAndSupportedTokensBalances[i]) {
-                    toSell[i] = _strategiesAndSupportedTokensBalances[i] - desiredBalance;
+            uint256 batchTokenBalanceUniform = toUniform(
+                tokenInfos[strategyToSupportedTokenIndexMap[i]].balance,
+                strategyToken
+            );
+            // if there anything to allocate to a strategy
+            if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
+                // reduce weight of the current strategy in this iteration of rebalance to 0
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
+                strategies[i].weight = 0;
+                // manipulation to avoid dust:
+                // if the case remaining balance of token is below allocation threshold –
+                // send it to the current strategy
+                if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                    totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                    balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
+                    // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                    tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
+                } else {
+                    // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
+                    // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
+                    // because desiredStrategyBalanceUniform is a virtual value
+                    // that could mismatch the real token number
+                    // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
+                    // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
+                    // we should subtract 333333330000000000
+                    uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
+                    totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
+                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
+                    balancesPendingAllocationToStrategy[i] += desiredStrategyBalance;
                 }
+            } else {
+                // reduce strategy weight in the current rebalance iteration proportionally to the degree
+                // at which the strategy's desired balance was saturated
+                // For example: if a strategy's weight is 10,000 and the total weight is 100,000
+                // and the strategy's desired balance was saturated by 80%
+                // we reduce the strategy weight by 80%
+                // strategy weight = 10,000 - 80% * 10,000 = 2,000
+                // total strategy weight = 100,000 - 80% * 10,000 = 92,000
+                uint256 strategyWeightFulfilled = strategies[i].weight * batchTokenBalanceUniform
+                    / desiredStrategyBalanceUniform;
+                remainingToAllocateStrategiesWeightSum -= strategyWeightFulfilled;
+                strategies[i].weight -= strategyWeightFulfilled;
+
+                totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
+                // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
             }
         }
 
-        // point 7
-        // all tokens we accept to deposit but are not part of strategies therefore we are going to swap them
-        // to tokens that strategies are accepting
-        for (uint256 i = strategiesCount; i < _strategiesAndSupportedTokensBalances.length; i++) {
-            toSell[i] = _strategiesAndSupportedTokensBalances[i];
-        }
+        // if everything was rebalanced already then remainingToAllocateStrategiesWeightSum == 0, spare cycles
+        if (remainingToAllocateStrategiesWeightSum > 0) {
+            for (uint256 i; i < strategies.length; i++) {
+                // necessary check as some strategies that go last could saturated on the previous step already
+                if (remainingToAllocateStrategiesWeightSum == 0) {
+                    break;
+                }
 
-        for (uint256 i; i < _strategiesAndSupportedTokensBalances.length; i++) {
-            for (uint256 j; j < strategiesCount; j++) {
-                // if we are not going to buy this token (nothing to sell), we simply skip to the next one
-                // if we can sell this token we go into swap routine
-                // we proceed to swap routine if there is some tokens to buy and some tokens sell
-                // if found which token to buy and which token to sell we proceed to swap routine
-                if (toSell[i] > 0 && toBuy[j] > 0) {
-                    // if toSell's 'i' greater than strats-1 (e.g. strats 2, tokens 2, i=2, 2>2-1==true)
-                    // then take supported_token[2-2=0]
-                    // otherwise take strategy_token[0 or 1]
-                    address sellToken = i > strategiesCount - 1
-                        ? _tokens[i - strategiesCount]
-                        : router.getStrategyDepositToken(i);
-                    address buyToken = router.getStrategyDepositToken(j);
+                uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
+                    / remainingToAllocateStrategiesWeightSum;
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
 
-                    uint256 toSellUniform = toUniform(toSell[i], sellToken);
-                    uint256 toBuyUniform = toUniform(toBuy[j], buyToken);
-                    /*
-                    Weight of strategies is in token amount not usd equivalent
-                    In case of stablecoin depeg an administrative decision will be made to move out of the strategy
-                    that has exposure to depegged stablecoin.
-                    curSell should have sellToken decimals
-                    */
-                    uint256 curSell = toSellUniform > toBuyUniform
-                        ? changeDecimals(toBuyUniform, UNIFORM_DECIMALS, ERC20(sellToken).decimals())
-                        : toSell[i];
+                if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                    continue;
+                }
 
-                    // no need to swap small amounts
-                    if (toUniform(curSell, sellToken) < REBALANCE_SWAP_THRESHOLD) {
-                        toSell[i] = 0;
-                        toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
+                address strategyToken = strategies[i].depositToken;
+                for (uint256 j; j < tokenInfos.length; j++) {
+                    if (j == strategyToSupportedTokenIndexMap[i]) {
+                        continue;
+                    }
+
+                    if (tokenInfos[j].insufficientBalance) {
+                        continue;
+                    }
+
+                    uint256 batchTokenBalanceUniform = toUniform(tokenInfos[j].balance, tokenInfos[j].tokenAddress);
+
+                    // is there anything to allocate to a strategy
+                    uint256 toSell;
+                    if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
+                        // manipulation to avoid leaving dust
+                        // if the case remaining balance of token is below allocation threshold –
+                        // send it to the current strategy
+                        if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
+                            totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                            toSell = tokenInfos[j].balance;
+                            desiredStrategyBalanceUniform = 0;
+                            // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                            tokenInfos[j].insufficientBalance = true;
+                        } else {
+                            // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
+                            // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
+                            // because desiredStrategyBalanceUniform is a virtual value
+                            // that could mismatch the real token number
+                            // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
+                            // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
+                            // we should subtract 333333330000000000
+                            toSell = fromUniform(desiredStrategyBalanceUniform, tokenInfos[j].tokenAddress);
+                            totalBatchUnallocatedTokens -= toUniform(toSell, tokenInfos[j].tokenAddress);
+                            desiredStrategyBalanceUniform = 0;
+                            tokenInfos[j].balance -= toSell;
+                        }
+                    } else {
+                        totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
+                        toSell = tokenInfos[j].balance;
+                        desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
+                        // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                        tokenInfos[j].insufficientBalance = true;
+                    }
+
+                    balancesPendingAllocationToStrategy[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
+
+                    // if remaining desired strategy amount is below the threshold then break the cycle
+                    if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                         break;
                     }
-                    uint256 received = _trySwap(curSell, sellToken, buyToken);
-
-                    _strategiesAndSupportedTokensBalances[i] -= curSell;
-                    _strategiesAndSupportedTokensBalances[j] += received;
-                    toSell[i] -= curSell;
-                    toBuy[j] -= changeDecimals(curSell, ERC20(sellToken).decimals(), ERC20(buyToken).decimals());
                 }
             }
         }
-
-        _balances = new uint256[](strategiesCount);
-        for (uint256 i; i < strategiesCount; i++) {
-            _balances[i] = _strategiesAndSupportedTokensBalances[i];
-        }
-
-        return _balances;
     }
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
+        // attempt to check that token address is valid
+        if (!oracle.isTokenSupported(tokenAddress)) {
+            revert InvalidToken();
+        }
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
         if (supported) {

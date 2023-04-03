@@ -1,7 +1,7 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const { deploy, deployProxy, parseUniform } = require("../test/utils");
+const { deploy, deployProxy, parseUniform, deployProxyIdleStrategy } = require("../test/utils");
 const fs = require("fs");
 
 // deploy script for testing on mainnet
@@ -34,7 +34,7 @@ async function main() {
   MIN_DEPOSIT = parseUniform("0.0001");
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
   FEE_PERCENT = 1000;
-  INITIAL_DEPOSIT = parseUsdc("0.1");
+  INITIAL_DEPOSIT = parseUsdc("1");
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 
   oracle = await deployProxy("ChainlinkOracle");
@@ -59,6 +59,7 @@ async function main() {
   });
   router = await upgrades.deployProxy(StrategyRouter, [], {
     kind: 'uups',
+    unsafeAllow: ['delegatecall'],
   });
   await router.deployed();
   console.log("StrategyRouter", router.address);
@@ -77,7 +78,7 @@ async function main() {
   let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt")
   strategyBusd = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
-    constructorArgs: [router.address, oracle.address],
+    constructorArgs: [router.address],
   });
   console.log("strategyBusd", strategyBusd.address);
   await (await strategyBusd.transferOwnership(router.address)).wait();
@@ -87,7 +88,7 @@ async function main() {
   StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt")
   strategyUsdc = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
-    constructorArgs: [router.address, oracle.address],
+    constructorArgs: [router.address],
   });
   console.log("strategyUsdc", strategyUsdc.address);
   await (await strategyUsdc.transferOwnership(router.address)).wait();
@@ -102,22 +103,56 @@ async function main() {
   console.log("dodoUsdt", strategyUsdc.address);
   await (await dodoUsdt.transferOwnership(router.address)).wait();
 
-  // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
+  StrategyFactory = await ethers.getContractFactory("StargateUsdt")
+  stargateUsdtStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    unsafeAllow: ['delegatecall'],
+    constructorArgs: [router.address],
+  });
+  console.log("stargateUsdtStrategy", stargateUsdtStrategy.address);
+  await (await stargateUsdtStrategy.transferOwnership(router.address)).wait();
+
+   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
+  StrategyFactory = await ethers.getContractFactory("StargateBusd")
+  stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    unsafeAllow: ['delegatecall'],
+    constructorArgs: [router.address],
+  });
+  console.log("stargateBusdStrategy", stargateBusdStrategy.address);
+  await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
+
+  // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~
   console.log("oracle setup...");
   let oracleTokens = [busd.address, usdc.address, usdt.address];
   let priceFeeds = [
-    hre.networkVariables.BusdUsdPriceFeed, 
+    hre.networkVariables.BusdUsdPriceFeed,
     hre.networkVariables.UsdcUsdPriceFeed,
-    hre.networkVariables.UsdtUsdPriceFeed
+    hre.networkVariables.UsdtUsdPriceFeed,
   ];
   await (await oracle.setPriceFeeds(oracleTokens, priceFeeds)).wait();
 
   // pancake plugin params
   console.log("pancake plugin setup...");
   await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.busd, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdt, true)).wait();
-  await (await pancakePlugin.setUseWeth(hre.networkVariables.bsw, hre.networkVariables.usdc, true)).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.busd]
+  )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.usdt]
+  )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.wbnb,
+    [hre.networkVariables.bsw, hre.networkVariables.usdc]
+  )).wait();
+  await (await pancakePlugin.setMediatorTokenForPair(
+    hre.networkVariables.busd,
+    [hre.networkVariables.stg, hre.networkVariables.usdt]
+  )).wait();
+
 
   // acryptos plugin params
   console.log("acryptos plugin setup...");
@@ -152,6 +187,8 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
       hre.networkVariables.bsw,
+      hre.networkVariables.stg,
+      hre.networkVariables.stg,
       hre.networkVariables.dodo,
     ],
     [
@@ -162,12 +199,16 @@ async function main() {
       hre.networkVariables.usdt,
       hre.networkVariables.usdc,
       hre.networkVariables.usdt,
+      hre.networkVariables.busd,
+      hre.networkVariables.usdt,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
@@ -198,13 +239,19 @@ async function main() {
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 
   console.log("Setting supported token...");
-  await (await router.setSupportedToken(busd.address, true)).wait();
-  await (await router.setSupportedToken(usdc.address, true)).wait();
+  const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  await (await router.setSupportedToken(busd.address, true, busdIdleStrategy.address)).wait();
+  const usdcIdleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
+  const usdtIdleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
+  await (await router.setSupportedToken(usdt.address, true, usdtIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(strategyBusd.address, busd.address, 3000)).wait();
-  await (await router.addStrategy(strategyUsdc.address, usdc.address, 3000)).wait();
-  await (await router.addStrategy(dodoUsdt.address, usdc.address, 4000)).wait();
+  await (await router.addStrategy(strategyBusd.address, 5000)).wait();
+  await (await router.addStrategy(strategyUsdc.address, 5000)).wait();
+  await (await router.addStrategy(dodoUsdt.address, 5000)).wait();
+  await (await router.addStrategy(stargateBusdStrategy.address, 5000)).wait();
+  await (await router.addStrategy(stargateUsdtStrategy.address, 5000)).wait();
 
 
   console.log("Approving for initial deposit...");

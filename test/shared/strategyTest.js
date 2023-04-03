@@ -3,7 +3,7 @@ const { parseUnits, parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
 const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
-const { BigNumber, utils } = require("ethers");
+const { BigNumber } = require("ethers");
 
 module.exports = function strategyTest(strategyName, needOracle) {
   describe(`Test ${strategyName} strategy`, function () {
@@ -32,40 +32,20 @@ module.exports = function strategyTest(strategyName, needOracle) {
       await setupParamsOnBNB(router, oracle, exchange);
 
       // get tokens on bnb chain for testing
-      const { usdc, busd, usdt } = await setupTokens();
-      await oracle.setPriceAndDecimals(
-        usdc.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        busd.address,
-        utils.parseUnits("1", 8),
-        8
-      );
-      await oracle.setPriceAndDecimals(
-        usdt.address,
-        utils.parseUnits("1", 8),
-        8
-      );
+      await setupTokens();
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
       let StrategyFactory = await ethers.getContractFactory(strategyName);
       strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
         kind: "uups",
-        constructorArgs: needOracle
-          ? [router.address, oracle.address]
-          : [router.address],
-        unsafeAllow: ['delegatecall']
+        unsafeAllow: ['delegatecall'],
+        constructorArgs: [router.address],
       });
       await strategy.deployed();
 
       // get deposit token and parse helper function
-      depositToken = await ethers.getContractAt(
-        "ERC20",
-        await strategy.depositToken()
-      );
+      depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
       let decimals = await depositToken.decimals();
       parseAmount = (amount) => parseUnits(amount, decimals);
     });

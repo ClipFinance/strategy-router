@@ -24,6 +24,14 @@ contract MockExchange {
         return 25e14; // 0.25% or 0.0025 with 18 decimals
     }
 
+    function getAmountOut(
+        uint256 amountA,
+        address tokenA,
+        address tokenB
+    ) external view returns (uint256 amountOut) {
+        return _amountReceived;
+    }
+
     function swap(
         uint256 amountA,
         address tokenA,

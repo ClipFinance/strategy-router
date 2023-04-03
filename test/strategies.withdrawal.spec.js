@@ -2,9 +2,11 @@ const strategyTest = require("./shared/strategyTest");
 
 describe("Test strategies", function () {
   let strategies = [
-    { name: "BiswapUsdcUsdt", needOracle: true },
-    { name: "BiswapBusdUsdt", needOracle: true },
     { name: "DodoUsdt" },
+    { name: "BiswapUsdcUsdt" },
+    { name: "BiswapBusdUsdt" },
+    { name: "StargateUsdt" },
+    { name: "StargateBusd" },
   ];
 
   for (let i = 0; i < strategies.length; i++) {

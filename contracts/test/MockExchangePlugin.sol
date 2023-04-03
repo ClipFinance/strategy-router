@@ -13,6 +13,8 @@ contract MockExchangePlugin is Ownable, IExchangePlugin {
     // Fee amount that is charged by exchange on every swap
     // For example, 30 means that received amount will be less by 0.3%
     uint16 private exchangeFeeBps;
+    // capture amout of time swap was called
+    uint16 public swapCallNumber = 0;
 
     constructor(IUsdOracle _oracle, uint16 _slippageInBps, uint16 _exchangeFeeBps) {
         oracle = _oracle;
@@ -38,6 +40,8 @@ contract MockExchangePlugin is Ownable, IExchangePlugin {
         amountToReceive = fromUniform(amountToReceive, tokenB);
 
         ERC20(tokenB).transfer(to, amountToReceive);
+
+        swapCallNumber += 1;
 
         return amountToReceive;
     }

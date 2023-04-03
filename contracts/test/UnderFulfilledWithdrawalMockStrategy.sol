@@ -18,6 +18,9 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
     uint256 private rewardPerCompoundPeriodInBps;
     bool private isRewardPositive;
 
+    uint256 public depositCount;
+    uint256 public withdrawCount;
+
     constructor(
         uint16 _underFulfilledWithdrawalInBps,
         address _depositToken,
@@ -35,6 +38,8 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
     }
 
     function deposit(uint256 amount) external override {
+        depositCount += 1;
+
         balanceInToken += amount;
     }
 
@@ -43,6 +48,8 @@ contract UnderFulfilledWithdrawalMockStrategy is Ownable, IStrategy {
         override
         returns (uint256 amountWithdrawn)
     {
+        withdrawCount += 1;
+
         amountWithdrawn = amount * (10000 - underFulfilledWithdrawalInBps) / 10000;
         balanceInToken -= amountWithdrawn;
         ERC20(strategyDepositToken).transfer(msg.sender, amountWithdrawn);

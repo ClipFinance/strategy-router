@@ -7,34 +7,27 @@ const {
   deploy,
   parseUniform,
   deployProxy,
+  deployProxyIdleStrategy,
 } = require("../utils");
-const {
-  getContract,
-  impersonate
-} = require("./forkHelper")
 
 module.exports = {
   setupTokens,
   setupCore,
   deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeUnderFulfilledWithdrawalStrategy,
   setupFakeToken,
   setupFakeTokens,
-  setupFakeTwoTokensByOrder,
   setupTokensLiquidityOnPancake,
-  setupTokensLiquidityOnBiswap,
-  getPairToken,
-  getPairTokenOnBiswap,
   setupParamsOnBNB,
   setupTestParams,
   setupRouterParams,
   setupFakePrices,
-  setupPancakePlugin,
   setupFakeExchangePlugin,
   mintFakeToken,
-  deployBiswapStrategy,
   deployDodoStrategy,
-  addBiswapPool,
+  setupIdleStrategies,
+  deployStargateStrategy,
 };
 
 async function deployFakeStrategy({
@@ -46,25 +39,28 @@ async function deployFakeStrategy({
   // console.log(router.address, await token.name(), weight, profitPercent);
   let strategy = await deploy("MockStrategy", token.address, profitPercent);
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  await router.addStrategy(strategy.address, weight);
 }
 
-async function deployBiswapStrategy({
+async function deployStargateStrategy({
   router,
-  poolId,
-  tokenA,
-  tokenB,
+  token,
   lpToken,
-  oracle,
+  stgToken,
+  stargateRouter,
+  stargateFarm,
+  poolId,
+  farmId,
   upgrader,
 }) {
-  let BiswapBase = await ethers.getContractFactory("MockBiswapBase");
-  let biswapStrategy = await upgrades.deployProxy(BiswapBase, [upgrader], {
+  let StargateBase = await ethers.getContractFactory("StargateBase");
+  let stargateStrategy = await upgrades.deployProxy(StargateBase, [upgrader], {
     kind: "uups",
-    constructorArgs: [router, poolId, tokenA, tokenB, lpToken, oracle],
+    unsafeAllow: ['delegatecall'],
+    constructorArgs: [router, token, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
   });
 
-  return biswapStrategy;
+  return stargateStrategy;
 }
 
 async function deployDodoStrategy({
@@ -86,12 +82,11 @@ async function deployDodoStrategy({
   return dodoStrategy;
 }
 
-async function deployFakeUnderFulfilledWithdrawalStrategy({
-  router, token, underFulfilledWithdrawalBps,
-  weight = 10_000, profitPercent = 0, isRewardPositive = true
+async function setupFakeUnderFulfilledWithdrawalStrategy({
+ router, token, underFulfilledWithdrawalBps = 0,
+ profitPercent = 0, isRewardPositive = true
 }) {
-  // console.log(router.address, await token.name(), weight, profitPercent);
-  let strategy = await deploy(
+  const strategy = await deploy(
     "UnderFulfilledWithdrawalMockStrategy",
     underFulfilledWithdrawalBps,
     token.address,
@@ -99,11 +94,28 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
     isRewardPositive
   );
   await strategy.transferOwnership(router.address);
-  await router.addStrategy(strategy.address, token.address, weight);
+  strategy.token = token;
+
+  return strategy;
+}
+
+async function deployFakeUnderFulfilledWithdrawalStrategy({
+  router, token, underFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
+}) {
+  // console.log(router.address, await token.name(), weight, profitPercent);
+  const strategy = await setupFakeUnderFulfilledWithdrawalStrategy({
+    router, token, underFulfilledWithdrawalBps, profitPercent, isRewardPositive
+  });
+  await router.addStrategy(strategy.address, weight);
+
+  return strategy;
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
-async function setupFakeTokens() {
+async function setupFakeTokens(router) {
+  const [owner] = await ethers.getSigners();
+
   // each test token's total supply, minted to owner
   let totalSupply = (100_000_000).toString();
 
@@ -111,34 +123,27 @@ async function setupFakeTokens() {
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
 
+  if (router !== false) {
+    usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  }
+
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
+
+  if (router !== false) {
+    busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  }
 
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
 
-  return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
-}
-
-async function setupFakeTwoTokensByOrder() {
-  // each test token's total supply, minted to owner
-  let totalSupply = (100_000_000).toString();
-
-  let token0 = await deploy("MockToken", parseUnits(totalSupply, 18), 18);
-  token0.decimalNumber = 18;
-
-  let token1 = await deploy("MockToken", parseUnits(totalSupply, 18), 18);
-  token1.decimalNumber = 18;
-
-  if (token0.address.toLowerCase() > token1.address.toLowerCase()) {
-    const token = token0;
-    token0 = token1;
-    token1 = token;
+  if (router !== false) {
+    usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
   }
 
-  return { token0, token1 };
+  return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 }
 
 async function setupFakeToken(
@@ -152,17 +157,47 @@ async function setupFakeToken(
   return { token, parseToken };
 }
 
+async function setupFakeToken(decimals = 18) {
+  // each test token's total supply, minted to owner
+  let totalSupply = (100_000_000).toString();
+
+  let parseToken = (args) => parseUnits(args, decimals);
+  let token = await deploy("MockToken", parseToken(totalSupply), decimals);
+  token.decimalNumber = 18;
+  token.parse = parseToken;
+
+  return token;
+}
+
+async function setupIdleStrategies(owner, router, ...tokens) {
+  for (const token of tokens) {
+    const StrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
+    const idleSTrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+      kind: 'uups',
+      constructorArgs: [router.address, token.address],
+      unsafeAllow: ['delegatecall'],
+    });
+    await idleSTrategy.transferOwnership(router.address);
+
+    token.idleStrategy = idleSTrategy;
+  }
+}
+
 async function mintFakeToken(toAddress, token, value) {
   await token.mint(toAddress, value);
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
-async function setupFakeExchangePlugin(oracle, slippageBps, feeBps) {
+async function setupFakeExchangePlugin(
+  oracle,
+  slippageBps,
+  feeBps,
+) {
   let exchangePlugin = await deploy(
     "MockExchangePlugin",
     oracle.address,
     slippageBps,
-    feeBps
+    feeBps,
   );
 
   // set up balances for main stablecoins
@@ -174,15 +209,12 @@ async function setupFakeExchangePlugin(oracle, slippageBps, feeBps) {
 }
 
 // Create liquidity on uniswap-like router with test tokens
-async function setupTokensLiquidity(tokenA, tokenB, amount, amount1, routerAddr) {
+async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount) {
   const [owner] = await ethers.getSigners();
-  let uniswapRouter = await ethers.getContractAt(
-    "IUniswapV2Router02",
-    routerAddr
-  );
+  let uniswapRouter = await ethers.getContractAt("IUniswapV2Router02", hre.networkVariables.uniswapRouter);
 
-  let amountA = parseUnits(amount.toString(), await tokenA.decimals());
-  let amountB = parseUnits(amount1 ? amount1.toString() : amount.toString(), await tokenB.decimals());
+  let amountA = parseUnits(amount, await tokenA.decimals());
+  let amountB = parseUnits(amount, await tokenB.decimals());
   await tokenA.approve(uniswapRouter.address, amountA);
   await tokenB.approve(uniswapRouter.address, amountB);
   await uniswapRouter.addLiquidity(
@@ -197,64 +229,13 @@ async function setupTokensLiquidity(tokenA, tokenB, amount, amount1, routerAddr)
   );
 }
 
-// Create liquidity on Pancake
-async function setupTokensLiquidityOnPancake(tokenA, tokenB, amount, amount1) {
-  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.uniswapRouter)
-}
-
-// Create liquidity on Biswap
-async function setupTokensLiquidityOnBiswap(tokenA, tokenB, amount, amount1) {
-  await setupTokensLiquidity(tokenA, tokenB, amount, amount1, hre.networkVariables.biswapRouter)
-}
-
-// Get lp pair token on uniswap-like router
-async function getPairToken(tokenA, tokenB, routerAddr) {
-  let uniswapRouter = await ethers.getContractAt(
-    "IUniswapV2Router02",
-    routerAddr
-  );
-
-  const factory = await getContract(
-    "IUniswapV2Factory",
-    await uniswapRouter.factory()
-  );
-
-  const lpAddr = await factory.getPair(tokenA.address, tokenB.address);
-  lpToken = await getContract("MockToken", lpAddr);
-
-  return lpToken;
-}
-
-// Get pair token on Biswap
-function getPairTokenOnBiswap(tokenA, tokenB) {
-  return getPairToken(tokenA, tokenB, hre.networkVariables.biswapRouter)
-}
-
-// Create liquidity on uniswap-like router with test tokens
-async function addBiswapPool(lpTokenAddress, alloc = 70) {
-  const biswapFarm = await getContract("IBiswapFarm", hre.networkVariables.biswapFarm);
-
-  biswapOwner = await impersonate(await biswapFarm.owner());
-
-  biswapPoolId = await biswapFarm.poolLength();
-
-  const [owner] = await ethers.getSigners();
-
-  await owner.sendTransaction({
-    from: owner.address,
-    to: biswapOwner.address,
-    value: parseEther("1"),
-  });
-  await biswapFarm.connect(biswapOwner).add(alloc, lpTokenAddress, false);
-
-  return biswapPoolId;
-}
 
 // Get tokens that actually exists on BNB for testing
 async function setupTokens() {
   ({ tokenContract: usdc, parse: parseUsdc } = await getUSDC());
   ({ tokenContract: usdt, parse: parseUsdt } = await getUSDT());
   ({ tokenContract: busd, parse: parseBusd } = await getBUSD());
+
   return { usdc, busd, usdt, parseUsdc, parseUsdt, parseBusd };
 }
 
@@ -276,6 +257,7 @@ async function setupCore() {
   });
   let router = await upgrades.deployProxy(StrategyRouter, [], {
     kind: "uups",
+    unsafeAllow: ["delegatecall"],
   });
   await router.deployed();
   // Deploy SharesToken
@@ -303,6 +285,13 @@ async function setupCore() {
 
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let INITIAL_SHARES = Number(1e12);
+
+  router.addSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, true, token.idleStrategy.address);
+  };
+  router.removeSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, false, ethers.constants.AddressZero);
+  };
 
   return {
     oracle,
@@ -340,6 +329,7 @@ async function setupTestParams(
   await oracle.setPrice(usdc.address, usdcAmount);
 
   let bsw = hre.networkVariables.bsw;
+  // let wbnb = hre.networkVariables.wbnb;
 
   // Setup exchange params
   busd = busd.address;
@@ -369,9 +359,9 @@ async function setupTestParams(
 
     // pancake plugin params
     await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-    // await pancakePlugin.setUseWeth(bsw, busd, true);
-    // await pancakePlugin.setUseWeth(bsw, usdt, true);
-    // await pancakePlugin.setUseWeth(bsw, usdc, true);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+    // await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
   }
 }
 
@@ -393,28 +383,6 @@ async function setupFakePrices(oracle, usdc, usdt, busd) {
   await oracle.setPrice(usdc.address, usdcAmount);
 }
 
-async function setupPancakePlugin(exchange, usdc, usdt, busd) {
-  let bsw = hre.networkVariables.bsw;
-
-  let pancakePlugin = await deploy("UniswapPlugin");
-  let pancake = pancakePlugin.address;
-  // Setup exchange params
-  busd = busd.address;
-  usdc = usdc.address;
-  usdt = usdt.address;
-  await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw],
-    [usdt, usdc, usdt, busd, usdt, usdc],
-    [pancake, pancake, pancake, pancake, pancake, pancake]
-  );
-
-  // pancake plugin params
-  await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  // await pancakePlugin.setUseWeth(bsw, busd, true);
-  // await pancakePlugin.setUseWeth(bsw, usdt, true);
-  // await pancakePlugin.setUseWeth(bsw, usdc, true);
-}
-
 // Setup core params that are similar (or the same) as those that will be set in production
 async function setupParamsOnBNB(router, oracle, exchange) {
   const [owner, , , , , , , , , , feeAddress] = await ethers.getSigners();
@@ -427,11 +395,14 @@ async function setupParamsOnBNB(router, oracle, exchange) {
 }
 
 async function setupPluginsOnBNB(exchange) {
+
+  let wbnb = hre.networkVariables.wbnb;
   let bsw = hre.networkVariables.bsw;
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
   let dodo = hre.networkVariables.dodo;
+  let stg = hre.networkVariables.stg;
   let acs4usd = hre.networkVariables.acs4usd.address;
 
   let acsPlugin = await deploy("CurvePlugin");
@@ -439,12 +410,14 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw, usdt],
-    [usdt, usdc, usdt, busd, usdt, usdc, dodo],
+    [busd, busd, usdc, bsw,  bsw,  bsw,  stg,  stg,  usdt],
+    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd, dodo],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
@@ -464,7 +437,8 @@ async function setupPluginsOnBNB(exchange) {
 
   // pancake plugin params
   await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter);
-  await pancakePlugin.setUseWeth(bsw, busd, true);
-  await pancakePlugin.setUseWeth(bsw, usdt, true);
-  await pancakePlugin.setUseWeth(bsw, usdc, true);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, busd]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdt]);
+  await pancakePlugin.setMediatorTokenForPair(wbnb, [bsw, usdc]);
+  await pancakePlugin.setMediatorTokenForPair(busd, [stg, usdt]);
 }

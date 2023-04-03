@@ -3,6 +3,8 @@ const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
 const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
 const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
+const { constants } = require("@openzeppelin/test-helpers");
+
 
 
 describe("Test StrategyRouter", function () {
@@ -30,7 +32,7 @@ describe("Test StrategyRouter", function () {
     allocationWindowTime = await router.allocationWindowTime();
 
     // deploy mock tokens 
-    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router));
 
     // setup fake token liquidity
     let amount = (1_000_000).toString();
@@ -47,9 +49,9 @@ describe("Test StrategyRouter", function () {
     await usdt.approve(router.address, parseUsdt("1000000"));
 
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true);
-    await router.setSupportedToken(busd.address, true);
-    await router.setSupportedToken(usdt.address, true);
+    await router.addSupportedToken(usdc);
+    await router.addSupportedToken(busd);
+    await router.addSupportedToken(usdt);
 
     // add fake strategies
     await deployFakeStrategy({ router, token: busd });
@@ -252,7 +254,7 @@ describe("Test StrategyRouter", function () {
     await farm2.transferOwnership(router.address);
 
     // add new farm
-    await router.addStrategy(farm2.address, usdc.address, 1000);
+    await router.addStrategy(farm2.address, 1000);
 
     // remove 2nd farm with index 1
     await router.removeStrategy(1);

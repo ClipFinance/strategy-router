@@ -1,5 +1,5 @@
 const { parseEther, parseUnits } = require("ethers/lib/utils");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 const { BigNumber } = require("ethers");
 
 MONTH_SECONDS = 60 * 60 * 24 * 30;
@@ -16,6 +16,7 @@ module.exports = {
   parseUniform, provider, getUSDC, getBUSD, getUSDT,
   deploy, deployProxy, saturateTokenBalancesInStrategies,
   convertFromUsdToTokenAmount, applySlippageInBps,
+  deployProxyIdleStrategy,
 }
 
 BigNumber.prototype.divCeil = function (other) {
@@ -38,6 +39,22 @@ async function deployProxy(contractName, initializeArgs = []) {
     kind: 'uups',
   });
   return await contract.deployed();
+}
+
+async function deployProxyIdleStrategy(owner, router, token) {
+  const IdleStrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
+  const idleStrategy = await upgrades.deployProxy(
+    IdleStrategyFactory,
+    [owner.address],
+    {
+      kind: 'uups',
+      constructorArgs: [router.address, token.address],
+      unsafeAllow: ['delegatecall'],
+    }
+  );
+  await idleStrategy.transferOwnership(router.address);
+
+  return idleStrategy;
 }
 
 async function getBUSD(receiverAddress = null) {
@@ -153,7 +170,7 @@ function printStruct(struct) {
 
 // Use this method if you want deposit token's smart contract balance to be much higher than mocked strategy recorder balance
 async function saturateTokenBalancesInStrategies(router) {
- const strategiesData = await router.getStrategies();
+ const [strategiesData] = await router.getStrategies();
  for( i = 0; i < strategiesData.length; i++) {
    let strategyContract = await ethers.getContractAt("MockStrategy", strategiesData[i].strategyAddress);
    let depositTokenAddress = await strategyContract.depositToken();

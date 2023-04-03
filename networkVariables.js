@@ -1,6 +1,7 @@
 function bnbChain() {
 
   const bnb = {
+    wbnb: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
 
     busd: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
     usdc: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
@@ -8,6 +9,7 @@ function bnbChain() {
     dai: "0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3",
 
     bsw: "0x965f527d9159dce6288a2219db51fc6eef120dd1",
+    stg: "0xB0D502E938ed5f4df2E681fE6E419ff29631d62b",
 
     dodo: "0x67ee3Cb086F8a16f34beE3ca72FAD36F7Db929e2",
 
@@ -26,8 +28,6 @@ function bnbChain() {
   };
 
   bnb.uniswapRouter = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-  bnb.biswapFarm = "0xDbc1A13490deeF9c3C12b44FE77b503c1B061739";
-  bnb.biswapRouter = "0x3a6d8cA21D1CF76F653A67577FA0D27453350dD8"
 
   bnb.BusdUsdPriceFeed = "0xcBb98864Ef56E9042e7d2efef76141f15731B82f";
   bnb.UsdcUsdPriceFeed = "0x51597f405303C4377E36123cBc172b13269EA163";
@@ -38,6 +38,11 @@ function bnbChain() {
   bnb.dodoBusdLp = "0xBEb34A9d23E0fe41d7b08AE3A4cbAD9A63ce0aea";
   bnb.dodoBusdUsdtPool = "0xBe60d4c4250438344bEC816Ec2deC99925dEb4c7";
 
+  bnb.stargateRouter = "0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8";
+  bnb.stargateFarm = "0x3052A0F6ab15b4AE1df39962d5DdEFacA86DaB47";
+  bnb.stargateUsdtLpPool = "0x9aA83081AA06AF7208Dcc7A4cB72C94d057D2cda";
+  bnb.stargateBusdLpPool = "0x98a5737749490856b401DB5Dc27F522fC314A4e1";
+
   return bnb;
 }
 
@@ -45,6 +50,7 @@ function bnbChain() {
 function bnbTestChain() {
 
   const bnb = {
+    wbnb: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
     // https://testnet.bscscan.com/address/0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7
     busd: "0x3304dd20f6Fe094Cb0134a6c8ae07EcE26c7b6A7",
     // https://testnet.bscscan.com/address/0xCA8eB2dec4Fe3a5abbFDc017dE48E461A936623D
