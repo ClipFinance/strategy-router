@@ -73,7 +73,7 @@ describe("Test idle strategies participation in withdrawals", function () {
 
   describe('When idle strategies are not empty', async function () {
     it('idle strategy for withdrawal token fully satisfies', async function () {
-      const { router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+      const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
         await loadFixture(loadStateWithZeroSwapFee);
 
       oracle.setPrice(usdt.address, parseUsdt('1'));
@@ -82,7 +82,7 @@ describe("Test idle strategies participation in withdrawals", function () {
 
       await usdt.transfer(usdt.idleStrategy.address, parseUsdt('1000'));
 
-      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(busd.address, parseBusd("150"));
       await router.allocateToStrategies();
 
       const receiptIds = [0];
@@ -98,6 +98,7 @@ describe("Test idle strategies participation in withdrawals", function () {
 
       console.log(shares);
       console.log(minExpectedWithdrawAmount);
+      const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
         receiptIds,
         usdt.address,
@@ -109,16 +110,23 @@ describe("Test idle strategies participation in withdrawals", function () {
         await router.getStrategiesValue();
 
       expect(totalStrategyBalance).to.be.closeTo(
-        parseUniform('100'),
+        parseUniform('150'),
         parseUniform('0.1'),
       );
       expect(totalIdleStrategyBalance).to.be.closeTo(
         parseUniform('900'),
         parseUniform('0.1'),
       );
+
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('100'),
+        parseUsdt('0.1'),
+      );
     });
     it('idle native token + idle other strategies satisfy', async function () {
-      const { router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+      const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
         await loadFixture(loadStateWithZeroSwapFee);
 
       oracle.setPrice(usdt.address, parseUsdt('1'));
@@ -129,7 +137,7 @@ describe("Test idle strategies participation in withdrawals", function () {
       await busd.transfer(busd.idleStrategy.address, parseBusd('50'));
       await usdc.transfer(usdc.idleStrategy.address, parseUsdc('1000'));
 
-      await router.depositToBatch(busd.address, parseBusd("150"));
+      await router.depositToBatch(busd.address, parseBusd("200"));
       await router.allocateToStrategies();
 
       const receiptIds = [0];
@@ -147,6 +155,7 @@ describe("Test idle strategies participation in withdrawals", function () {
 
       console.log(shares);
       console.log(minExpectedWithdrawAmount);
+      const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
         receiptIds,
         usdt.address,
@@ -158,16 +167,23 @@ describe("Test idle strategies participation in withdrawals", function () {
         await router.getStrategiesValue();
 
       expect(totalStrategyBalance).to.be.closeTo(
-        parseUniform('150'),
+        parseUniform('200'),
         parseUniform('0.1'),
       );
       expect(totalIdleStrategyBalance).to.be.closeTo(
         parseUniform('950'),
         parseUniform('0.1'),
       );
+
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('150'),
+        parseUsdt('0.1'),
+      );
     });
     it('idle native token + idle other strategies partially satisfy', async function () {
-      const { router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+      const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
         await loadFixture(loadStateWithZeroSwapFee);
 
       oracle.setPrice(usdt.address, parseUsdt('1'));
@@ -199,6 +215,8 @@ describe("Test idle strategies participation in withdrawals", function () {
 
       console.log(shares);
       console.log(minExpectedWithdrawAmount);
+
+      const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
         receiptIds,
         usdt.address,
@@ -217,11 +235,70 @@ describe("Test idle strategies participation in withdrawals", function () {
         parseUniform('0'),
         parseUniform('0.1'),
       );
+
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('200'),
+        parseUsdt('0.1'),
+      );
     });
   });
 
   it('withdraws all tokens from clip', async function () {
+    const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+      await loadFixture(loadStateWithZeroSwapFee);
 
+    oracle.setPrice(usdt.address, parseUsdt('1'));
+    oracle.setPrice(busd.address, parseBusd('1'));
+    oracle.setPrice(usdc.address, parseUsdc('1'));
+
+    // all shares for owner
+    await router.depositToBatch(busd.address, parseBusd("250"));
+    await router.allocateToStrategies();
+
+    // some balances on idle strategies
+    await usdt.transfer(usdt.idleStrategy.address, parseUsdt('50'));
+    await busd.transfer(busd.idleStrategy.address, parseBusd('50'));
+    await usdc.transfer(usdc.idleStrategy.address, parseUsdc('50'));
+
+    const receiptIds = [0];
+    const shares = await router.calculateSharesFromReceipts(receiptIds);
+    const sharesValueUsd = await router.calculateSharesUsdValue(shares);
+    const minExpectedWithdrawAmount = applySlippageInBps(
+      await convertFromUsdToTokenAmount(
+        oracle,
+        busd,
+        sharesValueUsd
+      ),
+      100 // 1% slippage
+    );
+
+    const previousBalance = await busd.balanceOf(owner.address);
+    await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+
+    const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, } =
+      await router.getStrategiesValue();
+
+    expect(totalBalance).to.be.closeTo(
+      parseUniform('0'),
+      parseUniform('0.1'),
+    );
+    expect(totalStrategyBalance).to.be.closeTo(
+      parseUniform('0'),
+      parseUniform('0.1'),
+    );
+    expect(totalIdleStrategyBalance).to.be.closeTo(
+      parseUniform('0'),
+      parseUniform('0.1'),
+    );
+
+    expect(
+      (await busd.balanceOf(owner.address)).sub(previousBalance)
+    ).to.be.closeTo(
+      parseBusd('400'),
+      parseBusd('0.1'),
+    );
   });
   it('verifies funds withdrawn proportially', async function () {
 
