@@ -1,9 +1,10 @@
 const { expect } = require("chai");
 const { parseEther } = require("ethers/lib/utils");
 const { ethers } = require("hardhat");
-const { setupTokens, setupCore, setupParamsOnBNB } = require("./shared/commonSetup");
+const { setupTokens, setupCore, setupParamsOnBNB, setupIdleStrategies } = require("./shared/commonSetup");
 const { skipTimeAndBlocks, MaxUint256, deploy, provider, parseUniform, convertFromUsdToTokenAmount, applySlippageInBps } = require("./utils");
 const { BigNumber } = require("ethers");
+const { constants } = require("@openzeppelin/test-helpers");
 
 
 describe("Test StrategyRouter with two real strategies on bnb chain (happy scenario)", function () {
@@ -35,9 +36,11 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // get tokens on bnb chain for testing
     ({usdc, busd, parseUsdc, parseBusd} = await setupTokens());
 
+    await setupIdleStrategies(owner, router, usdc, busd);
+
     // setup supported tokens
-    await router.setSupportedToken(usdc.address, true);
-    await router.setSupportedToken(busd.address, true);
+    await router.addSupportedToken(usdc);
+    await router.addSupportedToken(busd);
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("1000000"));

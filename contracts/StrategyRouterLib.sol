@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./idle-strategies/DefaultIdleStrategy.sol";
+import "./interfaces/IIdleStrategy.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
@@ -40,13 +42,18 @@ library StrategyRouterLib {
         bool isBalanceInsufficient;
     }
 
-    function getStrategiesValue(IUsdOracle oracle, StrategyRouter.StrategyInfo[] storage strategies)
+    function getStrategiesValue(
+        IUsdOracle oracle,
+        StrategyRouter.StrategyInfo[] storage strategies,
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies
+    )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances)
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        balances = new uint256[](strategies.length);
-        for (uint256 i; i < balances.length; i++) {
+        uint256 strategiesLength = strategies.length;
+        balances = new uint256[](strategiesLength);
+        for (uint256 i; i < strategiesLength; i++) {
             address token = strategies[i].depositToken;
 
             uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
@@ -55,6 +62,20 @@ library StrategyRouterLib {
             balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
+            totalBalance += balanceInDepositToken;
+        }
+
+        uint256 idleStrategiesLength = idleStrategies.length;
+        idleBalances = new uint256[](idleStrategiesLength);
+        for (uint256 i; i < idleStrategiesLength; i++) {
+            address token = idleStrategies[i].depositToken;
+
+            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
+
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
+            idleBalances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
         }
     }
@@ -177,6 +198,7 @@ library StrategyRouterLib {
         }
     }
 
+    // TODO When idle added to rebalanced should be a special case for removed token
     function rebalanceStrategies(
         Exchange exchange,
         StrategyRouter.StrategyInfo[] storage strategies,
@@ -518,6 +540,58 @@ library StrategyRouterLib {
             // deposit amount of tokens was transfered to the strategy
             // NOTE: in some edge cases 0 could be deposited
             IStrategy(strategyDatas[i].strategyAddress).deposit(strategyDatas[i].toDeposit);
+        }
+    }
+
+    function setIdleStrategy(
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        address[] memory supportedTokens,
+        uint256 i,
+        address idleStrategy
+    ) public {
+        if (i >= supportedTokens.length) {
+            revert StrategyRouter.InvalidIndexForIdleStrategy();
+        }
+
+        address tokenAddress = supportedTokens[i];
+        if (idleStrategy == address(0) || IIdleStrategy(idleStrategy).depositToken() != tokenAddress) {
+            revert StrategyRouter.InvalidIdleStrategy();
+        }
+
+        if (i < idleStrategies.length) {
+            if (idleStrategies[i].strategyAddress != address(0)) {
+                IIdleStrategy currentIdleStrategy = IIdleStrategy(idleStrategies[i].strategyAddress);
+                if (currentIdleStrategy.totalTokens() != 0) {
+                    uint256 withdrawnAmount = currentIdleStrategy.withdrawAll();
+                    IERC20(tokenAddress).safeTransfer(idleStrategy, withdrawnAmount);
+                    IIdleStrategy(idleStrategy).deposit(withdrawnAmount);
+                }
+
+                Ownable(address(currentIdleStrategy))
+                    .transferOwnership(Ownable(address(this)).owner());
+            }
+
+            idleStrategies[i] = StrategyRouter.IdleStrategyInfo({
+                strategyAddress: idleStrategy,
+                depositToken: tokenAddress
+            });
+        } else {
+            // ensure idle strategy pushed at index i
+            // though in practice the loop will never be iterated
+            for (uint256 j = idleStrategies.length; j < i; j++) {
+                idleStrategies.push(
+                    StrategyRouter.IdleStrategyInfo({
+                        strategyAddress: address(0),
+                        depositToken: address(0)
+                    })
+                );
+            }
+            idleStrategies.push(
+                StrategyRouter.IdleStrategyInfo({
+                    strategyAddress: idleStrategy,
+                    depositToken: tokenAddress
+                })
+            );
         }
     }
 }
