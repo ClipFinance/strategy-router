@@ -258,6 +258,30 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositUnderDepositFeeValue");
     });
 
+    it("should fire DepositWithFee event after deposit with exact values", async function () {
+      const amount = parseBusd("100");
+
+      const {
+        depositAmount,
+        depositFeeAmount,
+        depositValue,
+        depositFeeValue
+      } = await calculateExpectedDepositStates(amount, busd.address);
+
+      await expect(
+        router.depositToBatch(busd.address, amount)
+      ).to
+        .emit(batch, "DepositWithFee")
+        .withArgs(
+          owner.address,
+          busd.address,
+          depositAmount,
+          depositFeeAmount,
+          depositValue,
+          depositFeeValue
+        );
+    });
+
     it("should deposit tokens with min deposit fee and set correct values to a receipt", async function () {
       const amount = parseBusd("100");
 
