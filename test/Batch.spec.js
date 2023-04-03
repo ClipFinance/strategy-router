@@ -249,6 +249,15 @@ describe("Test Batch", function () {
       await provider.send("evm_revert", [_snapshot]);
     });
 
+    it("should revert when user deposit amount is above min deposit value but below min deposit fee ($0.15)", async function () {
+       // set min deposit to $0.01
+      await router.setMinDepositUsd(parseUniform("0.01"));
+
+      await expect(
+        router.depositToBatch(usdt.address, parseUsdt("0.10"))
+      ).to.be.revertedWithCustomError(batch, "DepositUnderDepositFeeValue");
+    });
+
     it("should deposit tokens with min deposit fee and set correct values to a receipt", async function () {
       const amount = parseBusd("100");
 

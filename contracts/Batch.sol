@@ -15,7 +15,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-//import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -37,6 +37,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsMaxPercentage();
     error InvalidDepositFeeTreasury();
+    error DepositUnderDepositFeeValue();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
     event DepositWithFee(
@@ -213,6 +214,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             } else if (depositFeeValue > maxDepositFee) {
                 depositFeeValue = maxDepositFee;
             }
+
+            // revert if deposit fee is more than deposit value
+            if (depositFeeValue > value) revert DepositUnderDepositFeeValue();
 
             uint256 depositValue = value - depositFeeValue;
             uint256 depositAmount = (_amount * depositValue) / value;
