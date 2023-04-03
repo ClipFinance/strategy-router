@@ -7,7 +7,7 @@ const {
   setupTestParams,
   deployFakeStrategy,
 } = require("./shared/commonSetup");
-const { provider, parseUniform, toUniform } = require("./utils");
+const { provider, parseUniform, toUniform, fromUniform } = require("./utils");
 
 describe("Test Batch", function () {
   let owner, nonReceiptOwner;
@@ -249,8 +249,8 @@ describe("Test Batch", function () {
       await provider.send("evm_revert", [_snapshot]);
     });
 
-    it("should depositToBatch create receipt with correct values", async function () {
-      let amount = parseBusd("100");
+    it("should deposit tokens with min deposit fee and set correct values to a receipt", async function () {
+      const amount = parseBusd("100");
 
       const {
         depositAmount,
@@ -260,14 +260,94 @@ describe("Test Batch", function () {
 
       await router.depositToBatch(busd.address, amount);
 
-      let newReceipt = await receiptContract.getReceipt(1);
+      // Check receipt
+      const newReceipt = await receiptContract.getReceipt(1);
       expect(await receiptContract.ownerOf(1)).to.be.equal(owner.address);
       expect(newReceipt.token).to.be.equal(busd.address);
       expect(newReceipt.tokenAmountUniform).to.be.equal(depositAmountUniform);
       expect(newReceipt.cycleId).to.be.equal(1);
-      expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
-      expect(await busd.balanceOf(depositFeeTreasury)).to.be.equal(depositFeeAmount);
+
+      // Check deposited amount and deposit fee
+      const batchBalanceAfter = await busd.balanceOf(batch.address);
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(batchBalanceAfter).to.be.equal(depositAmount);
+      expect(treasuryBalanceAfter).to.be.equal(depositFeeAmount);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(minDepositFee);
     });
+
+    it("should take the minimum fee value ($0.15) until $1,500 ($1,000)", async function () {
+      const value = parseUniform("1000");
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(minDepositFee);
+    });
+
+    it("should take the minimum fee value ($0.15) until $1,500 ($1,490)", async function () {
+      const value = parseUniform("1490");
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(minDepositFee);
+    });
+
+    it("should take a 0.01% fee value between $1,500 and $10,000 ($1,501)", async function () {
+      const value = parseUniform("1501");
+      const expectedFeeValue = parseUniform("0.1501"); // 0.1501 USD is 0.01% of 1,501 USD
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+    });
+
+    it("should take a 0.01% fee value between $1,500 and $10,000 ($5,000)", async function () {
+      const value = parseUniform("5000");
+      const expectedFeeValue = parseUniform("0.5"); // 0.5 USD is 0.01% of 5,000 USD
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+    });
+
+    it("should take a 0.01% fee value between $1,500 and $10,000 ($9,990)", async function () {
+      const value = parseUniform("9990");
+      const expectedFeeValue = parseUniform("0.999"); // 0.999 USD is 0.01% of 9,990 USD
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+    });
+
+    it("should take the max fee value ($1) above $10,000 ($11,000)", async function () {
+      const value = parseUniform("11000");
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(maxDepositFee);
+    });
+
+    it("should take the max fee value ($1) above $10,000 ($50,000)", async function () {
+      const value = parseUniform("50000");
+      const amount = await getTokenAmount(busd.address, value);
+
+      await router.depositToBatch(busd.address, amount);
+
+      const treasuryBalanceAfter = await busd.balanceOf(depositFeeTreasury);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(maxDepositFee);
+    });
+
   });
 
   describe("deposit in other tokens than strategy tokens", function () {
@@ -467,17 +547,34 @@ describe("Test Batch", function () {
     });
   });
 
-  const calculateExpectedDepositStates = async (amount, depositTokenAddress) => {
-    const depositFeePercentage = await batch.depositFeePercentage();
-
-    const [price, priceDecimals] = await oracle.getTokenUsdPrice(depositTokenAddress);
+  // amount is in token decimals
+  // returns value in uniform decimals
+  const getTokenValue = async (tokenAddress, amount) => {
+    const [price, priceDecimals] = await oracle.getTokenUsdPrice(tokenAddress);
     const pricePrecision = ethers.BigNumber.from(10).pow(priceDecimals);
 
-    const value = await toUniform(
+    return toUniform(
       amount.mul(price).div(pricePrecision),
-      depositTokenAddress
+      tokenAddress
     );
+  };
 
+  // value is in uniform decimals
+  // returns amount in token decimals
+  const getTokenAmount = async (tokenAddress, value) => {
+    const [price, priceDecimals] = await oracle.getTokenUsdPrice(tokenAddress);
+    const pricePrecision = ethers.BigNumber.from(10).pow(priceDecimals);
+
+    return await fromUniform(
+      value.mul(pricePrecision).div(price),
+      tokenAddress
+    );
+  };
+
+  const calculateExpectedDepositStates = async (amount, depositTokenAddress) => {
+    const value = await getTokenValue(amount, depositTokenAddress);
+
+    const depositFeePercentage = await batch.depositFeePercentage();
     if (depositFeePercentage == 0) return {
       depositAmount: amount,
       depositAmountUniform: await toUniform(amount, depositTokenAddress),

@@ -216,15 +216,15 @@ function applySlippageInBps(amount, slippageInBps)
 
 async function toUniform(amount, tokenAddress) {
   let decimals = await (await ethers.getContractAt("ERC20", tokenAddress)).decimals();
-  return await changeDecimals(amount, Number(decimals), Number(18));
+  return changeDecimals(amount, Number(decimals), Number(18));
 }
 
 async function fromUniform(amount, tokenAddress) {
   let decimals = await (await ethers.getContractAt("ERC20", tokenAddress)).decimals();
-  return await changeDecimals(amount, Number(18), Number(decimals));
+  return changeDecimals(amount, Number(18), Number(decimals));
 }
 
-async function changeDecimals(amount, oldDecimals, newDecimals) {
+function changeDecimals(amount, oldDecimals, newDecimals) {
   if (oldDecimals < (newDecimals)) {
     return amount.mul(BigNumber.from(10).pow(newDecimals - oldDecimals));
     // return amount * (10 ** (newDecimals - oldDecimals));
