@@ -7,7 +7,7 @@ const {
   setupTestParams,
   deployFakeStrategy,
 } = require("./shared/commonSetup");
-const { provider, parseUniform, toUniform, fromUniform } = require("./utils");
+const { provider, parseUniform, deployProxyIdleStrategy, toUniform, fromUniform } = require("./utils");
 
 describe("Test Batch", function () {
   let owner, nonReceiptOwner;
@@ -38,8 +38,7 @@ describe("Test Batch", function () {
     depositFeeTreasury = hre.networkVariables.depositFeeTreasuryForTests;
 
     // deploy mock tokens
-    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } =
-      await setupFakeTokens());
+    ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router));
 
     // setup fake token liquidity
     let amount = (1_000_000).toString();
@@ -76,9 +75,9 @@ describe("Test Batch", function () {
       _snapshot = await provider.send("evm_snapshot");
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
@@ -163,9 +162,9 @@ describe("Test Batch", function () {
       _snapshot = await provider.send("evm_snapshot");
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
@@ -175,6 +174,7 @@ describe("Test Batch", function () {
       // admin initial deposit to set initial shares and pps
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.allocateToStrategies();
+
     });
 
     after(async () => {
@@ -183,8 +183,7 @@ describe("Test Batch", function () {
 
     it("should revert depositToBatch no allowance", async function () {
       await busd.approve(router.address, 0);
-      await expect(router.depositToBatch(busd.address, parseBusd("100"))).to.be
-        .reverted;
+      await expect(router.depositToBatch(busd.address, parseBusd("100"))).to.be.reverted;
     });
 
     it("should revert depositToBatch if token unsupported", async function () {
@@ -223,9 +222,9 @@ describe("Test Batch", function () {
       _snapshot = await provider.send("evm_snapshot");
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
@@ -391,8 +390,8 @@ describe("Test Batch", function () {
       _snapshot = await provider.send("evm_snapshot");
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: usdc });
@@ -422,11 +421,12 @@ describe("Test Batch", function () {
   });
 
   describe("getBatchTotalUsdValue", function () {
+
     it("happy paths: 1 supported token", async function () {
       await oracle.setPrice(busd.address, parseBusd("0.5"));
 
       // setup supported tokens
-      await router.setSupportedToken(busd.address, true);
+      await router.addSupportedToken(busd);
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
 
@@ -442,9 +442,9 @@ describe("Test Batch", function () {
       await oracle.setPrice(usdt.address, parseUsdt("1.1"));
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
@@ -472,9 +472,9 @@ describe("Test Batch", function () {
       _snapshot = await provider.send("evm_snapshot");
 
       // setup supported tokens
-      await router.setSupportedToken(usdc.address, true);
-      await router.setSupportedToken(busd.address, true);
-      await router.setSupportedToken(usdt.address, true);
+      await router.addSupportedToken(usdc);
+      await router.addSupportedToken(busd);
+      await router.addSupportedToken(usdt);
 
       // add fake strategies
       await deployFakeStrategy({ router, token: busd });
@@ -554,53 +554,48 @@ describe("Test Batch", function () {
       newBalance = await usdt.balanceOf(owner.address);
       newBalance2 = await busd.balanceOf(owner.address);
 
-      expect(newBalance.sub(oldBalance)).to.be.closeTo(
-        parseUsdt("100"),
-        parseUsdt("1")
-      );
-      expect(newBalance2.sub(oldBalance2)).to.be.closeTo(
-        parseBusd("100"),
-        parseBusd("1")
-      );
+      expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdt("100"), parseUsdt("1"));
+      expect(newBalance2.sub(oldBalance2)).to.be.closeTo(parseBusd("100"), parseBusd("1"));
     });
   });
 
   describe("setSupportedToken", function () {
     it("should add supported token", async function () {
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
       expect((await router.getSupportedTokens()).toString()).to.be.equal(
         `${usdt.address}`
       );
     });
 
     it("should be idempotent", async function () {
-      await router.setSupportedToken(usdt.address, true);
-      await router.setSupportedToken(usdt.address, false);
-      await router.setSupportedToken(usdt.address, true);
+      await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
+      await router.setSupportedToken(usdt.address, false, ethers.constants.AddressZero);
+      await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
       expect((await router.getSupportedTokens()).toString()).to.be.equal(
         `${usdt.address}`
       );
     });
 
     it("should revert when adding the same token twice", async function () {
-      await router.setSupportedToken(usdt.address, true);
-      await expect(router.setSupportedToken(usdt.address, true)).to.be.reverted;
+      await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
+      await expect(
+        router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address)
+      ).to.be.reverted;
     });
 
     it("should revert when removing token that is in use by strategy", async function () {
-      await router.setSupportedToken(busd.address, true);
+      await router.setSupportedToken(busd.address, true, busd.idleStrategy.address);
       await deployFakeStrategy({ router, token: busd });
-      await expect(router.setSupportedToken(busd.address, false)).to.be
-        .reverted;
+      await expect(
+        router.setSupportedToken(busd.address, false, ethers.constants.AddressZero)
+      ).to.be.reverted;
     });
 
-    it("pass address that is not a token", async function () {
-      await router.setSupportedToken(owner.address, true);
-      expect((await router.getSupportedTokens()).toString()).to.be.equal(
-        `${owner.address}`
-      );
-      await router.setSupportedToken(owner.address, false);
-      expect((await router.getSupportedTokens()).toString()).to.be.equal(``);
+    it("reverts on an address that is not a token and has no oracle configured for it", async function () {
+      const ownerIdleStrategy = await deployProxyIdleStrategy(owner, router, owner)
+      await expect(
+        router.setSupportedToken(owner.address, true, ownerIdleStrategy.address)
+      ).to.be.reverted;
     });
   });
 

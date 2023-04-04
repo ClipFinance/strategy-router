@@ -38,6 +38,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositFeePercentExceedsMaxPercentage();
     error InvalidDepositFeeTreasury();
     error DepositUnderDepositFeeValue();
+    error InvalidToken();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
     event DepositWithFee(
@@ -470,6 +471,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
     function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
+        // attempt to check that token address is valid
+        if (!oracle.isTokenSupported(tokenAddress)) {
+            revert InvalidToken();
+        }
         if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
         if (supported) {

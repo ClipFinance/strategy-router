@@ -8,6 +8,7 @@ import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IIdleStrategy.sol";
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
 import {ReceiptNFT} from "./ReceiptNFT.sol";
@@ -15,6 +16,7 @@ import {Exchange} from "./exchange/Exchange.sol";
 import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouterLib.sol";
+import "./idle-strategies/DefaultIdleStrategy.sol";
 
 // import "hardhat/console.sol";
 
@@ -87,11 +89,19 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error NothingToRebalance();
     error NotModerator();
     error WithdrawnAmountLowerThanExpectedAmount();
+    error InvalidIdleStrategy();
+    error InvalidIndexForIdleStrategy();
+    error IdleStrategySupportedTokenMismatch();
 
     struct StrategyInfo {
         address strategyAddress;
         address depositToken;
         uint256 weight;
+    }
+
+    struct IdleStrategyInfo {
+        address strategyAddress;
+        address depositToken;
     }
 
     struct Cycle {
@@ -137,6 +147,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     StrategyInfo[] public strategies;
     uint256 public allStrategiesWeightSum;
+
+    IdleStrategyInfo[] public idleStrategies;
 
     mapping(uint256 => Cycle) public cycles;
     mapping(address => bool) public moderators;
@@ -246,12 +258,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        (uint256 balanceAfterCompoundInUsd, , ) = getStrategiesValue();
         uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
 
         // step 5
-        (uint256 strategiesBalanceAfterCompoundInUsd, ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
@@ -266,7 +278,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-        (uint256 strategiesBalanceAfterDepositInUsd, ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValue();
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
@@ -316,7 +328,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        (uint256 balanceAfterCompoundInUsd,) = getStrategiesValue();
+        (uint256 balanceAfterCompoundInUsd, , ) = getStrategiesValue();
         uint256 totalShares = sharesToken.totalSupply();
         emit AfterCompound(currentCycleId, balanceAfterCompoundInUsd, totalShares);
     }
@@ -341,6 +353,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         return (strategies, allStrategiesWeightSum);
     }
 
+    /// @notice Returns array of idle strategies.
+    function getIdleStrategies() public view returns (IdleStrategyInfo[] memory) {
+        return idleStrategies;
+    }
+
     /// @notice Returns deposit token of the strategy.
     function getStrategyDepositToken(uint256 i) public view returns (address) {
         return strategies[i].depositToken;
@@ -349,9 +366,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total usd value.
-    /// @return balances Array of usd value of token balances.
-    function getStrategiesValue() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        (totalBalance, balances) = StrategyRouterLib.getStrategiesValue(oracle, strategies);
+    /// @return balances Array of usd value of strategy token balances.
+    /// @return idleBalances Array of usd value of idle strategy token balances.
+    function getStrategiesValue()
+        public
+        view
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+    {
+        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
+            oracle,
+            strategies,
+            idleStrategies
+        );
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
@@ -402,7 +428,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function calculateSharesUsdValue(uint256 amountShares) public view returns (uint256 amountUsd) {
         uint256 totalShares = sharesToken.totalSupply();
         if (amountShares > totalShares) revert AmountExceedTotalSupply();
-        (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+        (uint256 strategiesLockedUsd, , ) = getStrategiesValue();
 
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / totalShares;
 
@@ -412,7 +438,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Calculate shares amount from usd value.
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
-        (uint256 strategiesLockedUsd, ) = getStrategiesValue();
+        (uint256 strategiesLockedUsd, , ) = getStrategiesValue();
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / sharesToken.totalSupply();
         shares = (amount * PRECISION) / currentPricePerShare;
     }
@@ -534,8 +560,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyOwner {
+    function setSupportedToken(address tokenAddress, bool supported, address idleStrategy) external onlyOwner {
         batch.setSupportedToken(tokenAddress, supported);
+        if (supported) {
+            address[] memory supportedTokens = getSupportedTokens();
+            StrategyRouterLib.setIdleStrategy(
+                idleStrategies,
+                supportedTokens,
+                supportedTokens.length - 1,
+                idleStrategy);
+        } else {
+            _removeIdleStrategy(tokenAddress);
+        }
     }
 
     /// @notice Set wallets that will be moderators.
@@ -675,6 +711,56 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         Ownable(address(removedStrategy)).transferOwnership(msg.sender);
     }
 
+    function setIdleStrategy(uint256 i, address idleStrategy) external onlyOwner {
+        StrategyRouterLib.setIdleStrategy(
+            idleStrategies,
+            getSupportedTokens(),
+            i,
+            idleStrategy
+        );
+    }
+
+    function _removeIdleStrategy(address tokenAddress) internal {
+        IdleStrategyInfo memory idleStrategyToRemove;
+        for (uint256 i; i < idleStrategies.length; i++) {
+            if (tokenAddress == idleStrategies[i].depositToken) {
+                idleStrategyToRemove = idleStrategies[i];
+                idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
+                idleStrategies.pop();
+                // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
+                // so the shifted indexes must match
+                // but better to double check
+                // TODO add tests for idleStrategyLength = 0 after removal
+                if (
+                    idleStrategies.length != 0
+                    && i != idleStrategies.length
+                    && idleStrategies[i].depositToken != getSupportedTokens()[i]
+                ) {
+                    revert IdleStrategySupportedTokenMismatch();
+                }
+                break;
+            }
+        }
+
+        if (IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll() != 0) {
+            address[] memory supportedTokens = getSupportedTokens();
+            address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
+            supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
+            for (uint256 i; i < supportedTokens.length; i++) {
+                supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+            }
+            StrategyRouterLib.rebalanceStrategies(
+                exchange,
+                strategies,
+                allStrategiesWeightSum,
+                supportedTokensWithRemovedToken
+            );
+        }
+
+        // TODO test
+        Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
+    }
+
     /// @notice Rebalance batch, so that token balances will match strategies weight.
     /// @return balances Batch token balances after rebalancing.
     /// @dev Admin function.
@@ -735,7 +821,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         private
         returns (uint256 tokenAmountToWithdraw)
     {
-        (, uint256[] memory strategyTokenBalancesUsd) = getStrategiesValue();
+        (, uint256[] memory strategyTokenBalancesUsd, ) = getStrategiesValue();
         uint256 strategiesCount = strategies.length;
 
         // find token to withdraw requested token without extra swaps

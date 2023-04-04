@@ -35,6 +35,11 @@ contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
+    function isTokenSupported(address base) external view override returns (bool isTokenSupported)
+    {
+        return feeds[base] != address(0);
+    }
+
     /**
      * Returns the latest token / usd price and its decimals
      */
