@@ -91,7 +91,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -130,7 +130,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -169,7 +169,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -218,7 +218,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9950"), parseUniform("3"));
@@ -260,7 +260,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9930"), parseUniform("2"));
@@ -306,7 +306,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             1000 // 10% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("1"));
@@ -382,7 +382,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         // 5. FE requests to withdraw 1000 shares and pass the minimum expected amount as 898.81 BUSD
         let tokenBalanceBefore = await busd.balanceOf(owner.address);
-        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
         let tokenBalanceAfter = await busd.balanceOf(owner.address);
 
         // 6. ~$1000 BUSD are withdrawn
@@ -441,7 +441,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         // 5. FE requests to withdraw 1000 shares and pass the minimum expected amount as 898.81 BUSD
         let tokenBalanceBefore = await busd.balanceOf(owner.address);
-        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
         let tokenBalanceAfter = await busd.balanceOf(owner.address);
 
         // 6. ~$1000 BUSD are withdrawn

@@ -287,7 +287,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
           [USER_1_RECEIPT_7],
           usdc.address,
           shares,
-          expectedWithdrawAmount
+          expectedWithdrawAmount,
+          false
         );
         let afterWithdrawUserBalance = await usdc.balanceOf(owner.address);
 
@@ -331,7 +332,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
           [USER_1_RECEIPT_7],
           usdc.address,
           shares,
-          expectedWithdrawAmount
+          expectedWithdrawAmount,
+          false
         );
         // <---- end of 'fixture' ---->
 
@@ -350,7 +352,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
           [USER_2_RECEIPT_3],
           usdc.address,
           shares,
-          expectedWithdrawAmount
+          expectedWithdrawAmount,
+          false
         );
         let afterWithdrawUserBalance = await usdc.balanceOf(user2.address);
 
@@ -400,7 +403,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
           [receipts[0]],
           usdc.address,
           shares,
-          expectedWithdrawAmount
+          expectedWithdrawAmount,
+          false
         );
 
         // console.log("strategies balance");
@@ -456,7 +460,8 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         [receipts[0]],
         usdc.address,
         shares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       );
       let newBalance = await usdc.balanceOf(owner.address);
       expect(newBalance.sub(oldBalance)).to.be.closeTo(
