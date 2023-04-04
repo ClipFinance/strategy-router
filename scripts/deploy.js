@@ -1,7 +1,7 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const { deploy, deployProxy, parseUniform } = require("../test/utils");
+const { deploy, deployProxy, parseUniform, deployProxyIdleStrategy } = require("../test/utils");
 const fs = require("fs");
 
 // deploy script for testing on mainnet
@@ -94,6 +94,16 @@ async function main() {
   await (await strategyUsdc.transferOwnership(router.address)).wait();
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+  StrategyFactory = await ethers.getContractFactory("DodoUsdt")
+  dodoUsdt = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    kind: 'uups',
+    constructorArgs: [router.address],
+    unsafeAllow: ['delegatecall']
+  });
+  console.log("dodoUsdt", strategyUsdc.address);
+  await (await dodoUsdt.transferOwnership(router.address)).wait();
+
+  // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   StrategyFactory = await ethers.getContractFactory("StargateUsdt")
   stargateUsdtStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
@@ -103,7 +113,7 @@ async function main() {
   console.log("stargateUsdtStrategy", stargateUsdtStrategy.address);
   await (await stargateUsdtStrategy.transferOwnership(router.address)).wait();
 
-   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
+   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
   StrategyFactory = await ethers.getContractFactory("StargateBusd")
   stargateBusdStrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
     kind: 'uups',
@@ -113,7 +123,7 @@ async function main() {
   console.log("stargateBusdStrategy", stargateBusdStrategy.address);
   await (await stargateBusdStrategy.transferOwnership(router.address)).wait();
 
-  // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~ 
+  // ~~~~~~~~~~~ ADDITIONAL SETUP ~~~~~~~~~~~
   console.log("oracle setup...");
   let oracleTokens = [busd.address, usdc.address, usdt.address];
   let priceFeeds = [
@@ -179,6 +189,7 @@ async function main() {
       hre.networkVariables.bsw,
       hre.networkVariables.stg,
       hre.networkVariables.stg,
+      hre.networkVariables.dodo,
     ],
     [
       hre.networkVariables.usdt,
@@ -189,12 +200,14 @@ async function main() {
       hre.networkVariables.usdc,
       hre.networkVariables.usdt,
       hre.networkVariables.busd,
+      hre.networkVariables.usdt,
     ],
     [
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: acsPlugin.address, limit: parseUnits("100000", 12), secondRoute: pancakePlugin.address },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
+      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
       { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero  },
@@ -226,13 +239,17 @@ async function main() {
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 
   console.log("Setting supported token...");
-  await (await router.setSupportedToken(busd.address, true)).wait();
-  await (await router.setSupportedToken(usdc.address, true)).wait();
-  await (await router.setSupportedToken(usdt.address, true)).wait();
+  const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  await (await router.setSupportedToken(busd.address, true, busdIdleStrategy.address)).wait();
+  const usdcIdleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
+  const usdtIdleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
+  await (await router.setSupportedToken(usdt.address, true, usdtIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");
   await (await router.addStrategy(strategyBusd.address, 5000)).wait();
   await (await router.addStrategy(strategyUsdc.address, 5000)).wait();
+  await (await router.addStrategy(dodoUsdt.address, 5000)).wait();
   await (await router.addStrategy(stargateBusdStrategy.address, 5000)).wait();
   await (await router.addStrategy(stargateUsdtStrategy.address, 5000)).wait();
 
@@ -278,6 +295,7 @@ async function main() {
     sharesToken,
     strategyBusd,
     strategyUsdc,
+    dodoUsdt
   ]);
 }
 

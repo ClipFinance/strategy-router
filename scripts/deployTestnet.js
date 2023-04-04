@@ -1,7 +1,7 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const { deploy, deployProxy, parseUniform } = require("../test/utils");
+const { deploy, deployProxy, parseUniform, deployProxyIdleStrategy } = require("../test/utils");
 const fs = require("fs");
 
 // deploy script for testing on testnet
@@ -136,8 +136,10 @@ async function main() {
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
 
   console.log("Setting supported token...");
-  await (await router.setSupportedToken(busd.address, true)).wait();
-  await (await router.setSupportedToken(usdc.address, true)).wait();
+  const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  await (await router.setSupportedToken(busd.address, true, busdIdleStrategy.address)).wait();
+  const usdcIdleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
 
   console.log("Adding strategies...");
   await (await router.addStrategy(mockStrategy.address, 10000)).wait();

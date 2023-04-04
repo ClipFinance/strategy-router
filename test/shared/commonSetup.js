@@ -7,6 +7,7 @@ const {
   deploy,
   parseUniform,
   deployProxy,
+  deployProxyIdleStrategy,
 } = require("../utils");
 
 module.exports = {
@@ -24,6 +25,8 @@ module.exports = {
   setupFakePrices,
   setupFakeExchangePlugin,
   mintFakeToken,
+  deployDodoStrategy,
+  setupIdleStrategies,
   deployStargateStrategy,
 };
 
@@ -60,6 +63,25 @@ async function deployStargateStrategy({
   return stargateStrategy;
 }
 
+async function deployDodoStrategy({
+  router,
+  token,
+  lpToken,
+  dodoToken,
+  pool,
+  farm,
+  upgrader,
+}) {
+  let DodoBase = await ethers.getContractFactory("DodoBase");
+  let dodoStrategy = await upgrades.deployProxy(DodoBase, [upgrader], {
+    kind: "uups",
+    constructorArgs: [router, token, lpToken, dodoToken, pool, farm],
+    unsafeAllow: ['delegatecall']
+  });
+
+  return dodoStrategy;
+}
+
 async function setupFakeUnderFulfilledWithdrawalStrategy({
  router, token, underFulfilledWithdrawalBps = 0,
  profitPercent = 0, isRewardPositive = true
@@ -91,7 +113,9 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
 }
 
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
-async function setupFakeTokens() {
+async function setupFakeTokens(router) {
+  const [owner] = await ethers.getSigners();
+
   // each test token's total supply, minted to owner
   let totalSupply = (100_000_000).toString();
 
@@ -99,13 +123,25 @@ async function setupFakeTokens() {
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
 
+  if (router !== false) {
+    usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
+  }
+
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
 
+  if (router !== false) {
+    busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
+  }
+
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
+
+  if (router !== false) {
+    usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);
+  }
 
   return { usdc, busd, usdt, parseUsdc, parseBusd, parseUsdt };
 }
@@ -119,6 +155,32 @@ async function setupFakeToken(
   token.decimalNumber = decimals;
 
   return { token, parseToken };
+}
+
+async function setupFakeToken(decimals = 18) {
+  // each test token's total supply, minted to owner
+  let totalSupply = (100_000_000).toString();
+
+  let parseToken = (args) => parseUnits(args, decimals);
+  let token = await deploy("MockToken", parseToken(totalSupply), decimals);
+  token.decimalNumber = 18;
+  token.parse = parseToken;
+
+  return token;
+}
+
+async function setupIdleStrategies(owner, router, ...tokens) {
+  for (const token of tokens) {
+    const StrategyFactory = await ethers.getContractFactory("DefaultIdleStrategy")
+    const idleSTrategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+      kind: 'uups',
+      constructorArgs: [router.address, token.address],
+      unsafeAllow: ['delegatecall'],
+    });
+    await idleSTrategy.transferOwnership(router.address);
+
+    token.idleStrategy = idleSTrategy;
+  }
 }
 
 async function mintFakeToken(toAddress, token, value) {
@@ -173,6 +235,7 @@ async function setupTokens() {
   ({ tokenContract: usdc, parse: parseUsdc } = await getUSDC());
   ({ tokenContract: usdt, parse: parseUsdt } = await getUSDT());
   ({ tokenContract: busd, parse: parseBusd } = await getBUSD());
+
   return { usdc, busd, usdt, parseUsdc, parseUsdt, parseBusd };
 }
 
@@ -222,6 +285,13 @@ async function setupCore() {
 
   // Retrieve contracts that are deployed from StrategyRouter constructor
   let INITIAL_SHARES = Number(1e12);
+
+  router.addSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, true, token.idleStrategy.address);
+  };
+  router.removeSupportedToken = async function (token) {
+    return await router.setSupportedToken(token.address, false, ethers.constants.AddressZero);
+  };
 
   return {
     oracle,
@@ -331,6 +401,7 @@ async function setupPluginsOnBNB(exchange) {
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
+  let dodo = hre.networkVariables.dodo;
   let stg = hre.networkVariables.stg;
   let acs4usd = hre.networkVariables.acs4usd.address;
 
@@ -339,12 +410,13 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw, stg, stg],
-    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd],
+    [busd, busd, usdc, bsw,  bsw,  bsw,  stg,  stg,  usdt],
+    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd, dodo],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,

@@ -5,6 +5,7 @@ const { provider } = require("../utils");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("../shared/commonSetup");
 const { BigNumber } = require("ethers");
 const { smock } = require("@defi-wonderland/smock");
+const { constants } = require("@openzeppelin/test-helpers");
 
 describe("Test Exchange", function () {
     let owner, nonOwner, stubPlugin, stubPlugin2;
@@ -29,7 +30,7 @@ describe("Test Exchange", function () {
         exchangeNonOwner = await exchange.connect(nonOwner);
 
         // deploy mock tokens 
-        ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens());
+        ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router));
 
         // setup fake token liquidity
         let amount = (1_000_000).toString();
@@ -46,9 +47,9 @@ describe("Test Exchange", function () {
         await usdt.approve(router.address, parseUsdt("1000000"));
 
         // setup supported tokens
-        await router.setSupportedToken(usdc.address, true);
-        await router.setSupportedToken(busd.address, true);
-        await router.setSupportedToken(usdt.address, true);
+        await router.addSupportedToken(usdc);
+        await router.addSupportedToken(busd);
+        await router.addSupportedToken(usdt);
 
         // add fake strategies
         await deployFakeStrategy({ router, token: busd });

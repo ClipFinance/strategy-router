@@ -5,7 +5,7 @@ const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber } = require("ethers");
 
-module.exports = function strategyTest(strategyName) {
+module.exports = function strategyTest(strategyName, needOracle) {
   describe(`Test ${strategyName} strategy`, function () {
     let owner;
     // core contracts
