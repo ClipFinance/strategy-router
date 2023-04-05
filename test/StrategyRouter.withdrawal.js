@@ -483,7 +483,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
         expect(withdrawAmountWithCompound).to.be.gte(withdrawAmountWithoutCompound);
 
         // Check that the difference is greater than or equal to 970 BUSD (~1% is compound earnings), indicating additional earnings with compounding
-        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.least(parseBusd("970"));
+        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.gte(parseBusd("970"));
       });
 
       it("User has small enough deposit", async function () {
@@ -514,7 +514,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
         expect(withdrawAmountWithCompound).to.be.gte(withdrawAmountWithoutCompound);
 
         // Check that the difference is less than 0.1 BUSD (~1% is compound earnings), indicating lost earnings with compounding
-        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.lessThan(parseBusd("0.1"));
+        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.lt(parseBusd("0.1"));
 
       });
     });
