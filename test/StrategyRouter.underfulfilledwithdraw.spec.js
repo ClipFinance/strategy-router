@@ -127,7 +127,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         usdc.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
@@ -168,7 +169,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         busd.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
@@ -207,7 +209,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         busd.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
@@ -253,7 +256,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         usdc.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
@@ -299,7 +303,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         busd.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
 
@@ -338,7 +343,8 @@ describe("Test StrategyRouter.withdrawFromStrategies reverts", function () {
         [1, 2],
         busd.address,
         withdrawShares,
-        expectedWithdrawAmount
+        expectedWithdrawAmount,
+        false
       )).to.be.revertedWithCustomError(router, "WithdrawnAmountLowerThanExpectedAmount");
     });
   });
