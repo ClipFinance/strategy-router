@@ -1,11 +1,13 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
+const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken,
+  setupFakeUnderFulfilledWithdrawalIdleStrategy
+} = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { parseUniform, applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 
-describe("Test idle strategies participation in withdrawals", function () {
-  async function loadState(feeBps = 25) {
+describe("Test withdrawal algorithm specifics", function () {
+  async function loadCleanState(feeBps = 25) {
     const [owner, nonReceiptOwner] = await ethers.getSigners();
 
     // deploy core contracts
@@ -31,9 +33,52 @@ describe("Test idle strategies participation in withdrawals", function () {
     await usdc.approve(router.address, parseUsdc("10000000"));
     await usdt.approve(router.address, parseUsdt("10000000"));
 
-    const expectNoRemnants = async function (contract) {
-      await expectNoRemnantsFn(contract, busd, usdc, usdt);
+    const deployStrategy = async function ({token, weight = 10_000, underFulfilledWithdrawalBps = 0}) {
+      const strategy = await deployFakeUnderFulfilledWithdrawalStrategy({
+        router,
+        token,
+        underFulfilledWithdrawalBps: underFulfilledWithdrawalBps,
+        weight,
+      });
+      strategy.token = token;
+      strategy.weight = weight;
+
+      return strategy;
     };
+
+    return {
+      owner, nonReceiptOwner,
+      router, oracle, exchange, batch, receiptContract, sharesToken,
+      usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
+      fakeExchangePlugin, deployStrategy
+    }
+  }
+
+  async function loadState(feeBps = 25) {
+    const [owner, nonReceiptOwner] = await ethers.getSigners();
+
+    // deploy core contracts
+    const { router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore();
+
+    // deploy mock tokens
+    const { usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router);
+
+    const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
+      oracle,
+      0, // 0% slippage,
+      feeBps // fee %0.25
+    );
+    mintFakeToken(fakeExchangePlugin.address, usdc, parseUsdc('10000000'));
+    mintFakeToken(fakeExchangePlugin.address, usdt, parseUsdt('10000000'));
+    mintFakeToken(fakeExchangePlugin.address, busd, parseBusd('10000000'));
+
+    // setup params for testing
+    await setupTestParams(router, oracle, exchange, usdc, usdt, busd, fakeExchangePlugin);
+
+    // setup infinite allowance
+    await busd.approve(router.address, parseBusd("10000000"));
+    await usdc.approve(router.address, parseUsdc("10000000"));
+    await usdt.approve(router.address, parseUsdt("10000000"));
 
     const deployStrategy = async function ({token, weight = 10_000, underFulfilledWithdrawalBps = 0}) {
       const strategy = await deployFakeUnderFulfilledWithdrawalStrategy({
@@ -61,8 +106,7 @@ describe("Test idle strategies participation in withdrawals", function () {
       owner, nonReceiptOwner,
       router, oracle, exchange, batch, receiptContract, sharesToken,
       usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
-      fakeExchangePlugin,
-      expectNoRemnants, deployStrategy
+      fakeExchangePlugin, deployStrategy
     }
   }
 
@@ -96,8 +140,6 @@ describe("Test idle strategies participation in withdrawals", function () {
         100 // 1% slippage
       );
 
-      console.log(shares);
-      console.log(minExpectedWithdrawAmount);
       const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
         receiptIds,
@@ -142,8 +184,6 @@ describe("Test idle strategies participation in withdrawals", function () {
 
       const receiptIds = [0];
       const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('150'));
-      console.log('shares', shares);
-      console.log('await router.calculateSharesFromReceipts(receiptIds)', await router.calculateSharesFromReceipts(receiptIds));
       const minExpectedWithdrawAmount = applySlippageInBps(
         await convertFromUsdToTokenAmount(
           oracle,
@@ -153,8 +193,6 @@ describe("Test idle strategies participation in withdrawals", function () {
         100 // 1% slippage
       );
 
-      console.log(shares);
-      console.log(minExpectedWithdrawAmount);
       const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
         receiptIds,
@@ -197,13 +235,8 @@ describe("Test idle strategies participation in withdrawals", function () {
       await router.depositToBatch(busd.address, parseBusd("250"));
       await router.allocateToStrategies();
 
-      console.log('cycle', await router.cycles(0));
-      console.log('getStrategiesValue', await router.getStrategiesValue());
-
       const receiptIds = [0];
       const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('200'));
-      console.log('shares', shares);
-      console.log('await router.calculateSharesFromReceipts(receiptIds)', await router.calculateSharesFromReceipts(receiptIds));
       const minExpectedWithdrawAmount = applySlippageInBps(
         await convertFromUsdToTokenAmount(
           oracle,
@@ -212,9 +245,6 @@ describe("Test idle strategies participation in withdrawals", function () {
         ),
         100 // 1% slippage
       );
-
-      console.log(shares);
-      console.log(minExpectedWithdrawAmount);
 
       const previousBalance = await usdt.balanceOf(owner.address);
       await router.withdrawFromStrategies(
@@ -300,7 +330,353 @@ describe("Test idle strategies participation in withdrawals", function () {
       parseBusd('0.1'),
     );
   });
-  it('verifies funds withdrawn proportially', async function () {
+  describe('verifies funds withdrawn proportionally', async function () {
+    it('when idle strategies are not empty', async function () {
+      const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+        await loadFixture(loadStateWithZeroSwapFee);
 
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+
+      // some balances on idle strategies
+      await usdt.transfer(usdt.idleStrategy.address, parseUsdt('50'));
+      await busd.transfer(busd.idleStrategy.address, parseBusd('50'));
+      await usdc.transfer(usdc.idleStrategy.address, parseUsdc('50'));
+
+      // all shares for owner
+      await router.depositToBatch(busd.address, parseBusd("300"));
+      await router.allocateToStrategies();
+
+      const receiptIds = [0];
+      const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('200'));
+      const minExpectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdt,
+          parseUniform('200')
+        ),
+        100 // 1% slippage
+      );
+
+      const previousBalance = await usdt.balanceOf(owner.address);
+      await router.withdrawFromStrategies(
+        receiptIds,
+        usdt.address,
+        shares,
+        minExpectedWithdrawAmount
+      );
+
+      const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
+        await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.closeTo(
+        parseUniform('250'),
+        parseUniform('0.1'),
+      );
+      expect(totalStrategyBalance).to.be.closeTo(
+        parseUniform('250'),
+        parseUniform('0.1'),
+      );
+      expect(totalIdleStrategyBalance).to.be.closeTo(
+        parseUniform('0'),
+        parseUniform('0.1'),
+      );
+
+      expect(balances[0]).to.be.closeTo(
+        parseUniform('83.33'),
+        parseUniform('0.1'),
+      );
+      expect(balances[1]).to.be.closeTo(
+        parseUniform('83.33'),
+        parseUniform('0.1'),
+      );
+      expect(balances[2]).to.be.closeTo(
+        parseUniform('83.33'),
+        parseUniform('0.1'),
+      );
+
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('200'),
+        parseUsdt('0.1'),
+      );
+    });
+    it('when idle strategies are empty', async function () {
+      const { owner, router, oracle, usdt, parseUsdt, busd, parseBusd, usdc, parseUsdc, } =
+        await loadFixture(loadStateWithZeroSwapFee);
+
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+
+      // all shares for owner
+      await router.depositToBatch(busd.address, parseBusd("300"));
+      await router.allocateToStrategies();
+
+      const receiptIds = [0];
+      const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('200'));
+      const minExpectedWithdrawAmount = applySlippageInBps(
+        await convertFromUsdToTokenAmount(
+          oracle,
+          usdt,
+          parseUniform('200')
+        ),
+        100 // 1% slippage
+      );
+
+      const previousBalance = await usdt.balanceOf(owner.address);
+      await router.withdrawFromStrategies(
+        receiptIds,
+        usdt.address,
+        shares,
+        minExpectedWithdrawAmount
+      );
+
+      const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
+        await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.closeTo(
+        parseUniform('100'),
+        parseUniform('0.1'),
+      );
+      expect(totalStrategyBalance).to.be.closeTo(
+        parseUniform('100'),
+        parseUniform('0.1'),
+      );
+      expect(totalIdleStrategyBalance).to.be.closeTo(
+        parseUniform('0'),
+        parseUniform('0.1'),
+      );
+
+      expect(balances[0]).to.be.closeTo(
+        parseUniform('33.33'),
+        parseUniform('0.1'),
+      );
+      expect(balances[1]).to.be.closeTo(
+        parseUniform('33.33'),
+        parseUniform('0.1'),
+      );
+      expect(balances[2]).to.be.closeTo(
+        parseUniform('33.33'),
+        parseUniform('0.1'),
+      );
+
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('200'),
+        parseUsdt('0.1'),
+      );
+    });
+  });
+  describe('withdrawer pays for slippage on withdrawal rather than ongoing holders', async function () {
+    it('when withdrawal served by withdrawal token idle strategy', async function () {
+      const {
+        owner, router, oracle,
+        usdt, parseUsdt, busd,
+        parseBusd, usdc, parseUsdc,
+        deployStrategy
+      } =
+        await loadFixture(function loadCleanStateWithSwapFee () {
+          return loadCleanState(0); // 0% swap fee
+        });
+
+      const idleStrategy = await setupFakeUnderFulfilledWithdrawalIdleStrategy({
+        token: busd,
+        underFulfilledWithdrawalBps: 5000, // 50% underflow
+      });
+      router.setSupportedToken(busd.address, true, idleStrategy.address);
+
+      await deployStrategy({token: busd});
+
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+
+      // all shares for owner
+      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.allocateToStrategies();
+
+      await busd.transfer(idleStrategy.address, parseBusd('200'));
+
+      const receiptIds = [0];
+      const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('100'));
+      const minExpectedWithdrawAmount = 0; // turn off slippage protection
+
+      const previousBalance = await busd.balanceOf(owner.address);
+      await router.withdrawFromStrategies(
+        receiptIds,
+        busd.address,
+        shares,
+        minExpectedWithdrawAmount
+      );
+
+      const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
+        await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.closeTo(
+        parseUniform('250'),
+        parseUniform('0.1'),
+      );
+      expect(totalStrategyBalance).to.be.closeTo(
+        parseUniform('100'),
+        parseUniform('0.1'),
+      );
+      expect(totalIdleStrategyBalance).to.be.closeTo(
+        parseUniform('150'),
+        parseUniform('0.1'),
+      );
+
+      // withdrawn 50 BUSD only from 100 BUSD requested
+      // 50% underflow on strategy withdrawal
+      expect(
+        (await busd.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseBusd('50'),
+        parseBusd('0.1'),
+      );
+    });
+    it('when withdrawal served by non-withdrawal token idle strategy', async function () {
+      const {
+        owner, router, oracle,
+        usdt, parseUsdt, busd,
+        parseBusd, usdc, parseUsdc,
+        deployStrategy
+      } =
+        await loadFixture(function loadCleanStateWithSwapFee () {
+          return loadCleanState(5000); // 50% swap fee
+        });
+
+      const idleStrategy = await setupFakeUnderFulfilledWithdrawalIdleStrategy({
+        token: busd,
+        underFulfilledWithdrawalBps: 5000, // 50% underflow
+      });
+      router.setSupportedToken(busd.address, true, idleStrategy.address);
+
+      router.addSupportedToken(usdt);
+
+      await deployStrategy({token: busd});
+
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+
+      // all shares for owner
+      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.allocateToStrategies();
+
+      await busd.transfer(idleStrategy.address, parseBusd('200'));
+
+      const receiptIds = [0];
+      const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('100'));
+      const minExpectedWithdrawAmount = 0; // turn off slippage protection
+
+      const previousBalance = await usdt.balanceOf(owner.address);
+      await router.withdrawFromStrategies(
+        receiptIds,
+        usdt.address,
+        shares,
+        minExpectedWithdrawAmount
+      );
+
+      const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
+        await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.closeTo(
+        parseUniform('250'),
+        parseUniform('0.1'),
+      );
+      expect(totalStrategyBalance).to.be.closeTo(
+        parseUniform('100'),
+        parseUniform('0.1'),
+      );
+      expect(totalIdleStrategyBalance).to.be.closeTo(
+        parseUniform('150'),
+        parseUniform('0.1'),
+      );
+
+      // withdrawn 25 USDT only from 100 USDT requested
+      // 50% underflow on strategy withdrawal
+      // 50% swap fee
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('25'),
+        parseUsdt('0.1'),
+      );
+    });
+    it('when withdrawal served by active strategies', async function () {
+      const {
+        owner, router, oracle,
+        usdt, parseUsdt, busd,
+        parseBusd, usdc, parseUsdc,
+        deployStrategy
+      } =
+        await loadFixture(function loadCleanStateWithSwapFee () {
+          return loadCleanState(5000); // 50% swap fee
+        });
+
+      router.addSupportedToken(busd);
+      router.addSupportedToken(usdt);
+
+      await deployStrategy({
+        token: busd,
+        underFulfilledWithdrawalBps: 5000, // 50% underflow
+      });
+      await deployStrategy({
+        token: usdt,
+        underFulfilledWithdrawalBps: 5000, // 50% underflow
+      });
+
+      oracle.setPrice(usdt.address, parseUsdt('1'));
+      oracle.setPrice(busd.address, parseBusd('1'));
+      oracle.setPrice(usdc.address, parseUsdc('1'));
+
+      // all shares for owner
+      // deposit both BUSD and USDT to avoid swaps + swap fees
+      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(usdt.address, parseUsdt("100"));
+      await router.allocateToStrategies();
+
+      const receiptIds = [0, 1,];
+      const shares = await router.calculateSharesAmountFromUsdAmount(parseUniform('100'));
+      const minExpectedWithdrawAmount = 0; // turn off slippage protection
+
+      const previousBalance = await usdt.balanceOf(owner.address);
+      await router.withdrawFromStrategies(
+        receiptIds,
+        usdt.address,
+        shares,
+        minExpectedWithdrawAmount
+      );
+
+      const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
+        await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.closeTo(
+        parseUniform('150'),
+        parseUniform('0.1'),
+      );
+      expect(totalStrategyBalance).to.be.closeTo(
+        parseUniform('150'),
+        parseUniform('0.1'),
+      );
+      expect(totalIdleStrategyBalance).to.be.closeTo(
+        parseUniform('0'),
+        parseUniform('0.1'),
+      );
+
+      // withdrawn 37.5 USDT only from 100 USDT requested
+      // 50% underflow + 50% swap fee on BUSD strategy withdrawal
+      // 50% underflow on USDT strategy withdrawal
+      expect(
+        (await usdt.balanceOf(owner.address)).sub(previousBalance)
+      ).to.be.closeTo(
+        parseUsdt('37.5'),
+        parseUsdt('0.1'),
+      );
+    });
   });
 });

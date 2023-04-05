@@ -16,6 +16,7 @@ module.exports = {
   deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy,
   setupFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeUnderFulfilledWithdrawalIdleStrategy,
   setupFakeToken,
   setupFakeTokens,
   setupTokensLiquidityOnPancake,
@@ -91,6 +92,19 @@ async function setupFakeUnderFulfilledWithdrawalStrategy({
     2000
   );
   await strategy.transferOwnership(router.address);
+  strategy.token = token;
+
+  return strategy;
+}
+
+async function setupFakeUnderFulfilledWithdrawalIdleStrategy({
+ token, underFulfilledWithdrawalBps = 0,
+}) {
+  const strategy = await deploy(
+    "UnderFulfilledWithdrawalMockIdleStrategy",
+    underFulfilledWithdrawalBps,
+    token.address,
+  );
   strategy.token = token;
 
   return strategy;

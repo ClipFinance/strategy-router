@@ -18,7 +18,7 @@ import "./Batch.sol";
 import "./StrategyRouterLib.sol";
 import "./idle-strategies/DefaultIdleStrategy.sol";
 
- import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -262,7 +262,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 6
         for (uint256 i; i < strategiesLength; i++) {
-            console.log('depositAmountsInTokens[i]', i, depositAmountsInTokens[i]);
             address strategyDepositToken = strategies[i].depositToken;
 
             if (depositAmountsInTokens[i] > 0) {
@@ -443,7 +442,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @dev Returned amount has `UNIFORM_DECIMALS` decimals.
     function calculateSharesAmountFromUsdAmount(uint256 amount) public view returns (uint256 shares) {
         (uint256 strategiesLockedUsd, , , , ) = getStrategiesValue();
-//        console.log('strategiesLockedUsd', strategiesLockedUsd);
         uint256 currentPricePerShare = (strategiesLockedUsd * PRECISION) / sharesToken.totalSupply();
         shares = (amount * PRECISION) / currentPricePerShare;
     }
@@ -479,9 +477,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256 shares,
         uint256 minTokenAmountToWithdraw
     ) external returns (uint256 withdrawnAmount) {
-//        console.log('withdrawToken', withdrawToken);
-//        console.log('shares', shares);
-//        console.log('minTokenAmountToWithdraw', minTokenAmountToWithdraw);
         if (shares == 0) revert AmountNotSpecified();
         uint256 supportedTokenIndex = type(uint256).max;
         address[] memory supportedTokens = getSupportedTokens();
@@ -529,8 +524,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             }
             if (unlockedShares == shares) break;
         }
-//        console.log('unlockedShares', unlockedShares);
-//        console.log('shares', shares);
 
         // if receipts didn't fulfilled requested shares amount, then try to take more from caller
         if (unlockedShares < shares) {
@@ -824,9 +817,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         ) = getStrategiesValue();
 
         if (totalIdleStrategyBalance != 0) {
-//            console.log('totalIdleStrategyBalance', totalIdleStrategyBalance);
-//            console.log('idleStrategyTokenBalancesUsd[supportedTokenIndex]', supportedTokenIndex, idleStrategyTokenBalancesUsd[supportedTokenIndex]);
-//            console.log('withdrawAmountUsd', withdrawAmountUsd);
             if (idleStrategyTokenBalancesUsd[supportedTokenIndex] != 0) {
                 // at this moment its in USD
                 uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[supportedTokenIndex] < withdrawAmountUsd
