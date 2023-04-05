@@ -56,11 +56,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint256 public constant DEPOSIT_FEE_THRESHOLD = 10e18; // 10 USD
     uint256 public constant MAX_DEPOSIT_FEE_PERCENTAGE = 300; // 3%
 
-    uint256 public minDeposit;
-    uint256 public minDepositFee;
-    uint256 public maxDepositFee;
-    uint256 public depositFeePercentage;
-    address public depositFeeTreasury;
+    DepositSettings public depositSettings;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -68,6 +64,14 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private supportedTokens;
+
+    struct DepositSettings {
+        uint256 minValue;        // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 minFee;          // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 maxFee;          // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 feePercentage;   // Percentage of deposit fee, must be between 1 and 10000
+        address feeTreasury;     // Address to send deposit fee to
+    }
 
     struct TokenInfo {
         address tokenAddress;
@@ -202,18 +206,18 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
         uint256 value = toUniform((_amount * price) / 10**priceDecimals, depositToken);
 
-        if (minDeposit > value) revert DepositUnderMinimum();
+        if (depositSettings.minValue > value) revert DepositUnderMinimum();
 
         // Calculate and transfer deposit fee
-        if (depositFeePercentage > 0) {
+        if (depositSettings.feePercentage > 0) {
             uint256 depositFeeAmount = 0;
             uint256 depositFeeValue = 0;
 
-            depositFeeValue = value * depositFeePercentage / 10000;
-            if (depositFeeValue < minDepositFee) {
-                depositFeeValue = minDepositFee;
-            } else if (depositFeeValue > maxDepositFee) {
-                depositFeeValue = maxDepositFee;
+            depositFeeValue = value * depositSettings.feePercentage / 10000;
+            if (depositFeeValue < depositSettings.minFee) {
+                depositFeeValue = depositSettings.minFee;
+            } else if (depositFeeValue > depositSettings.maxFee) {
+                depositFeeValue = depositSettings.maxFee;
             }
 
             // revert if deposit fee is more than deposit value
@@ -228,7 +232,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             // set amount as deposited amount
             _amount = depositAmount;
 
-            IERC20(depositToken).transfer(depositFeeTreasury, depositFeeAmount);
+            IERC20(depositToken).transfer(depositSettings.feeTreasury, depositFeeAmount);
             emit DepositWithFee(
                 depositor,
                 depositToken,
@@ -256,34 +260,13 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // Admin functions
 
-    /// @notice Minimum to be deposited in the batch.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Admin function.
-    function setMinDepositUsd(uint256 amount) external onlyStrategyRouter {
-        minDeposit = amount;
-    }
+    function setDepositSettings(DepositSettings calldata _depositSettings) external onlyStrategyRouter {
+        if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
+        if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
+        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE) revert DepositFeePercentExceedsMaxPercentage();
+        if (_depositSettings.feeTreasury == address(0)) revert InvalidDepositFeeTreasury();
 
-    /// @notice The deposit fee is a percentage of the deposit amount.
-    /// @param _minDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @param _maxDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @param _depositFeePercentage Percentage of deposit fee, must be between 1 and 10000.
-    /// @param _depositFeeTreasury Address to send deposit fees to.
-    /// @dev Admin function.
-    function setDepositFee(
-        uint256 _minDepositFee,
-        uint256 _maxDepositFee,
-        uint256 _depositFeePercentage,
-        address _depositFeeTreasury
-    ) external onlyStrategyRouter {
-        if (_maxDepositFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
-        if (_maxDepositFee < _minDepositFee) revert MinDepositFeeExceedsMax();
-        if (_depositFeePercentage > MAX_DEPOSIT_FEE_PERCENTAGE) revert DepositFeePercentExceedsMaxPercentage();
-        if (_depositFeeTreasury == address(0)) revert InvalidDepositFeeTreasury();
-
-        minDepositFee = _minDepositFee;
-        maxDepositFee = _maxDepositFee;
-        depositFeePercentage = _depositFeePercentage;
-        depositFeeTreasury = _depositFeeTreasury;
+        depositSettings = _depositSettings;
     }
 
     function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {

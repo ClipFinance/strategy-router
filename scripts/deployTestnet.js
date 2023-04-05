@@ -27,10 +27,17 @@ async function main() {
 
   CYCLE_DURATION = 3600;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
-  MIN_DEPOSIT = parseUniform("0.0001");
   FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
   FEE_PERCENT = 1000;
   INITIAL_DEPOSIT = parseUsdc("0.1");
+
+  const depositSettings = {
+    minValue: parseUniform("0.0001"), // 0.0001 USD
+    minFee: parseUniform("0.15"), // 0.15 USD
+    maxFee: parseUniform("1"), // 1 USD
+    feePercentage: 1, // is 0.01% in BPS
+    feeTreasury: FEE_ADDRESS, // TODO: set another address if needed
+  };
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~
   oracle = await deployProxy("ChainlinkOracle");
@@ -129,11 +136,10 @@ async function main() {
     batch.address,
     receiptContract.address
   )).wait();
-
-  await (await router.setMinDepositUsd(MIN_DEPOSIT)).wait();
   await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
+  await (await router.setDepositSettings(depositSettings)).wait();
 
   console.log("Setting supported token...");
   const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);

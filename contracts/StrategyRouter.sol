@@ -57,13 +57,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
 
     // Events for setters.
-    event SetMinDeposit(uint256 newAmount);
-    event SetDepositFee(
-        uint256 newMinDepositFee,
-        uint256 newMaxDepositFee,
-        uint256 newDepositFeePercent,
-        address newDepositFeeTreasury
-    );
+    event SetDepositSettings(Batch.DepositSettings newDepositSettings);
     event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
@@ -596,28 +590,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         emit SetFeePercent(percent);
     }
 
-    /// @notice Minimum to be deposited in the batch.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
+    /// @notice Set deposit settings in the batch.
+    /// @param depositSettings Deposit settings.
     /// @dev Admin function.
-    function setMinDepositUsd(uint256 amount) external onlyOwner {
-        batch.setMinDepositUsd(amount);
-        emit SetMinDeposit(amount);
-    }
-
-    /// @notice The deposit fee is a percentage of the deposit amount.
-    /// @param minDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @param maxDepositFee Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @param depositFeePercentage Percentage of deposit fee, must be between 1 and 10000.
-    /// @param depositFeeTreasury Address to send deposit fees to.
-    /// @dev Admin function.
-    function setDepositFee(
-        uint256 minDepositFee,
-        uint256 maxDepositFee,
-        uint256 depositFeePercentage,
-        address depositFeeTreasury
-    ) external onlyOwner {
-        batch.setDepositFee(minDepositFee, maxDepositFee, depositFeePercentage, depositFeeTreasury);
-        emit SetDepositFee(minDepositFee, maxDepositFee, depositFeePercentage, depositFeeTreasury);
+    function setDepositSettings(Batch.DepositSettings calldata depositSettings) external onlyOwner {
+        batch.setDepositSettings(depositSettings);
+        emit SetDepositSettings(depositSettings);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
