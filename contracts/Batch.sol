@@ -36,7 +36,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsMaxPercentage();
-    error InvalidDepositFeeTreasury();
+    error DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
+    error DepositFeeTreasuryNotSet();
     error DepositUnderDepositFeeValue();
     error InvalidToken();
 
@@ -209,7 +210,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (depositSettings.minValue > value) revert DepositUnderMinimum();
 
         // Calculate and transfer deposit fee
-        if (depositSettings.feePercentage > 0) {
+        if (depositSettings.maxFee > 0 && depositSettings.feePercentage > 0) {
             uint256 depositFeeAmount = 0;
             uint256 depositFeeValue = 0;
 
@@ -263,8 +264,18 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     function setDepositSettings(DepositSettings calldata _depositSettings) external onlyStrategyRouter {
         if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
         if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
-        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE) revert DepositFeePercentExceedsMaxPercentage();
-        if (_depositSettings.feeTreasury == address(0)) revert InvalidDepositFeeTreasury();
+        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE)
+            revert DepositFeePercentExceedsMaxPercentage();
+
+        if (
+            _depositSettings.feePercentage == 0 && _depositSettings.maxFee > 0 ||
+            _depositSettings.maxFee == 0 && _depositSettings.feePercentage > 0
+        ) revert DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
+
+        if (
+            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0 &&
+            _depositSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
+        ) revert DepositFeeTreasuryNotSet();
 
         depositSettings = _depositSettings;
     }

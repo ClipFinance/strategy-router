@@ -127,16 +127,49 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeePercentExceedsMaxPercentage");
     });
 
-    it("should revert when if set invalid deposit fee treasury address", async function () {
+    it("should revert when a fee percent or a max fee is zero if one of them is greater than zero", async function () {
+      await expect(
+        router.setDepositSettings({
+          ...depositSettings,
+          feePercentage: 0,
+          maxFee: parseUniform("1"),
+        })
+      ).to.be.revertedWithCustomError(batch, "DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists");
+
+      await expect(
+        router.setDepositSettings({
+          ...depositSettings,
+          minFee: 0,
+          maxFee: 0,
+          feePercentage: 1,
+        })
+      ).to.be.revertedWithCustomError(batch, "DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists");
+    });
+
+    it("should revert when set zero address as fee treasury with max fee and fee percentage values are not zero", async function () {
       await expect(
         router.setDepositSettings({
           ...depositSettings,
           feeTreasury: ethers.constants.AddressZero,
         })
-      ).to.be.revertedWithCustomError(batch, "InvalidDepositFeeTreasury");
+      ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
     });
 
-    it("should set deposit params fee with correct values", async function () {
+    it("can set zero address as treasury address if set deposit max fee and fee percentage are zero values", async function () {
+      await router.setDepositSettings({
+        ...depositSettings,
+        minFee: 0,
+        maxFee: 0,
+        feePercentage: 0,
+        feeTreasury: ethers.constants.AddressZero,
+      });
+
+      expect(
+        (await batch.depositSettings()).feeTreasury
+      ).to.be.equal(ethers.constants.AddressZero);
+    });
+
+    it("should set deposit settings with correct values", async function () {
       await router.setDepositSettings(depositSettings);
 
       const batchDepositSettings = await batch.depositSettings();
