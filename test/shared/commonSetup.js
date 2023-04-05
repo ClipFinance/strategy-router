@@ -246,7 +246,7 @@ async function setupCore() {
   // Deploy Exchange
   let exchange = await deployProxy("Exchange");
   // Deploy Batch
-  let batch = await deployProxy("Batch");
+  let batch = await deployProxy("Batch", [], true);
   // Deploy StrategyRouterLib
   let routerLib = await deploy("StrategyRouterLib");
   // Deploy StrategyRouter

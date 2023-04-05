@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./deps/OwnableUpgradeable.sol";
@@ -20,6 +21,7 @@ import "./interfaces/IUsdOracle.sol";
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
 contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
 
@@ -130,7 +132,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             address token = supportedTokens.at(i);
-            uint256 balance = ERC20(token).balanceOf(address(this));
+            uint256 balance = IERC20(token).balanceOf(address(this));
 
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
             balance = ((balance * price) / 10**priceDecimals);
@@ -170,7 +172,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
 
             uint256 transferAmount = fromUniform(receipt.tokenAmountUniform, receipt.token);
-            ERC20(receipt.token).transfer(receiptOwner, transferAmount);
+            IERC20(receipt.token).safeTransfer(receiptOwner, transferAmount);
             receiptContract.burn(receiptId);
 
             tokens[i] = receipt.token;
@@ -233,7 +235,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             // set amount as deposited amount
             _amount = depositAmount;
 
-            IERC20(depositToken).transfer(depositSettings.feeTreasury, depositFeeAmount);
+            IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, depositFeeAmount);
             emit DepositWithFee(
                 depositor,
                 depositToken,
@@ -256,7 +258,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address to,
         uint256 amount
     ) external onlyStrategyRouter {
-        ERC20(token).transfer(to, amount);
+        IERC20(token).safeTransfer(to, amount);
     }
 
     // Admin functions
@@ -289,7 +291,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // point 2
         for (uint256 i; i < tokenInfos.length; i++) {
             tokenInfos[i].tokenAddress = supportedTokens.at(i);
-            tokenInfos[i].balance = ERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
+            tokenInfos[i].balance = IERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
 
             uint tokenBalanceUniform = toUniform(
                 tokenInfos[i].balance,
@@ -508,7 +510,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address to // tokenTo
     ) private returns (uint256 result) {
         if (from != to) {
-            IERC20(from).transfer(address(exchange), amount);
+            IERC20(from).safeTransfer(address(exchange), amount);
             result = exchange.swap(amount, from, to, address(this));
             return result;
         }

@@ -33,10 +33,11 @@ async function deploy(contractName, ...constructorArgs) {
   return await contract.deployed();
 }
 
-async function deployProxy(contractName, initializeArgs = []) {
+async function deployProxy(contractName, initializeArgs = [], allowDelegatecalls = false) {
   let factory = await ethers.getContractFactory(contractName);
   let contract = await upgrades.deployProxy(factory, initializeArgs, {
     kind: 'uups',
+    unsafeAllow: allowDelegatecalls ? ['delegatecall'] : [],
   });
   return await contract.deployed();
 }

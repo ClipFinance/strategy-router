@@ -67,7 +67,7 @@ async function main() {
   await router.deployed();
   console.log("StrategyRouter", router.address);
   // Deploy Batch
-  let batch = await deployProxy("Batch");
+  let batch = await deployProxy("Batch", [], true);
   console.log("Batch", batch.address);
   // Deploy SharesToken
   let sharesToken = await deployProxy("SharesToken", [router.address]);
