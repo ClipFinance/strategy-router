@@ -126,6 +126,7 @@ async function main() {
     router.address,
     receiptContract.address
   )).wait();
+  await (await batch.setDepositSettings(depositSettings)).wait();
 
   // setup StrategyRouter
   console.log("StrategyRouter settings setup...");
@@ -139,7 +140,6 @@ async function main() {
   await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
   await (await router.setFeesPercent(FEE_PERCENT)).wait();
   await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
-  await (await router.setDepositSettings(depositSettings)).wait();
 
   console.log("Setting supported token...");
   const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);

@@ -97,7 +97,7 @@ describe("Test Batch", function () {
     });
 
     it("should revert when min deposit fee is above min deposit value", async function () {
-      await expect(router.setDepositSettings({
+      await expect(batch.setDepositSettings({
        ...depositSettings,
        minValue: parseUniform("0.01"),
        minFee: parseUniform("0.02"),
@@ -107,7 +107,7 @@ describe("Test Batch", function () {
     it("should revert when if set max deposit fee exceeds trheshold", async function () {
       // deposit fee threshold is 10 USD
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           maxFee: parseUniform("11"), // 11 USD
         })
@@ -116,7 +116,7 @@ describe("Test Batch", function () {
 
     it("should revert when if set min deposit fee exceeds max", async function () {
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           minValue: parseUniform("1"),
           minFee: parseUniform("1"),
@@ -128,7 +128,7 @@ describe("Test Batch", function () {
     it("should revert when if set deposit fee percentage exceeds max percentage (3% at the moment)", async function () {
       // max deposit fee percentage is 3% in BPS
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           feePercentage: 301, // 3,01%
         })
@@ -137,7 +137,7 @@ describe("Test Batch", function () {
 
     it("should revert when a fee percent or a max fee is zero if one of them is greater than zero", async function () {
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           feePercentage: 0,
           maxFee: parseUniform("1"),
@@ -145,7 +145,7 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists");
 
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           minFee: 0,
           maxFee: 0,
@@ -156,7 +156,7 @@ describe("Test Batch", function () {
 
     it("should revert when set zero address as fee treasury with max fee and fee percentage values are not zero", async function () {
       await expect(
-        router.setDepositSettings({
+        batch.setDepositSettings({
           ...depositSettings,
           feeTreasury: ethers.constants.AddressZero,
         })
@@ -164,7 +164,7 @@ describe("Test Batch", function () {
     });
 
     it("can set zero address as treasury address if set deposit max fee and fee percentage are zero values", async function () {
-      await router.setDepositSettings({
+      await batch.setDepositSettings({
         ...depositSettings,
         minFee: 0,
         maxFee: 0,
@@ -178,7 +178,7 @@ describe("Test Batch", function () {
     });
 
     it("should set deposit settings with correct values", async function () {
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
 
       const batchDepositSettings = await batch.depositSettings();
 
@@ -265,7 +265,7 @@ describe("Test Batch", function () {
       await router.allocateToStrategies();
 
       // set deposit fee
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
     });
 
     after(async () => {
@@ -453,7 +453,7 @@ describe("Test Batch", function () {
 
     it("should revert when user calculate depegged token that numerically match minimum amount", async function () {
       // set minimum deposit value to 1 USD
-      await router.setDepositSettings({
+      await batch.setDepositSettings({
         minValue: parseUniform("1.0"),
         minFee: 0,
         maxFee: 0,
@@ -485,7 +485,7 @@ describe("Test Batch", function () {
     });
 
     it("should return correct deposit fee states with min fee value when the deposit fee is set as default", async function () {
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
 
       await oracle.setPrice(usdt.address, parseUsdt("1"));
 
@@ -512,7 +512,7 @@ describe("Test Batch", function () {
     });
 
     it("should return correct deposit fee states with max fee value when the deposit fee is set as default", async function () {
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
 
       await oracle.setPrice(usdt.address, parseUsdt("1"));
 
@@ -538,7 +538,7 @@ describe("Test Batch", function () {
     });
 
     it("should return correct deposit fee states with expected fee value ($0.5) when the deposit fee is set as default", async function () {
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
 
       await oracle.setPrice(usdt.address, parseUsdt("1"));
 
@@ -666,7 +666,7 @@ describe("Test Batch", function () {
 
     it("should withdraw whole amount without deposit fee", async function () {
       // set deposit fee
-      await router.setDepositSettings(depositSettings);
+      await batch.setDepositSettings(depositSettings);
 
       const value = parseUniform("100"); // 100 USD
       const amount = await getTokenAmount(usdt.address, value);

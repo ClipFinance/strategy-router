@@ -57,7 +57,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
 
     // Events for setters.
-    event SetDepositSettings(Batch.DepositSettings newDepositSettings);
     event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
@@ -588,14 +587,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         require(percent <= MAX_FEE_PERCENT, "20% Max!");
         feePercent = percent;
         emit SetFeePercent(percent);
-    }
-
-    /// @notice Set deposit settings in the batch.
-    /// @param depositSettings Deposit settings.
-    /// @dev Admin function.
-    function setDepositSettings(Batch.DepositSettings calldata depositSettings) external onlyOwner {
-        batch.setDepositSettings(depositSettings);
-        emit SetDepositSettings(depositSettings);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.

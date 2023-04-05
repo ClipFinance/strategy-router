@@ -45,6 +45,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error InvalidToken();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
+    event SetDepositSettings(Batch.DepositSettings newDepositSettings);
+
     event DepositWithFee(
         address indexed user,
         address indexed token,
@@ -99,6 +101,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
     }
 
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // Owner Functions
+
     function setAddresses(
         Exchange _exchange,
         IUsdOracle _oracle,
@@ -112,7 +118,32 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit SetAddresses(_exchange, _oracle, _router, _receiptNft);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    /// @notice Set deposit settings in the batch.
+    /// @param _depositSettings Deposit settings.
+    /// @dev Owner function.
+    function setDepositSettings(DepositSettings calldata _depositSettings) external onlyOwner {
+        // can't set min fee above min value, because deposit can be fail with underflow
+        if (_depositSettings.minFee > _depositSettings.minValue) revert MinDepositFeeExceedsMinValue();
+
+        if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
+        if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
+        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE)
+            revert DepositFeePercentExceedsMaxPercentage();
+
+        if (
+            _depositSettings.feePercentage == 0 && _depositSettings.maxFee > 0 ||
+            _depositSettings.maxFee == 0 && _depositSettings.feePercentage > 0
+        ) revert DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
+
+        if (
+            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0 &&
+            _depositSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
+        ) revert DepositFeeTreasuryNotSet();
+
+        depositSettings = _depositSettings;
+
+        emit SetDepositSettings(depositSettings);
+    }
 
     // Universal Functions
 
@@ -266,28 +297,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // Admin functions
-
-    function setDepositSettings(DepositSettings calldata _depositSettings) external onlyStrategyRouter {
-        // can't set min fee above min value, because deposit can be fail with underflow
-        if (_depositSettings.minFee > _depositSettings.minValue) revert MinDepositFeeExceedsMinValue();
-
-        if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
-        if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
-        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE)
-            revert DepositFeePercentExceedsMaxPercentage();
-
-        if (
-            _depositSettings.feePercentage == 0 && _depositSettings.maxFee > 0 ||
-            _depositSettings.maxFee == 0 && _depositSettings.feePercentage > 0
-        ) revert DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
-
-        if (
-            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0 &&
-            _depositSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
-        ) revert DepositFeeTreasuryNotSet();
-
-        depositSettings = _depositSettings;
-    }
 
     function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {
         uint256 totalBatchUnallocatedTokens;
