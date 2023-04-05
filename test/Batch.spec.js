@@ -33,7 +33,7 @@ describe("Test Batch", function () {
       await setupCore());
 
     depositSettings = {
-      minValue: 0,
+      minValue: parseUniform("0.15"),
       minFee: parseUniform("0.15"),
       maxFee: parseUniform("1"),
       feePercentage: 1, // is 0.01% in BPS
@@ -96,8 +96,16 @@ describe("Test Batch", function () {
       await provider.send("evm_revert", [_snapshot]);
     });
 
+    it("should revert when min deposit fee is above min deposit value", async function () {
+      await expect(router.setDepositSettings({
+       ...depositSettings,
+       minValue: parseUniform("0.01"),
+       minFee: parseUniform("0.02"),
+     })).to.be.revertedWithCustomError(batch, "MinDepositFeeExceedsMinValue");
+   });
+
     it("should revert when if set max deposit fee exceeds trheshold", async function () {
-      // deposit fee trheshold is 10 USD
+      // deposit fee threshold is 10 USD
       await expect(
         router.setDepositSettings({
           ...depositSettings,
@@ -107,12 +115,12 @@ describe("Test Batch", function () {
     });
 
     it("should revert when if set min deposit fee exceeds max", async function () {
-      // use changed order of min and max deposit fees to expect revert
       await expect(
         router.setDepositSettings({
           ...depositSettings,
-          minFee: depositSettings.maxFee,
-          maxFee: depositSettings.minFee,
+          minValue: parseUniform("1"),
+          minFee: parseUniform("1"),
+          maxFee: parseUniform("0.5"),
         })
       ).to.be.revertedWithCustomError(batch, "MinDepositFeeExceedsMax");
     });
@@ -279,18 +287,6 @@ describe("Test Batch", function () {
       await provider.send("evm_revert", [_snapshot]);
     });
 
-    it("should revert when user deposit amount is above min deposit value but below min deposit fee ($0.15)", async function () {
-       // set deposit with min value of 0.01 USD
-      await router.setDepositSettings({
-        ...depositSettings,
-        minValue: parseUniform("0.01"),
-      });
-
-      await expect(
-        router.depositToBatch(usdt.address, parseUsdt("0.10"))
-      ).to.be.revertedWithCustomError(batch, "DepositUnderDepositFeeValue");
-    });
-
     it("should fire DepositWithFee event after deposit with exact values", async function () {
       const amount = parseBusd("100");
 
@@ -414,6 +410,20 @@ describe("Test Batch", function () {
       expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.equal(depositSettings.maxFee);
     });
 
+    it("should take all deposit value ($0.15) as a fee when the min fee ($0.15) and the min value ($0.15) are the same", async function () {
+      const value = parseUniform("0.15");
+      const amount = await getTokenAmount(usdc.address, value);
+
+      await router.depositToBatch(usdc.address, amount);
+
+      // expect that batch balance is 0
+      const batchBalanceAfter = await usdc.balanceOf(batch.address);
+      expect(batchBalanceAfter).to.be.equal(0);
+
+      // expect that treasury balance is the same as the deposit value
+      const treasuryBalanceAfter = await usdc.balanceOf(depositSettings.feeTreasury);
+      expect(await getTokenValue(usdc.address, treasuryBalanceAfter)).to.be.equal(depositSettings.minFee);
+    });
   });
 
   describe("deposit in other tokens than strategy tokens", function () {

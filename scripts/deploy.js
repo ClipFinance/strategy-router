@@ -36,7 +36,7 @@ async function main() {
   INITIAL_DEPOSIT = parseUsdc("1");
 
   const depositSettings = {
-    minValue: parseUniform("0.0001"), // 0.0001 USD
+    minValue: parseUniform("0.15"), // 0.15 USD
     minFee: parseUniform("0.15"), // 0.15 USD
     maxFee: parseUniform("1"), // 1 USD
     feePercentage: 1, // is 0.01% in BPS

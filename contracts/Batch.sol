@@ -35,6 +35,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
+    error MinDepositFeeExceedsMinValue();
     error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsMaxPercentage();
@@ -223,9 +224,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 depositFeeValue = depositSettings.maxFee;
             }
 
-            // revert if deposit fee is more than deposit value
-            if (depositFeeValue > value) revert DepositUnderDepositFeeValue();
-
             uint256 depositValue = value - depositFeeValue;
             uint256 depositAmount = (_amount * depositValue) / value;
 
@@ -264,6 +262,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Admin functions
 
     function setDepositSettings(DepositSettings calldata _depositSettings) external onlyStrategyRouter {
+        // can't set min fee above min value, because deposit can be fail with underflow
+        if (_depositSettings.minFee > _depositSettings.minValue) revert MinDepositFeeExceedsMinValue();
+
         if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
         if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
         if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE)
