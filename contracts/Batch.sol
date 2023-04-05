@@ -143,6 +143,36 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
+    function calculateDepositStates(uint256 amount, address token)
+        public
+        view
+        returns (uint256 depositAmount, uint256 feeAmount, uint256 depositValue, uint256 feeValue)
+    {
+        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+        uint256 value = toUniform(
+            (amount * price) / 10**priceDecimals,
+            token
+        );
+
+        if (depositSettings.minValue > value) revert DepositUnderMinimum();
+
+        if (depositSettings.maxFee > 0 && depositSettings.feePercentage > 0) {
+            feeValue = value * depositSettings.feePercentage / 10000;
+            if (feeValue < depositSettings.minFee) {
+                feeValue = depositSettings.minFee;
+            } else if (feeValue > depositSettings.maxFee) {
+                feeValue = depositSettings.maxFee;
+            }
+
+            depositValue = value - feeValue;
+            depositAmount = (amount * depositValue) / value;
+            feeAmount = amount - depositAmount;
+        } else {
+            depositAmount = amount;
+            depositValue = value;
+        }
+    }
+
     // User Functions
 
     /// @notice Withdraw tokens from batch while receipts are in batch.
@@ -196,59 +226,35 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Deposit token into batch.
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
-    /// @param _amount Amount to deposit.
+    /// @param amount Amount to deposit.
     /// @dev Returns deposited token amount.
-    /// @dev User should approve `_amount` of `depositToken` to this contract.
+    /// @dev User should approve `amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function deposit(
         address depositor,
         address depositToken,
-        uint256 _amount,
+        uint256 amount,
         uint256 _currentCycleId
-    ) external onlyStrategyRouter returns (uint256) {
+    ) external onlyStrategyRouter returns (uint256 depositAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
-        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        uint256 value = toUniform((_amount * price) / 10**priceDecimals, depositToken);
+        (uint256 _depositAmount, uint256 feeAmount, uint256 value, uint256 feeValue) = calculateDepositStates(amount, depositToken);
+        depositAmount = _depositAmount;
 
-        if (depositSettings.minValue > value) revert DepositUnderMinimum();
-
-        // Calculate and transfer deposit fee
-        if (depositSettings.maxFee > 0 && depositSettings.feePercentage > 0) {
-            uint256 depositFeeAmount = 0;
-            uint256 depositFeeValue = 0;
-
-            depositFeeValue = value * depositSettings.feePercentage / 10000;
-            if (depositFeeValue < depositSettings.minFee) {
-                depositFeeValue = depositSettings.minFee;
-            } else if (depositFeeValue > depositSettings.maxFee) {
-                depositFeeValue = depositSettings.maxFee;
-            }
-
-            uint256 depositValue = value - depositFeeValue;
-            uint256 depositAmount = (_amount * depositValue) / value;
-
-            // calculate deposit fee amount
-            depositFeeAmount = _amount - depositAmount;
-
-            // set amount as deposited amount
-            _amount = depositAmount;
-
-            IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, depositFeeAmount);
+        if (feeAmount > 0) {
+            IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, feeAmount);
             emit DepositWithFee(
                 depositor,
                 depositToken,
                 depositAmount,
-                depositFeeAmount,
-                depositValue,
-                depositFeeValue
+                feeAmount,
+                value,
+                feeValue
             );
         }
 
-        uint256 amountUniform = toUniform(_amount, depositToken);
+        uint256 amountUniform = toUniform(depositAmount, depositToken);
 
         receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
-
-        return _amount;
     }
 
     function transfer(

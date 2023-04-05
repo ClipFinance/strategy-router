@@ -241,21 +241,6 @@ describe("Test Batch", function () {
       expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
     });
 
-    it("should revert when user deposits depegged token that numerically match minimum amount", async function () {
-      // set minimum deposit value to 1 USD
-      await router.setDepositSettings({
-        minValue: parseUniform("1.0"),
-        minFee: 0,
-        maxFee: 0,
-        feePercentage: 0,
-        feeTreasury: depositSettings.feeTreasury,
-      });
-      await oracle.setPrice(busd.address, parseBusd("0.1"));
-      await expect(
-        router.depositToBatch(busd.address, parseBusd("2.0"))
-      ).to.be.revertedWithCustomError(batch, "DepositUnderMinimum");
-    });
-
   });
 
   describe("deposit with fee", function () {
@@ -461,6 +446,122 @@ describe("Test Batch", function () {
       expect(newReceipt.tokenAmountUniform).to.be.equal(parseUniform("100"));
       expect(newReceipt.cycleId).to.be.equal(1);
       expect(await busd.balanceOf(batch.address)).to.be.equal(depositAmount);
+    });
+  });
+
+  describe("calculateDepositStates", function () {
+
+    it("should revert when user calculate depegged token that numerically match minimum amount", async function () {
+      // set minimum deposit value to 1 USD
+      await router.setDepositSettings({
+        minValue: parseUniform("1.0"),
+        minFee: 0,
+        maxFee: 0,
+        feePercentage: 0,
+        feeTreasury: ethers.constants.AddressZero
+      });
+      await oracle.setPrice(busd.address, parseBusd("0.1"));
+      await expect(
+        batch.calculateDepositStates(parseBusd("2.0"), busd.address)
+      ).to.be.revertedWithCustomError(batch, "DepositUnderMinimum");
+    });
+
+    it("should return the same deposit amount without a fee when the deposit fee is not set", async function () {
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const value = parseUniform("20"); // 20 USD
+      const amount = await getTokenAmount(usdc.address, value);
+      const {
+        depositAmount,
+        feeAmount,
+        depositValue,
+        feeValue
+      } = await batch.calculateDepositStates(amount, usdc.address);
+
+      expect(depositValue).to.be.equal(value);
+      expect(feeValue).to.be.equal(0);
+      expect(depositAmount).to.be.equal(amount);
+      expect(feeAmount).to.be.equal(0);
+    });
+
+    it("should return correct deposit fee states with min fee value when the deposit fee is set as default", async function () {
+      await router.setDepositSettings(depositSettings);
+
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const value = parseUniform("20"); // 20 USD
+      const amount = await getTokenAmount(usdt.address, value);
+
+      const {
+        depositAmount,
+        feeAmount,
+        depositValue,
+        feeValue
+      } = await batch.calculateDepositStates(amount, usdt.address);
+
+      expect(depositValue).to.be.equal(value.sub(depositSettings.minFee));
+      expect(feeValue).to.be.equal(depositSettings.minFee);
+
+      const {
+        depositAmount: calculatedDepositAmount,
+        depositFeeAmount: calculatedFeeAmount,
+      } = await calculateExpectedDepositStates(amount, usdt.address);
+
+      expect(depositAmount).to.be.equal(calculatedDepositAmount);
+      expect(feeAmount).to.be.equal(calculatedFeeAmount);
+    });
+
+    it("should return correct deposit fee states with max fee value when the deposit fee is set as default", async function () {
+      await router.setDepositSettings(depositSettings);
+
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const value = parseUniform("15000"); // 15,000 USD
+      const amount = await getTokenAmount(usdt.address, value);
+      const {
+        depositAmount,
+        feeAmount,
+        depositValue,
+        feeValue
+      } = await batch.calculateDepositStates(amount, usdt.address);
+
+      expect(depositValue).to.be.equal(value.sub(depositSettings.maxFee));
+      expect(feeValue).to.be.equal(depositSettings.maxFee);
+
+      const {
+        depositAmount: calculatedDepositAmount,
+        depositFeeAmount: calculatedFeeAmount,
+      } = await calculateExpectedDepositStates(amount, usdt.address);
+
+      expect(depositAmount).to.be.equal(calculatedDepositAmount);
+      expect(feeAmount).to.be.equal(calculatedFeeAmount);
+    });
+
+    it("should return correct deposit fee states with expected fee value ($0.5) when the deposit fee is set as default", async function () {
+      await router.setDepositSettings(depositSettings);
+
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const value = parseUniform("5000"); // 5,000 USD
+      const expectedFeeValue = parseUniform("0.5"); // 0.01% fee of 5,000 USD
+      const amount = await getTokenAmount(usdt.address, value);
+      const {
+        depositAmount,
+        feeAmount,
+        depositValue,
+        feeValue
+      } = await batch.calculateDepositStates(amount, usdt.address);
+
+      expect(depositValue).to.be.equal(value.sub(expectedFeeValue));
+      expect(feeValue).to.be.equal(expectedFeeValue);
+
+      const {
+        depositAmount: calculatedDepositAmount,
+        depositFeeAmount: calculatedFeeAmount,
+      } = await calculateExpectedDepositStates(amount, usdt.address);
+
+      expect(depositAmount).to.be.equal(calculatedDepositAmount);
+      expect(feeAmount).to.be.equal(calculatedFeeAmount);
     });
   });
 
