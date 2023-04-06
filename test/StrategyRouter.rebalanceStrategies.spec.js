@@ -1,9 +1,12 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
+const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken,
+  deployFakeOverFulfilledWithdrawalStrategy
+} = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
 const { constants } = require("@openzeppelin/test-helpers");
+const { parseUniform } = require("./utils");
 
 async function expectStrategyHoldsExactBalances(
   strategy,
@@ -1522,4 +1525,50 @@ describe("Test StrategyRouter.rebalanceStrategies in algorithm-specific manner",
       expect(await usdt.balanceOf(router.address)).to.be.equal(0);
     });
   });
+  it(
+    'correctly handles situation when more funds withdrawn from a strategy than was requested',
+    async function () {
+      const {
+        router, oracle,
+        busd, parseBusd,
+        deployStrategy
+      } = await loadFixture(loadStateWithZeroSwapFee);
+
+      await oracle.setPrice(busd.address, parseBusd(1));
+
+      const strategy1 = await deployFakeOverFulfilledWithdrawalStrategy({
+        router,
+        token: busd,
+        overFulfilledWithdrawalBps: 50_00, // 50%
+      });
+
+      // mint tokens to be used for overfulfillment
+      await mintFakeToken(strategy1.address, busd, parseBusd(10_000_000));
+
+      const strategy2 = await deployStrategy({
+        token: busd
+      });
+
+      await router.depositToBatch(busd.address, parseBusd(100));
+      await router.allocateToStrategies();
+
+      // force all funds to be withdrawn from strategy1
+      await router.updateStrategy(0, 0);
+      await router.updateStrategy(1, 10000);
+
+      await router.rebalanceStrategies();
+      // await expect(router.rebalanceStrategies()).not.to.be.reverted;
+
+      const {
+        totalBalance,
+        totalStrategyBalance,
+        balances,
+      } = await router.getStrategiesValue();
+
+      expect(totalBalance).to.be.equal(parseUniform(125));
+      expect(totalStrategyBalance).to.be.equal(parseUniform(125));
+      expect(balances[0]).to.be.equal(0);
+      expect(balances[1]).to.be.equal(parseUniform(125));
+    }
+  );
 });

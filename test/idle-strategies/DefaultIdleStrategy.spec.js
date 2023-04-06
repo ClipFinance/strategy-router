@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers, upgrades } = require("hardhat");
-const { setupFakeToken } = require("../shared/commonSetup");
+const { setupFakeToken, setupFakeUnderFulfilledTransferToken } = require("../shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { deployProxyIdleStrategy } = require("../utils");
 
@@ -203,6 +203,25 @@ describe("Test DefaultIdleStrategy API", function () {
       expect(
         await depositToken.balanceOf(idleStrategy.address)
       ).to.be.equal(0);
+    });
+    it('reverts when withdrawn not all coins', async function () {
+      const [owner] = await ethers.getSigners();
+
+      const depositToken = await setupFakeUnderFulfilledTransferToken(
+        50_00, // 50%
+        18
+      );
+      const idleStrategy = await deployProxyIdleStrategy(owner, owner, depositToken);
+
+      await depositToken.transfer(idleStrategy.address, depositToken.parse('100'));
+      await idleStrategy.deposit(depositToken.parse('100'));
+
+      await expect(
+        idleStrategy.withdrawAll()
+      ).to.be.revertedWithCustomError(
+        idleStrategy,
+        'NotAllAssetsWithdrawn'
+      );
     });
   });
 

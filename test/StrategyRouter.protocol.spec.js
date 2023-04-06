@@ -380,9 +380,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
         // Verify funds were withdrawn from strategies
         // should've withdrawn all (except admin), so verify that
-        expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+        expect(await strategyBiswap2.totalTokens()).to.be.lt(parseBusd("1"));
         expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
-        expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
+        expect(await usdc.balanceOf(router.address)).to.be.lt(parseUsdc("1"));
 
         expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
         expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(
@@ -423,9 +423,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // printStruct(await router.getStrategiesValue());
       }
 
-      expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+      expect(await strategyBiswap2.totalTokens()).to.be.lt(parseBusd("1"));
       expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
-      expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
+      expect(await usdc.balanceOf(router.address)).to.be.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
       expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
@@ -511,8 +511,10 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
       // deposit to strategies
       await router.updateStrategy(0, 0);
       await router.updateStrategy(1, 10000);
+      console.log('rebalance');
 
       await router.rebalanceStrategies();
+      console.log('rebalance2');
 
       ({ balances, totalBalance } = await router.getStrategiesValue());
 

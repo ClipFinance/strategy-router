@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 library StrategyRouterLib {
     using SafeERC20 for IERC20;
@@ -287,7 +287,12 @@ library StrategyRouterLib {
                         // we do not care where withdrawn tokens will be allocated
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
-                        balances[i] -= withdrawnBalance;
+                        // could happen we withdrawn more tokens than expdected
+                        if (withdrawnBalance > balances[i]) {
+                            balances[i] = 0;
+                        } else {
+                            balances[i] -= withdrawnBalance;
+                        }
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalance += withdrawnBalance;
                         withdrawnBalance = toUniform(
                             withdrawnBalance,
