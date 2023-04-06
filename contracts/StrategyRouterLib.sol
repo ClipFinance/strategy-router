@@ -80,6 +80,51 @@ library StrategyRouterLib {
         }
     }
 
+    function getStrategiesValue(
+        IUsdOracle oracle,
+        StrategyRouter.StrategyInfo[] storage strategies,
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+        uint256[] memory strategyIndexToSupportedTokenIndex,
+        address[] memory _supportedTokens
+    )
+        public
+        view
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+    {
+        uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
+        balances = new uint256[](strategiesLength);
+        for (uint256 i; i < strategiesLength; i++) {
+            address token = _supportedTokens[
+                strategyIndexToSupportedTokenIndex[i]
+            ];
+
+            uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
+
+            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[
+                strategyIndexToSupportedTokenIndex[i]
+            ];
+            balanceInDepositToken = ((balanceInDepositToken * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
+            balances[i] = balanceInDepositToken;
+            totalBalance += balanceInDepositToken;
+        }
+
+        uint256 idleStrategiesLength = _supportedTokens.length;
+        idleBalances = new uint256[](idleStrategiesLength);
+        for (uint256 i; i < idleStrategiesLength; i++) {
+            address token = _supportedTokens[i];
+
+            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
+
+            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
+            balanceInDepositToken = ((balanceInDepositToken * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInDepositToken = toUniform(balanceInDepositToken, token);
+            idleBalances[i] = balanceInDepositToken;
+            totalBalance += balanceInDepositToken;
+        }
+    }
+
     // returns amount of shares locked by receipt.
     function calculateSharesFromReceipt(
         uint256 receiptId,

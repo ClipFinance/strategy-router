@@ -20,6 +20,7 @@ import "./idle-strategies/DefaultIdleStrategy.sol";
 
 // import "hardhat/console.sol";
 
+
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
     /* EVENTS */
@@ -86,6 +87,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error InvalidIdleStrategy();
     error InvalidIndexForIdleStrategy();
     error IdleStrategySupportedTokenMismatch();
+
+    struct TokenPrice {
+        uint256 price;
+        uint8 priceDecimals;
+    }
 
     struct StrategyInfo {
         address strategyAddress;
@@ -222,24 +228,35 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
         step 9 - store remaining information for the current cycle
         */
+
         // step 1
+
+        (   
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+            uint256[] memory strategyIndexToSupportedTokenIndex,
+            address[] memory _supportedTokens
+        ) = batch.getSupportedTokensValueInUsd();
+
+        (uint256 batchValueInUsd, ) = getBatchValueUsd(
+            supportedTokenPrices,
+            _supportedTokens
+        );
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
         if (batchValueInUsd == 0) revert CycleNotClosableYet();
 
         currentCycleFirstDepositAt = 0;
 
+
         // step 3
         {
-            address[] memory tokens = getSupportedTokens();
-            for (uint256 i = 0; i < tokens.length; i++) {
-                if (ERC20(tokens[i]).balanceOf(address(batch)) > 0) {
-                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
-                    cycles[_currentCycleId].prices[tokens[i]] = StrategyRouterLib.changeDecimals(
-                        priceUsd,
-                        priceDecimals,
+            // address[] memory _supportedTokens = getSupported_supportedTokens();
+            for (uint256 i = 0; i < _supportedTokens.length; i++) {
+                if (ERC20(_supportedTokens[i]).balanceOf(address(batch)) > 0) {
+                    cycles[_currentCycleId].prices[_supportedTokens[i]] = StrategyRouterLib.changeDecimals(
+                        supportedTokenPrices[i].price,
+                        supportedTokenPrices[i].priceDecimals,
                         UNIFORM_DECIMALS
                     );
                 }
@@ -247,32 +264,39 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 4
-        uint256 strategiesLength = strategies.length;
-        for (uint256 i; i < strategiesLength; i++) {
+        // uint256 strategiesLength = strategies.length;
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
 
-        (uint256 balanceAfterCompoundInUsd, , ) = getStrategiesValue();
-        uint256 totalShares = sharesToken.totalSupply();
-        emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
-
         // step 5
-        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValue();
-        uint256[] memory depositAmountsInTokens = batch.rebalance();
+        uint256 totalShares = sharesToken.totalSupply();
+        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValue(
+            supportedTokenPrices, 
+            strategyIndexToSupportedTokenIndex,
+            _supportedTokens
+        );
+        uint256[] memory depositAmountsIn_supportedTokens = batch.rebalance();
+        emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
 
         // step 6
-        for (uint256 i; i < strategiesLength; i++) {
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             address strategyDepositToken = strategies[i].depositToken;
 
-            if (depositAmountsInTokens[i] > 0) {
-                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsInTokens[i]);
+            if (depositAmountsIn_supportedTokens[i] > 0) {
+                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsIn_supportedTokens[i]);
 
-                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
+                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsIn_supportedTokens[i]);
             }
         }
 
         // step 7
-        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValue();
+
+        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValue(
+            supportedTokenPrices, 
+            strategyIndexToSupportedTokenIndex,
+            _supportedTokens
+        );
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
@@ -374,12 +398,42 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         );
     }
 
+    /// @notice Returns usd value of the token balances and their sum in the strategies.
+    /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
+    /// @return totalBalance Total usd value.
+    /// @return balances Array of usd value of strategy token balances.
+    /// @return idleBalances Array of usd value of idle strategy token balances.
+    function getStrategiesValue(
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+            uint256[] memory strategyIndexToSupportedTokenIndex,
+            address[] memory _supportedTokens
+    )
+        private
+        view
+        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+    {
+        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
+            oracle,
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
+            strategyIndexToSupportedTokenIndex,
+            _supportedTokens
+        );
+    }
+
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batch usd value.
     /// @return balances Array of usd value of token balances in the batch.
-    function getBatchValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batch.getBatchValueUsd();
+    function getBatchValueUsd(
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+            address[] memory _supportedTokens
+    ) public view returns (uint256 totalBalance, uint256[] memory balances) {
+        return batch.getBatchValueUsd(
+            supportedTokenPrices,
+            _supportedTokens
+        );
     }
 
     /// @notice Returns stored address of the `Exchange` contract.

@@ -98,21 +98,52 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return supportedTokens.values();
     }
 
-    function getBatchValueUsd()
+    function getBatchValueUsd(
+        StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+        address[] memory _supportedTokens
+    )
         public
         view
         returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
     {
-        supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
+        supportedTokenBalancesUsd = new uint256[](_supportedTokens.length);
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
-            address token = supportedTokens.at(i);
+            address token = _supportedTokens[i];
             uint256 balance = ERC20(token).balanceOf(address(this));
 
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balance = ((balance * price) / 10**priceDecimals);
+            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
+            balance = ((balance * tokenPrice.price) / 10**tokenPrice.priceDecimals);
             balance = toUniform(balance, token);
             supportedTokenBalancesUsd[i] = balance;
             totalBalanceUsd += balance;
+        }
+    }
+
+    function getSupportedTokensValueInUsd()
+        public
+        view
+        returns (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+            uint256[] memory strategyIndexToSupportedTokenIndex,
+            address[] memory _supportedTokens
+        )
+    {
+        _supportedTokens = getSupportedTokens();
+        supportedTokenPrices = new StrategyRouter.TokenPrice[](_supportedTokens.length);
+        for (uint256 i; i < supportedTokenPrices.length; i++) {
+            address token = _supportedTokens[i];
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
+            supportedTokenPrices[i] = StrategyRouter.TokenPrice({
+                price: price,
+                priceDecimals: priceDecimals
+            });
+        }
+
+        strategyIndexToSupportedTokenIndex = new uint256[](router.getStrategiesCount());
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
+            strategyIndexToSupportedTokenIndex[i] = supportedTokens.indexOf(
+                router.getStrategyDepositToken(i)
+            );
         }
     }
 

@@ -162,7 +162,14 @@ describe("Test Batch", function () {
             await deployFakeStrategy({ router, token: busd });
 
             await router.depositToBatch(busd.address, parseBusd("100.0"))
-            let { totalBalance, balances } = await router.getBatchValueUsd();
+            let {
+                supportedTokenPrices, 
+                _supportedTokens
+            } = await batch.getSupportedTokensValueInUsd();
+            let { totalBalance, balances } = await router.getBatchValueUsd(
+                supportedTokenPrices, 
+                _supportedTokens
+            );
             expect(totalBalance).to.be.equal(parseUniform("50"));
             expect(balances.toString()).to.be.equal(`${parseUniform("50")}`);
         });
@@ -186,7 +193,14 @@ describe("Test Batch", function () {
             await router.depositToBatch(usdc.address, parseUsdc("100.0"))
             await router.depositToBatch(usdt.address, parseUsdt("100.0"))
 
-            let { totalBalance, balances } = await router.getBatchValueUsd();
+            let {
+                supportedTokenPrices, 
+                _supportedTokens
+            } = await batch.getSupportedTokensValueInUsd();
+            let { totalBalance, balances } = await router.getBatchValueUsd(
+                supportedTokenPrices, 
+                _supportedTokens
+            );
             // 0.9 + 0.9 + 1.1 = 2.9
             expect(totalBalance).to.be.equal(parseUniform("290"));
             expect(balances.toString()).to.be.equal(`${parseUniform("90")},${parseUniform("90")},${parseUniform("110")}`);
