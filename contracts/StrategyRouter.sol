@@ -276,17 +276,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             strategyIndexToSupportedTokenIndex,
             _supportedTokens
         );
-        uint256[] memory depositAmountsIn_supportedTokens = batch.rebalance();
+        uint256[] memory depositAmountsInTokens = batch.rebalance();
         emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
 
         // step 6
         for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             address strategyDepositToken = strategies[i].depositToken;
 
-            if (depositAmountsIn_supportedTokens[i] > 0) {
-                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsIn_supportedTokens[i]);
+            if (depositAmountsInTokens[i] > 0) {
+                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsInTokens[i]);
 
-                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsIn_supportedTokens[i]);
+                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
             }
         }
 
