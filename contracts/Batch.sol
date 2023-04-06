@@ -51,9 +51,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address indexed user,
         address indexed token,
         uint256 amount,
-        uint256 feeAmount,
-        uint256 value,
-        uint256 feeValue
+        uint256 feeAmount
     );
 
     uint8 public constant UNIFORM_DECIMALS = 18;
@@ -174,33 +172,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function calculateDepositStates(uint256 amount, address token)
+    // @notice Calculate deposit fee amount.
+    // @param depositAmount Amount of tokens to deposit.
+    // @param depositValue Uniform amount of USD, must be precalculated with the oracle price.
+    // @dev Returns a deposit fee amount.
+    function calculateDepositFee(uint256 depositAmount, uint256 depositValue)
         public
         view
-        returns (uint256 depositAmount, uint256 feeAmount, uint256 depositValue, uint256 feeValue)
+        returns (uint256 feeAmount)
     {
-        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-        uint256 value = toUniform(
-            (amount * price) / 10**priceDecimals,
-            token
-        );
+        DepositSettings memory _depositSettings = depositSettings;
 
-        if (depositSettings.minValue > value) revert DepositUnderMinimum();
-
-        if (depositSettings.maxFee > 0 && depositSettings.feePercentage > 0) {
-            feeValue = value * depositSettings.feePercentage / 10000;
-            if (feeValue < depositSettings.minFee) {
-                feeValue = depositSettings.minFee;
-            } else if (feeValue > depositSettings.maxFee) {
-                feeValue = depositSettings.maxFee;
+        if (
+            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0
+            && depositValue > 0
+        ) {
+            uint256 feeValue = depositValue * depositSettings.feePercentage / 10000;
+            if (feeValue < _depositSettings.minFee) {
+                feeValue = _depositSettings.minFee;
+            } else if (feeValue > _depositSettings.maxFee) {
+                feeValue = _depositSettings.maxFee;
             }
 
-            depositValue = value - feeValue;
-            depositAmount = (amount * depositValue) / value;
-            feeAmount = amount - depositAmount;
-        } else {
-            depositAmount = amount;
-            depositValue = value;
+            feeAmount = depositAmount - (depositAmount * (depositValue - feeValue)) / depositValue;
         }
     }
 
@@ -268,8 +262,17 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 _currentCycleId
     ) external onlyStrategyRouter returns (uint256 depositAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
-        (uint256 _depositAmount, uint256 feeAmount, uint256 value, uint256 feeValue) = calculateDepositStates(amount, depositToken);
-        depositAmount = _depositAmount;
+
+        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
+        uint256 value = toUniform(
+            (amount * price) / 10**priceDecimals,
+            depositToken
+        );
+
+        if (depositSettings.minValue > value) revert DepositUnderMinimum();
+
+        (uint256 feeAmount) = calculateDepositFee(amount, value);
+        depositAmount = amount - feeAmount;
 
         if (feeAmount > 0) {
             IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, feeAmount);
@@ -277,9 +280,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 depositor,
                 depositToken,
                 depositAmount,
-                feeAmount,
-                value,
-                feeValue
+                feeAmount
             );
         }
 
