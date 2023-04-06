@@ -819,7 +819,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         if (totalIdleStrategyBalance != 0) {
             if (idleStrategyTokenBalancesUsd[supportedTokenIndex] != 0) {
                 // at this moment its in USD
-                uint256 tokenAmountToSwap = idleStrategyTokenBalancesUsd[supportedTokenIndex] < withdrawAmountUsd
+                uint256 tokenAmountToWithdrawFromIdle = idleStrategyTokenBalancesUsd[supportedTokenIndex] < withdrawAmountUsd
                     ? idleStrategyTokenBalancesUsd[supportedTokenIndex]
                     : withdrawAmountUsd;
 
@@ -828,17 +828,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     // we on purpose do not adjust for slippage, fees, etc
                     // otherwise a user will be able to withdraw on Clip at better rates than on DEXes at other LPs expense
                     // if not the whole amount withdrawn from a strategy the slippage protection will sort this out
-                    withdrawAmountUsd -= tokenAmountToSwap;
+                    withdrawAmountUsd -= tokenAmountToWithdrawFromIdle;
                 }
 
                 (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
 
                 // convert usd value into token amount
-                tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
+                tokenAmountToWithdrawFromIdle = (tokenAmountToWithdrawFromIdle * 10**oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
-                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, withdrawToken);
+                tokenAmountToWithdrawFromIdle = StrategyRouterLib.fromUniform(tokenAmountToWithdrawFromIdle, withdrawToken);
                 tokenAmountToWithdraw += IStrategy(idleStrategies[supportedTokenIndex].strategyAddress)
-                    .withdraw(tokenAmountToSwap);
+                    .withdraw(tokenAmountToWithdrawFromIdle);
             }
 
             if (withdrawAmountUsd != 0) {

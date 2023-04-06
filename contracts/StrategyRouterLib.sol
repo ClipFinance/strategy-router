@@ -287,7 +287,7 @@ library StrategyRouterLib {
                         // we do not care where withdrawn tokens will be allocated
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
-                        // could happen we withdrawn more tokens than expdected
+                        // could happen if we withdrew more tokens than expected
                         if (withdrawnBalance > balances[i]) {
                             balances[i] = 0;
                         } else {
