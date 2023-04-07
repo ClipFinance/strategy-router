@@ -172,16 +172,22 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    // @notice Calculate deposit fee amount.
+    // @notice Get a deposit fee amount and value of a token amount in USD.
     // @param depositAmount Amount of tokens to deposit.
-    // @param depositValue Uniform amount of USD, must be precalculated with the oracle price.
-    // @dev Returns a deposit fee amount.
-    function calculateDepositFee(uint256 depositAmount, uint256 depositValue)
+    // @param depositToken Token address.
+    // @dev Returns a deposit fee amount and value in USD.
+    function getDepositFeeAndValue(uint256 depositAmount, address depositToken)
         public
         view
-        returns (uint256 feeAmount)
+        returns (uint256 feeAmount, uint256 depositValue)
     {
         DepositSettings memory _depositSettings = depositSettings;
+
+        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
+        depositValue = toUniform(
+            (depositAmount * price) / 10**priceDecimals,
+            depositToken
+        );
 
         if (
             _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0
@@ -195,6 +201,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
 
             feeAmount = depositAmount - (depositAmount * (depositValue - feeValue)) / depositValue;
+            depositValue -= feeValue;
         }
     }
 
@@ -263,15 +270,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     ) external onlyStrategyRouter returns (uint256 depositAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
 
-        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        uint256 value = toUniform(
-            (amount * price) / 10**priceDecimals,
-            depositToken
-        );
+        (uint256 feeAmount, uint depositValue) = getDepositFeeAndValue(amount, depositToken);
 
-        if (depositSettings.minValue > value) revert DepositUnderMinimum();
+        if (depositSettings.minValue > depositValue) revert DepositUnderMinimum();
 
-        (uint256 feeAmount) = calculateDepositFee(amount, value);
         depositAmount = amount - feeAmount;
 
         if (feeAmount > 0) {
