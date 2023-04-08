@@ -111,8 +111,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             address token = _supportedTokens[i];
             uint256 balance = ERC20(token).balanceOf(address(this));
 
-            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
-            balance = ((balance * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balance = ((balance * supportedTokenPrices[i].price) / 10**supportedTokenPrices[i].priceDecimals);
             balance = toUniform(balance, token);
             supportedTokenBalancesUsd[i] = balance;
             totalBalanceUsd += balance;
