@@ -271,7 +271,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 5
         uint256 totalShares = sharesToken.totalSupply();
-        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValue(
+        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValueWithoutOracleCalls(
             supportedTokenPrices, 
             strategyIndexToSupportedTokenIndex,
             _supportedTokens
@@ -292,7 +292,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 7
 
-        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValue(
+        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValueWithoutOracleCalls(
             supportedTokenPrices, 
             strategyIndexToSupportedTokenIndex,
             _supportedTokens
@@ -403,7 +403,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return totalBalance Total usd value.
     /// @return balances Array of usd value of strategy token balances.
     /// @return idleBalances Array of usd value of idle strategy token balances.
-    function getStrategiesValue(
+    function getStrategiesValueWithoutOracleCalls(
             StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
             uint256[] memory strategyIndexToSupportedTokenIndex,
             address[] memory _supportedTokens
@@ -412,7 +412,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         view
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
+        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
             strategies,
             idleStrategies,
             supportedTokenPrices,

@@ -80,7 +80,7 @@ library StrategyRouterLib {
         }
     }
 
-    function getStrategiesValue(
+    function getStrategiesValueWithoutOracleCalls(
         StrategyRouter.StrategyInfo[] storage strategies,
         StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
         StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
