@@ -193,7 +193,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0
             && depositValue > 0
         ) {
-            uint256 feeValue = depositValue * depositSettings.feePercentage / 10000;
+            uint256 feeValue = depositValue * _depositSettings.feePercentage / 10000;
             if (feeValue < _depositSettings.minFee) {
                 feeValue = _depositSettings.minFee;
             } else if (feeValue > _depositSettings.maxFee) {
