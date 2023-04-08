@@ -81,7 +81,6 @@ library StrategyRouterLib {
     }
 
     function getStrategiesValue(
-        IUsdOracle oracle,
         StrategyRouter.StrategyInfo[] storage strategies,
         StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
         StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
