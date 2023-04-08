@@ -47,13 +47,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
     event SetDepositSettings(Batch.DepositSettings newDepositSettings);
 
-    event DepositWithFee(
-        address indexed user,
-        address indexed token,
-        uint256 amount,
-        uint256 feeAmount
-    );
-
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
@@ -259,7 +252,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
     /// @param amount Amount to deposit.
-    /// @dev Returns deposited token amount.
+    /// @dev Returns deposited token amount and taken fee amount.
     /// @dev User should approve `amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function deposit(
@@ -267,7 +260,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address depositToken,
         uint256 amount,
         uint256 _currentCycleId
-    ) external onlyStrategyRouter returns (uint256 depositAmount) {
+    ) external onlyStrategyRouter returns (uint256 depositAmount, uint256 depositFeeAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
 
         (uint256 feeAmount, uint depositValue) = getDepositFeeAndValue(amount, depositToken);
@@ -276,19 +269,13 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         depositAmount = amount - feeAmount;
 
-        if (feeAmount > 0) {
-            IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, feeAmount);
-            emit DepositWithFee(
-                depositor,
-                depositToken,
-                depositAmount,
-                feeAmount
-            );
-        }
+        if (feeAmount > 0) IERC20(depositToken).safeTransfer(depositSettings.feeTreasury, feeAmount);
 
         uint256 amountUniform = toUniform(depositAmount, depositToken);
 
         receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
+
+        return (depositAmount, feeAmount);
     }
 
     function transfer(

@@ -27,7 +27,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Fires when user deposits in batch.
     /// @param token Supported token that user want to deposit.
     /// @param amount Amount of `token` transferred from user.
-    event Deposit(address indexed user, address token, uint256 amount);
+    /// @param feeAmount Amount of `token` fee taken for deposit to the batch.
+    event Deposit(address indexed user, address token, uint256 amount, uint256 feeAmount);
     /// @notice Fires when batch is deposited into strategies.
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
@@ -541,12 +542,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         if (!supportsToken(depositToken)) revert UnsupportedToken();
         IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
 
-        uint256 depositedAmount = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
+        (
+            uint256 depositAmount,
+            uint256 depositFeeAmount
+        ) = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
 
         currentCycleDepositsCount++;
         if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
 
-        emit Deposit(msg.sender, depositToken, depositedAmount);
+        emit Deposit(msg.sender, depositToken, depositAmount, depositFeeAmount);
     }
 
     // Admin functions

@@ -229,6 +229,21 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(router, "UnsupportedToken");
     });
 
+    it("should fire Deposit event with exact values (without fee) after deposit to the batch", async function () {
+      const amount = parseBusd("100");
+
+      await expect(
+        router.depositToBatch(busd.address, amount)
+      ).to
+        .emit(router, "Deposit")
+        .withArgs(
+          owner.address,
+          busd.address,
+          amount,
+          0,
+        );
+    });
+
     it("should depositToBatch create receipt with correct values", async function () {
       let depositAmount = parseBusd("100");
       await router.depositToBatch(busd.address, depositAmount);
@@ -300,7 +315,7 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositUnderMinimum");
     });
 
-    it("should fire DepositWithFee event after deposit with exact values", async function () {
+    it("should fire Deposit event with exact values (with fee) after deposit", async function () {
       const amount = parseBusd("100");
 
       const {
@@ -311,7 +326,7 @@ describe("Test Batch", function () {
       await expect(
         router.depositToBatch(busd.address, amount)
       ).to
-        .emit(batch, "DepositWithFee")
+        .emit(router, "Deposit")
         .withArgs(
           owner.address,
           busd.address,
