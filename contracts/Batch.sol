@@ -99,8 +99,8 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function getBatchValueUsd(
-        StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-        address[] memory _supportedTokens
+        StrategyRouter.TokenPrice[] calldata supportedTokenPrices, 
+        address[] calldata _supportedTokens
     )
         public
         view
