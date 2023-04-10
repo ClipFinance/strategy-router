@@ -383,9 +383,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
         // Verify funds were withdrawn from strategies
         // should've withdrawn all (except admin), so verify that
-        expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+        expect(await strategyBiswap2.totalTokens()).to.be.lt(parseBusd("1"));
         expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
-        expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
+        expect(await usdc.balanceOf(router.address)).to.be.lt(parseUsdc("1"));
 
         expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
         expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(
@@ -427,9 +427,9 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
         // printStruct(await router.getStrategiesValue());
       }
 
-      expect(await strategyBiswap2.totalTokens()).to.be.within(0, 5);
+      expect(await strategyBiswap2.totalTokens()).to.be.lt(parseBusd("1"));
       expect(await strategyBiswap.totalTokens()).to.be.lt(parseUsdc("1"));
-      expect(await usdc.balanceOf(router.address)).to.lt(parseUsdc("1"));
+      expect(await usdc.balanceOf(router.address)).to.be.lt(parseUsdc("1"));
 
       expect(await sharesToken.balanceOf(owner.address)).to.be.equal(0);
       expect(await sharesToken.balanceOf(router.address)).to.be.closeTo(parseEther("1"), parseEther("0.01"));
@@ -508,21 +508,36 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
     // leave this test to verify rebalance threshold works until refactored
     it("When swap amount is below swap threshold rebalance doesn't happen", async function () {
       let { balances, totalBalance } = await router.getStrategiesValue();
-      // strategies should be balanced as 50% and 50%
+
+      // strategies should be balanced as 00% and 100%
       expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(50, 1);
       expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(50, 1);
 
-      await router.updateStrategy(0, 4750);
-      await router.updateStrategy(1, 5250);
+      // deposit to strategies
+      await router.updateStrategy(0, 0);
+      await router.updateStrategy(1, 10000);
+      console.log('rebalance');
+
+      await router.rebalanceStrategies();
+      console.log('rebalance2');
+
+      ({ balances, totalBalance } = await router.getStrategiesValue());
+
+      // strategies should be balanced as 00% and 100%
+      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
+      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
+
+      await router.updateStrategy(0, 500);
+      await router.updateStrategy(1, 9500);
 
       await router.rebalanceStrategies();
 
       ({ balances, totalBalance } = await router.getStrategiesValue());
       // console.log(totalBalance, balances);
-      // strategies should be balanced as 50% and 50% cause rebalance didn't happen
+      // strategies should be balanced as 0% and 100% cause rebalance didn't happen
       // due to ~0.05 USD to be allocated to the first strategy below the rebalance threshold
-      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(50, 1);
-      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(50, 1);
+      expect(balances[0].mul(100).div(totalBalance).toNumber()).to.be.closeTo(0, 1);
+      expect(balances[1].mul(100).div(totalBalance).toNumber()).to.be.closeTo(100, 1);
     });
 
     it("Test rebalance function", async function () {

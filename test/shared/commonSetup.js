@@ -15,8 +15,12 @@ module.exports = {
   setupCore,
   deployFakeStrategy,
   deployFakeUnderFulfilledWithdrawalStrategy,
+  deployFakeOverFulfilledWithdrawalStrategy,
   setupFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeOverFulfilledWithdrawalStrategy,
+  setupFakeUnderFulfilledWithdrawalIdleStrategy,
   setupFakeToken,
+  setupFakeUnderFulfilledTransferToken,
   setupFakeTokens,
   setupTokensLiquidityOnPancake,
   setupParamsOnBNB,
@@ -125,6 +129,19 @@ async function setupFakeUnderFulfilledWithdrawalStrategy({
   return strategy;
 }
 
+async function setupFakeUnderFulfilledWithdrawalIdleStrategy({
+ token, underFulfilledWithdrawalBps = 0,
+}) {
+  const strategy = await deploy(
+    "UnderFulfilledWithdrawalMockIdleStrategy",
+    underFulfilledWithdrawalBps,
+    token.address,
+  );
+  strategy.token = token;
+
+  return strategy;
+}
+
 async function deployFakeUnderFulfilledWithdrawalStrategy({
   router, token, underFulfilledWithdrawalBps,
   weight = 10_000, profitPercent = 0, isRewardPositive = true
@@ -138,6 +155,38 @@ async function deployFakeUnderFulfilledWithdrawalStrategy({
   return strategy;
 }
 
+async function setupFakeOverFulfilledWithdrawalStrategy({
+  router, token, overFulfilledWithdrawalBps = 0,
+  profitPercent = 0, isRewardPositive = true
+}) {
+  const strategy = await deploy(
+    "OverFulfilledWithdrawalMockStrategy",
+    overFulfilledWithdrawalBps,
+    token.address,
+    profitPercent,
+    isRewardPositive,
+    token.parse((10_000_000).toString()),
+    2000
+  );
+  await strategy.transferOwnership(router.address);
+  strategy.token = token;
+
+  return strategy;
+}
+
+async function deployFakeOverFulfilledWithdrawalStrategy({
+  router, token, overFulfilledWithdrawalBps,
+  weight = 10_000, profitPercent = 0, isRewardPositive = true
+}) {
+  // console.log(router.address, await token.name(), weight, profitPercent);
+  const strategy = await setupFakeOverFulfilledWithdrawalStrategy({
+    router, token, overFulfilledWithdrawalBps, profitPercent, isRewardPositive
+  });
+  await router.addStrategy(strategy.address, weight);
+
+  return strategy;
+}
+
 // Deploy TestCurrencies and mint totalSupply to the 'owner'
 async function setupFakeTokens(router) {
   const [owner] = await ethers.getSigners();
@@ -145,7 +194,13 @@ async function setupFakeTokens(router) {
   // each test token's total supply, minted to owner
   let totalSupply = (100_000_000).toString();
 
-  let parseUsdc = (args) => parseUnits(args, 18);
+  let parseUsdc = (value) => {
+    if (typeof value === 'number') {
+      value = value.toString();
+    }
+
+    return parseUnits(value, 18);
+  }
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
   usdc.parse = parseUsdc;
@@ -154,7 +209,13 @@ async function setupFakeTokens(router) {
     usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
   }
 
-  let parseBusd = (args) => parseUnits(args, 8);
+  let parseBusd = (value) => {
+    if (typeof value === 'number') {
+      value = value.toString();
+    }
+
+    return parseUnits(value, 8);
+  }
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
   busd.parse = parseBusd;
@@ -163,7 +224,13 @@ async function setupFakeTokens(router) {
     busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
   }
 
-  let parseUsdt = (args) => parseUnits(args, 6);
+  let parseUsdt = (value) => {
+    if (typeof value === 'number') {
+      value = value.toString();
+    }
+
+    return parseUnits(value, 6);
+  }
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
   usdt.parse = parseUsdt;
@@ -192,6 +259,26 @@ async function setupFakeToken(decimals = 18) {
 
   let parseToken = (args) => parseUnits(args, decimals);
   let token = await deploy("MockToken", parseToken(totalSupply), decimals);
+  token.decimalNumber = 18;
+  token.parse = parseToken;
+
+  return token;
+}
+
+async function setupFakeUnderFulfilledTransferToken(
+  underFulfilledTransferInBps = 0,
+  decimals = 18
+) {
+  // each test token's total supply, minted to owner
+  let totalSupply = (100_000_000).toString();
+
+  let parseToken = (args) => parseUnits(args, decimals);
+  let token = await deploy(
+    "UnderFulfilledTransferMockToken",
+    underFulfilledTransferInBps,
+    parseToken(totalSupply),
+    decimals
+  );
   token.decimalNumber = 18;
   token.parse = parseToken;
 
