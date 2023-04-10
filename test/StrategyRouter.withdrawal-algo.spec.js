@@ -145,7 +145,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalStrategyBalance, totalIdleStrategyBalance, } =
@@ -198,7 +199,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalStrategyBalance, totalIdleStrategyBalance, } =
@@ -251,7 +253,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalStrategyBalance, totalIdleStrategyBalance, } =
@@ -305,7 +308,13 @@ describe("Test withdrawal algorithm specifics", function () {
     );
 
     const previousBalance = await busd.balanceOf(owner.address);
-    await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+    await router.withdrawFromStrategies(
+      receiptIds,
+      busd.address,
+      shares,
+      minExpectedWithdrawAmount,
+      false
+    );
 
     const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, } =
       await router.getStrategiesValue();
@@ -364,7 +373,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
@@ -431,7 +441,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
@@ -510,7 +521,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         busd.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
@@ -578,7 +590,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
@@ -649,7 +662,8 @@ describe("Test withdrawal algorithm specifics", function () {
         receiptIds,
         usdt.address,
         shares,
-        minExpectedWithdrawAmount
+        minExpectedWithdrawAmount,
+        false
       );
 
       const { totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances } =
