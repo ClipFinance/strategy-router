@@ -105,7 +105,8 @@ describe("Test StrategyRouter", function () {
       [1],
       usdc.address,
       receiptsShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
@@ -133,7 +134,8 @@ describe("Test StrategyRouter", function () {
       [],
       usdc.address,
       receiptsShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("100"), parseUsdc("1"));
@@ -165,7 +167,8 @@ describe("Test StrategyRouter", function () {
       [2],
       usdc.address,
       withdrawShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("200"), parseUsdc("2"));
@@ -197,7 +200,8 @@ describe("Test StrategyRouter", function () {
       [1, 2],
       usdc.address,
       withdrawShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
@@ -232,7 +236,8 @@ describe("Test StrategyRouter", function () {
       [1, 2],
       usdc.address,
       withdrawShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdc("50"), parseUsdc("2"));
@@ -283,7 +288,8 @@ describe("Test StrategyRouter", function () {
       [1],
       usdc.address,
       receiptsShares,
-      expectedWithdrawAmount
+      expectedWithdrawAmount,
+      false
     );
     let newBalance = await usdc.balanceOf(owner.address);
     expect(newBalance.sub(oldBalance)).to.be.closeTo(

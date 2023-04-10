@@ -25,7 +25,14 @@ module.exports = {
   deployProxyIdleStrategy,
 }
 
-// helper to reduce code duplication, transforms 3 lines of deployemnt into 1
+BigNumber.prototype.divCeil = function (other) {
+  other = BigNumber.from(other);
+  let quotient = this.div(other);
+  if(!this.mod(other).isZero()) quotient = quotient.add(1);
+  return quotient;
+}
+
+// helper to reduce code duplication, transforms 3 lines of deployment into 1
 async function deploy(contractName, ...constructorArgs) {
   let factory = await ethers.getContractFactory(contractName);
   let contract = await factory.deploy(...constructorArgs);
