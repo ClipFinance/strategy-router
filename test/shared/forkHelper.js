@@ -6,6 +6,7 @@ async function getTokenContract(addr) {
 
   token.decimalNumber = decimals;
   let parseToken = (args) => utils.parseUnits(args, decimals);
+  token.parse = parseToken;
 
   return { token, parseToken };
 }

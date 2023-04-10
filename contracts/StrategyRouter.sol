@@ -314,7 +314,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Harvest yield from farms, and reinvest these rewards into strategies.
     /// @notice Part of the harvested rewards is taken as protocol comission.
-    function compoundAll() external {
+    function compoundAll() public {
         if (sharesToken.totalSupply() == 0) revert();
 
         uint256 len = strategies.length;
@@ -475,7 +475,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         uint256[] calldata receiptIds,
         address withdrawToken,
         uint256 shares,
-        uint256 minTokenAmountToWithdraw
+        uint256 minTokenAmountToWithdraw,
+        bool performCompound
     ) external returns (uint256 withdrawnAmount) {
         if (shares == 0) revert AmountNotSpecified();
         uint256 supportedTokenIndex = type(uint256).max;
@@ -493,7 +494,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             revert UnsupportedToken();
         }
 
-        // uint256 unlockedShares = StrategyRouterLib.burnReceipts(receiptIds, currentCycleId, receiptContract, cycles);
         ReceiptNFT _receiptContract = receiptContract;
         uint256 _currentCycleId = currentCycleId;
         uint256 unlockedShares;
@@ -525,17 +525,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             if (unlockedShares == shares) break;
         }
 
-        // if receipts didn't fulfilled requested shares amount, then try to take more from caller
+        // if receipts didn't fulfill requested shares amount, then try to take more from caller
         if (unlockedShares < shares) {
             // lack of shares -> get from user
             sharesToken.transferFromAutoApproved(msg.sender, address(this), shares - unlockedShares);
         }
 
+        // Compound before calculate shares USD value and withdrawal if requested by user
+        if (performCompound) compoundAll();
+
         // shares into usd using current PPS
         uint256 usdToWithdraw = calculateSharesUsdValue(shares);
         sharesToken.burn(address(this), shares);
 
-        // Withhold withdrawen amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
+        // Withhold withdrawn amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
         uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare / PRECISION;
         cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
 

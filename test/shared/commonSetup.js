@@ -29,6 +29,7 @@ module.exports = {
   setupFakePrices,
   setupFakeExchangePlugin,
   mintFakeToken,
+  deployDodoStrategy,
   setupIdleStrategies,
   deployStargateStrategy,
 };
@@ -79,6 +80,34 @@ async function deployStargateStrategy({
   );
 
   return stargateStrategy;
+}
+
+async function deployDodoStrategy({
+  router,
+  token,
+  lpToken,
+  dodoToken,
+  pool,
+  farm,
+  upgrader,
+}) {
+  let DodoBase = await ethers.getContractFactory("DodoBase");
+  let dodoStrategy = await upgrades.deployProxy(
+    DodoBase,
+    [
+      upgrader,
+      token.parse((100_000_000).toString()),
+      500, // 5%
+    ],
+    {
+      kind: "uups",
+      constructorArgs: [router, token.address, lpToken, dodoToken, pool, farm],
+      unsafeAllow: ['delegatecall'],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
+
+  return dodoStrategy;
 }
 
 async function setupFakeUnderFulfilledWithdrawalStrategy({
@@ -488,6 +517,7 @@ async function setupPluginsOnBNB(exchange) {
   let busd = hre.networkVariables.busd;
   let usdt = hre.networkVariables.usdt;
   let usdc = hre.networkVariables.usdc;
+  let dodo = hre.networkVariables.dodo;
   let stg = hre.networkVariables.stg;
   let acs4usd = hre.networkVariables.acs4usd.address;
 
@@ -496,12 +526,13 @@ async function setupPluginsOnBNB(exchange) {
 
   // Setup exchange params
   await exchange.setRoute(
-    [busd, busd, usdc, bsw, bsw, bsw, stg, stg],
-    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd],
+    [busd, busd, usdc, bsw,  bsw,  bsw,  stg,  stg,  usdt],
+    [usdt, usdc, usdt, busd, usdt, usdc, usdt, busd, dodo],
     [
       acsPlugin.address,
       acsPlugin.address,
       acsPlugin.address,
+      pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,
       pancakePlugin.address,

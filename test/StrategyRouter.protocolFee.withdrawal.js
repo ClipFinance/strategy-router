@@ -91,7 +91,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -110,7 +110,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
           expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
         });
-      })
+      });
 
       describe( "rate decreased", function () {
         beforeEach(async function () {
@@ -130,7 +130,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -149,7 +149,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
           expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
         });
-      })
+      });
 
       describe( "rate increased", function () {
         beforeEach(async function () {
@@ -169,7 +169,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.eq(parseUniform("0"));
@@ -188,7 +188,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.eq(parseUniform("0"));
           expect(cycleData.pricePerShare).to.be.eq(parseUniform("1"));
         });
-      })
+      });
     });
 
     describe( "Price per share varies", function () {
@@ -218,7 +218,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9950"), parseUniform("3"));
@@ -237,7 +237,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("10030"), parseUniform("3"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.01"), parseUniform("0.005"));
         });
-      })
+      });
 
       describe( "Stablecoin rate decreased", function () {
         beforeEach(async function () {
@@ -260,7 +260,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9930"), parseUniform("2"));
@@ -279,7 +279,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("9860"), parseUniform("2"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("0.99"), parseUniform("0.004"));
         });
-      })
+      });
 
       describe( "Stablecoin rate increased", function () {
         let protocolSharesBefore;
@@ -306,7 +306,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             1000 // 10% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("1"));
@@ -327,7 +327,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
           expect(cycleData.strategiesBalanceWithCompoundAndBatchDepositsInUsd).to.be.closeTo(parseUniform("10195"), parseUniform("2"));
           expect(cycleData.pricePerShare).to.be.closeTo(parseUniform("1.02"), parseUniform("0.005"));
         });
-      })
+      });
     });
 
     describe( "Specific scenarion" , function () {
@@ -382,13 +382,13 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         // 5. FE requests to withdraw 1000 shares and pass the minimum expected amount as 898.81 BUSD
         let tokenBalanceBefore = await busd.balanceOf(owner.address);
-        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
         let tokenBalanceAfter = await busd.balanceOf(owner.address);
 
         // 6. ~$1000 BUSD are withdrawn
         let tokenWithdrawn = tokenBalanceAfter.sub(tokenBalanceBefore);
         expect(tokenWithdrawn.toString()).to.be.closeTo(parseBusd("997"), parseBusd("1"));
-      })
+      });
 
       it("Rate-goes-down scenario", async function () {
         let busdAmount = parseBusd("1");
@@ -441,13 +441,82 @@ describe("Test StrategyRouter protocol fee collection", function () {
 
         // 5. FE requests to withdraw 1000 shares and pass the minimum expected amount as 898.81 BUSD
         let tokenBalanceBefore = await busd.balanceOf(owner.address);
-        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+        await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
         let tokenBalanceAfter = await busd.balanceOf(owner.address);
 
         // 6. ~$1000 BUSD are withdrawn
         let tokenWithdrawn = tokenBalanceAfter.sub(tokenBalanceBefore);
         expect(tokenWithdrawn.toString()).to.be.closeTo(parseBusd("997"), parseBusd("1"));
-      })
+      });
     });
-  })
+
+    describe("Compound on withdrawal", function () {
+
+      it("User has big enough deposit in strategy", async function () {
+        // User deposits 100,000 BUSD;
+        await router.depositToBatch(busd.address, parseBusd("100000"));
+        await router.allocateToStrategies();
+
+        // Calculate shares
+        let receiptIds = [0];
+        let shares = await router.calculateSharesFromReceipts(receiptIds);
+
+        // Calculate shares value in USD
+        let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+        let busdToWithdraw = await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        );
+
+        // Apply slippage tolerance
+        let minExpectedWithdrawAmount = applySlippageInBps(
+          busdToWithdraw,
+          100 // 1% slippage
+        );
+
+        // Calculate the expected amount withdrawn with and without compounding
+        const withdrawAmountWithoutCompound = await router.callStatic.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false)
+        const withdrawAmountWithCompound = await router.callStatic.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, true)
+
+        // Check that the withdrawal amount with compounding is greater than or equal to the withdrawal amount without compounding
+        expect(withdrawAmountWithCompound).to.be.gte(withdrawAmountWithoutCompound);
+
+        // Check that the difference is greater than or equal to 970 BUSD (~1% is compound earnings), indicating additional earnings with compounding
+        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.gte(parseBusd("970"));
+      });
+
+      it("User has small enough deposit", async function () {
+        // User deposits 10 BUSD;
+        await router.depositToBatch(busd.address, parseBusd("10"));
+        await router.allocateToStrategies();
+
+        let receiptIds = [0];
+        let shares = await router.calculateSharesFromReceipts(receiptIds);
+
+        let sharesValueUsd = await router.calculateSharesUsdValue(shares);
+        let busdToWithdraw = await convertFromUsdToTokenAmount(
+          oracle,
+          busd,
+          sharesValueUsd
+        );
+
+        let minExpectedWithdrawAmount = applySlippageInBps(
+          busdToWithdraw,
+          100 // 1% slippage
+        );
+
+        // Calculate the expected amount withdrawn with and without compounding
+        const withdrawAmountWithoutCompound = await router.callStatic.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
+        const withdrawAmountWithCompound = await router.callStatic.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, true);
+
+        // Check that the withdrawal amount with compounding is greater than or equal to the withdrawal amount without compounding
+        expect(withdrawAmountWithCompound).to.be.gte(withdrawAmountWithoutCompound);
+
+        // Check that the difference is less than 0.1 BUSD (~1% is compound earnings), indicating lost earnings with compounding
+        expect(withdrawAmountWithCompound.sub(withdrawAmountWithoutCompound)).to.be.lt(parseBusd("0.1"));
+
+      });
+    });
+  });
 });

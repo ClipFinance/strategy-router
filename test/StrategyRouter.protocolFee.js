@@ -302,7 +302,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
             ),
             700 // 7% slippage
           );
-          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+          await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
 
           let totalShares = await sharesToken.totalSupply();
           expect(totalShares.toString()).to.be.closeTo(parseUniform("9980"), parseUniform("2"));
@@ -335,7 +335,7 @@ describe("Test StrategyRouter protocol fee collection", function () {
               ),
               700 // 7% slippage
             );
-            await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount);
+            await router.withdrawFromStrategies(receiptIds, busd.address, shares, minExpectedWithdrawAmount, false);
           });
 
           it("should have shares if there was yield", async function () {
