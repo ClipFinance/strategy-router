@@ -35,11 +35,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
-    error MinDepositFeeExceedsMinValue();
+    error MinDepositFeeExceedsMinUsdValue();
     error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsMaxPercentage();
-    error DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
+    error DepositFeePercentOrMaxFeeInUsdCanNotBeZeroIfOneOfThemExists();
     error DepositFeeTreasuryNotSet();
     error DepositUnderDepositFeeValue();
     error InvalidToken();
@@ -63,11 +63,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     EnumerableSet.AddressSet private supportedTokens;
 
     struct DepositSettings {
-        uint256 minValue;        // Amount of USD, must be `UNIFORM_DECIMALS` decimals
-        uint256 minFee;          // Amount of USD, must be `UNIFORM_DECIMALS` decimals
-        uint256 maxFee;          // Amount of USD, must be `UNIFORM_DECIMALS` decimals
-        uint256 feePercentage;   // Percentage of deposit fee, must be between 1 and 10000
-        address feeTreasury;     // Address to send deposit fee to
+        uint256 minUsdValue;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 minFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 maxFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 feeInBps;       // Percentage of deposit fee, in basis points
+        address feeTreasury;    // Address to send deposit fee to
     }
 
     struct TokenInfo {
@@ -114,20 +114,20 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Owner function.
     function setDepositSettings(DepositSettings calldata _depositSettings) external onlyOwner {
         // can't set min fee above min value, because deposit can be fail with underflow
-        if (_depositSettings.minFee > _depositSettings.minValue) revert MinDepositFeeExceedsMinValue();
+        if (_depositSettings.minFeeInUsd > _depositSettings.minUsdValue) revert MinDepositFeeExceedsMinUsdValue();
 
-        if (_depositSettings.maxFee > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
-        if (_depositSettings.maxFee < _depositSettings.minFee) revert MinDepositFeeExceedsMax();
-        if (_depositSettings.feePercentage > MAX_DEPOSIT_FEE_PERCENTAGE)
+        if (_depositSettings.maxFeeInUsd > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
+        if (_depositSettings.maxFeeInUsd < _depositSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
+        if (_depositSettings.feeInBps > MAX_DEPOSIT_FEE_PERCENTAGE)
             revert DepositFeePercentExceedsMaxPercentage();
 
         if (
-            _depositSettings.feePercentage == 0 && _depositSettings.maxFee > 0 ||
-            _depositSettings.maxFee == 0 && _depositSettings.feePercentage > 0
-        ) revert DepositFeePercentOrMaxFeeCanNotBeZeroIfOneOfThemExists();
+            _depositSettings.feeInBps == 0 && _depositSettings.maxFeeInUsd > 0 ||
+            _depositSettings.maxFeeInUsd == 0 && _depositSettings.feeInBps > 0
+        ) revert DepositFeePercentOrMaxFeeInUsdCanNotBeZeroIfOneOfThemExists();
 
         if (
-            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0 &&
+            _depositSettings.maxFeeInUsd > 0 && _depositSettings.feeInBps > 0 &&
             _depositSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
         ) revert DepositFeeTreasuryNotSet();
 
@@ -182,15 +182,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             depositToken
         );
 
-        if (
-            _depositSettings.maxFee > 0 && _depositSettings.feePercentage > 0
-            && depositValue > 0
-        ) {
-            uint256 feeValue = depositValue * _depositSettings.feePercentage / 10000;
-            if (feeValue < _depositSettings.minFee) {
-                feeValue = _depositSettings.minFee;
-            } else if (feeValue > _depositSettings.maxFee) {
-                feeValue = _depositSettings.maxFee;
+        if (_depositSettings.feeInBps > 0 && depositValue > 0) {
+            uint256 feeValue = depositValue * _depositSettings.feeInBps / 10000;
+            if (feeValue < _depositSettings.minFeeInUsd) {
+                feeValue = _depositSettings.minFeeInUsd;
+            } else if (feeValue > _depositSettings.maxFeeInUsd) {
+                feeValue = _depositSettings.maxFeeInUsd;
             }
 
             feeAmount = depositAmount - (depositAmount * (depositValue - feeValue)) / depositValue;
@@ -265,7 +262,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         (uint256 feeAmount, uint depositValue) = getDepositFeeAndValue(amount, depositToken);
 
-        if (depositSettings.minValue > depositValue) revert DepositUnderMinimum();
+        if (depositSettings.minUsdValue > depositValue) revert DepositUnderMinimum();
 
         depositAmount = amount - feeAmount;
 
