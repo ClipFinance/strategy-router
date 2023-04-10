@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 library StrategyRouterLib {
     using SafeERC20 for IERC20;
@@ -49,7 +49,13 @@ library StrategyRouterLib {
     )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+        returns (
+            uint256 totalBalance,
+            uint256 totalStrategyBalance,
+            uint256 totalIdleStrategyBalance,
+            uint256[] memory balances,
+            uint256[] memory idleBalances
+        )
     {
         uint256 strategiesLength = strategies.length;
         balances = new uint256[](strategiesLength);
@@ -63,6 +69,7 @@ library StrategyRouterLib {
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             balances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
+            totalStrategyBalance += balanceInDepositToken;
         }
 
         uint256 idleStrategiesLength = idleStrategies.length;
@@ -77,6 +84,7 @@ library StrategyRouterLib {
             balanceInDepositToken = toUniform(balanceInDepositToken, token);
             idleBalances[i] = balanceInDepositToken;
             totalBalance += balanceInDepositToken;
+            totalIdleStrategyBalance += balanceInDepositToken;
         }
     }
 
@@ -279,7 +287,12 @@ library StrategyRouterLib {
                         // we do not care where withdrawn tokens will be allocated
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
-                        balances[i] -= withdrawnBalance;
+                        // could happen if we withdrew more tokens than expected
+                        if (withdrawnBalance > balances[i]) {
+                            balances[i] = 0;
+                        } else {
+                            balances[i] -= withdrawnBalance;
+                        }
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalance += withdrawnBalance;
                         withdrawnBalance = toUniform(
                             withdrawnBalance,
