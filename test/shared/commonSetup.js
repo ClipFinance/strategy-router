@@ -37,7 +37,13 @@ async function deployFakeStrategy({
   profitPercent = 10_000,
 }) {
   // console.log(router.address, await token.name(), weight, profitPercent);
-  let strategy = await deploy("MockStrategy", token.address, profitPercent);
+  let strategy = await deploy(
+    "MockStrategy",
+    token.address,
+    profitPercent,
+    token.parse((10_000_000).toString()),
+    2000
+  );
   await strategy.transferOwnership(router.address);
   await router.addStrategy(strategy.address, weight);
 }
@@ -54,11 +60,20 @@ async function deployStargateStrategy({
   upgrader,
 }) {
   let StargateBase = await ethers.getContractFactory("StargateBase");
-  let stargateStrategy = await upgrades.deployProxy(StargateBase, [upgrader], {
-    kind: "uups",
-    unsafeAllow: ['delegatecall'],
-    constructorArgs: [router, token, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
-  });
+  let stargateStrategy = await upgrades.deployProxy(
+    StargateBase,
+    [
+      upgrader,
+      token.parse((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: "uups",
+      unsafeAllow: ['delegatecall'],
+      constructorArgs: [router, token.address, lpToken, stgToken, stargateRouter, stargateFarm, poolId, farmId],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
 
   return stargateStrategy;
 }
@@ -73,11 +88,20 @@ async function deployDodoStrategy({
   upgrader,
 }) {
   let DodoBase = await ethers.getContractFactory("DodoBase");
-  let dodoStrategy = await upgrades.deployProxy(DodoBase, [upgrader], {
-    kind: "uups",
-    constructorArgs: [router, token, lpToken, dodoToken, pool, farm],
-    unsafeAllow: ['delegatecall']
-  });
+  let dodoStrategy = await upgrades.deployProxy(
+    DodoBase,
+    [
+      upgrader,
+      token.parse((100_000_000).toString()),
+      500, // 5%
+    ],
+    {
+      kind: "uups",
+      constructorArgs: [router, token.address, lpToken, dodoToken, pool, farm],
+      unsafeAllow: ['delegatecall'],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
 
   return dodoStrategy;
 }
@@ -91,7 +115,9 @@ async function setupFakeUnderFulfilledWithdrawalStrategy({
     underFulfilledWithdrawalBps,
     token.address,
     profitPercent,
-    isRewardPositive
+    isRewardPositive,
+    token.parse((10_000_000).toString()),
+    2000
   );
   await strategy.transferOwnership(router.address);
   strategy.token = token;
@@ -122,6 +148,7 @@ async function setupFakeTokens(router) {
   let parseUsdc = (args) => parseUnits(args, 18);
   let usdc = await deploy("MockToken", parseUsdc(totalSupply), 18);
   usdc.decimalNumber = 18;
+  usdc.parse = parseUsdc;
 
   if (router !== false) {
     usdc.idleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
@@ -130,6 +157,7 @@ async function setupFakeTokens(router) {
   let parseBusd = (args) => parseUnits(args, 8);
   let busd = await deploy("MockToken", parseBusd(totalSupply), 8);
   busd.decimalNumber = 8;
+  busd.parse = parseBusd;
 
   if (router !== false) {
     busd.idleStrategy = await deployProxyIdleStrategy(owner, router, busd);
@@ -138,6 +166,7 @@ async function setupFakeTokens(router) {
   let parseUsdt = (args) => parseUnits(args, 6);
   let usdt = await deploy("MockToken", parseUsdt(totalSupply), 6);
   usdt.decimalNumber = 6;
+  usdt.parse = parseUsdt;
 
   if (router !== false) {
     usdt.idleStrategy = await deployProxyIdleStrategy(owner, router, usdt);

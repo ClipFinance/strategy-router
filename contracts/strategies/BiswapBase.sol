@@ -7,6 +7,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IBiswapFarm.sol";
 import "../StrategyRouter.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
 
 import "hardhat/console.sol";
 
@@ -15,7 +16,7 @@ import "hardhat/console.sol";
 // their code on github: https://github.com/biswap-org/staking/blob/main/contracts/MasterChef.sol
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy {
+contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy, AbstractBaseStrategyWithHardcap {
     error CallerUpgrader();
 
     address internal upgrader;
@@ -61,8 +62,11 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         _disableInitializers();
     }
 
-    function initialize(address _upgrader) external initializer {
-        __Ownable_init();
+    function initialize(address _upgrader, uint256 _hardcapTargetInToken, uint16 _hardcapDeviationInBps)
+        external
+        initializer
+    {
+        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
     }
@@ -73,7 +77,7 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         return address(tokenA);
     }
 
-    function deposit(uint256 amount) external override onlyOwner {
+    function _deposit(uint256 amount) internal override {
         Exchange exchange = strategyRouter.getExchange();
 
         uint256 dexFee = exchange.getExchangeProtocolFee(amount / 2, address(tokenA), address(tokenB));
@@ -171,7 +175,11 @@ contract BiswapBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStra
         }
     }
 
-    function totalTokens() external view override returns (uint256) {
+    function totalTokens() public view override returns (uint256) {
+        return _totalTokens();
+    }
+
+    function _totalTokens() internal view override returns (uint256) {
         (uint256 liquidity, ) = farm.userInfo(poolId, address(this));
 
         uint256 _totalSupply = lpToken.totalSupply();

@@ -48,18 +48,34 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
     // deploy strategies
     let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
-    strategyBiswap2 = await upgrades.deployProxy(StrategyFactory, [owner.address], {
+    strategyBiswap2 = await upgrades.deployProxy(
+      StrategyFactory,
+      [
+        owner.address,
+        parseBusd((1_000_000).toString()), // TODO change to real value on production deploy
+        500, // 5%
+      ], {
       kind: 'uups',
       constructorArgs: [router.address],
+      initializer: 'initialize(address, uint256, uint16)',
     });
     await strategyBiswap2.deployed();
     await strategyBiswap2.transferOwnership(router.address);
 
     StrategyFactory = await ethers.getContractFactory("BiswapUsdcUsdt");
-    strategyBiswap = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-      kind: 'uups',
-      constructorArgs: [router.address],
-    });
+    strategyBiswap = await upgrades.deployProxy(
+      StrategyFactory,
+      [
+        owner.address,
+        parseUsdc((1_000_000).toString()), // TODO change to real value on production deploy
+        500, // 5%
+      ],
+      {
+        kind: 'uups',
+        constructorArgs: [router.address],
+        initializer: 'initialize(address, uint256, uint16)',
+      }
+    );
     await strategyBiswap.deployed();
     await strategyBiswap.transferOwnership(router.address);
 
@@ -429,10 +445,19 @@ describe("Test StrategyRouter with two real strategies on bnb chain (happy scena
 
       // deploy new strategy
       let StrategyFactory = await ethers.getContractFactory("BiswapBusdUsdt");
-      let farm2 = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-        kind: 'uups',
-        constructorArgs: [router.address],
-      });
+      let farm2 = await upgrades.deployProxy(
+        StrategyFactory,
+        [
+          owner.address,
+          parseBusd((1_000_000).toString()),
+          500, // 5%
+        ],
+        {
+          kind: 'uups',
+          constructorArgs: [router.address],
+          initializer: 'initialize(address, uint256, uint16)',
+        }
+      );
       await farm2.deployed();
       await farm2.transferOwnership(router.address);
 

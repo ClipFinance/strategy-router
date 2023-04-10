@@ -23,4 +23,13 @@ interface IStrategy {
 
     /// @notice Withdraw all tokens from strategy.
     function withdrawAll() external returns (uint256 amountWithdrawn);
+
+    /// @notice Get hardcap target value
+    function getHardcardTargetInToken() view external returns (uint256);
+
+    /// @notice Set allowed deviation from target value
+    function getHardcardDeviationInBps() view external returns (uint16);
+
+    /// @notice Get data on satisfying hard limits
+    function getCapacityData() view external returns (bool limitReached, uint256 underflow, uint256 overflow);
 }

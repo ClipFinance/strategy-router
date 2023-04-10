@@ -5,8 +5,9 @@ const { setupCore, setupParamsOnBNB, setupTokens } = require("./commonSetup");
 const { skipBlocks, BLOCKS_MONTH, deploy } = require("../utils");
 const { BigNumber } = require("ethers");
 
-module.exports = function strategyTest(strategyName, needOracle) {
+module.exports = function strategyTest(strategyName, strategyToken, needOracle) {
   describe(`Test ${strategyName} strategy`, function () {
+
     let owner;
     // core contracts
     let router, oracle, exchange;
@@ -32,22 +33,31 @@ module.exports = function strategyTest(strategyName, needOracle) {
       await setupParamsOnBNB(router, oracle, exchange);
 
       // get tokens on bnb chain for testing
-      await setupTokens();
+      const tokens = await setupTokens();
+
+      // get deposit token and parse helper function
+      depositToken = tokens[strategyToken];
+      let decimals = await depositToken.decimals();
+      parseAmount = (amount) => parseUnits(amount, decimals);
 
       // deploy strategy to test
       // strategy = await deploy(strategyName, router.address);
-      let StrategyFactory = await ethers.getContractFactory(strategyName);
-      strategy = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-        kind: "uups",
-        unsafeAllow: ['delegatecall'],
-        constructorArgs: [router.address],
-      });
+      let StrategyFactory = await ethers.getContractFactory(strategyName)
+      strategy = await upgrades.deployProxy(
+        StrategyFactory,
+        [
+          owner.address,
+          parseAmount((1_000_000).toString()),
+          500, // 5%
+        ],
+        {
+          kind: 'uups',
+          constructorArgs: [router.address],
+          unsafeAllow: ['delegatecall'],
+          initializer: 'initialize(address, uint256, uint16)',
+        }
+      );
       await strategy.deployed();
-
-      // get deposit token and parse helper function
-      depositToken = await ethers.getContractAt("ERC20", await strategy.depositToken());
-      let decimals = await depositToken.decimals();
-      parseAmount = (amount) => parseUnits(amount, decimals);
     });
 
     after(async function () {

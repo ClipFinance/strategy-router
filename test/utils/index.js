@@ -8,7 +8,13 @@ BLOCKS_DAY = 60 * 60 * 24 / 3;
 MaxUint256 = ethers.constants.MaxUint256;
 
 provider = ethers.provider;
-const parseUniform = (args) => parseUnits(args, 18);
+const parseUniform = (value) => {
+  if (typeof value === 'number') {
+    value = value.toString();
+  }
+
+  return parseUnits(value, 18)
+};
 
 module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
