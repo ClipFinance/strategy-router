@@ -112,11 +112,20 @@ async function main() {
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~ 
   StrategyFactory = await ethers.getContractFactory("DodoUsdt")
-  dodoUsdt = await upgrades.deployProxy(StrategyFactory, [owner.address], {
-    kind: 'uups',
-    constructorArgs: [router.address],
-    unsafeAllow: ['delegatecall']
-  });
+  dodoUsdt = await upgrades.deployProxy(
+    StrategyFactory,
+    [
+      owner.address,
+      parseUsdt((1_000_000).toString()), // TODO change to real value on production deploy
+      500, // 5%
+    ],
+    {
+      kind: 'uups',
+      constructorArgs: [router.address],
+      unsafeAllow: ['delegatecall'],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
   console.log("dodoUsdt", strategyUsdc.address);
   await (await dodoUsdt.transferOwnership(router.address)).wait();
 

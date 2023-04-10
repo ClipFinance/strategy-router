@@ -88,11 +88,20 @@ async function deployDodoStrategy({
   upgrader,
 }) {
   let DodoBase = await ethers.getContractFactory("DodoBase");
-  let dodoStrategy = await upgrades.deployProxy(DodoBase, [upgrader], {
-    kind: "uups",
-    constructorArgs: [router, token, lpToken, dodoToken, pool, farm],
-    unsafeAllow: ['delegatecall']
-  });
+  let dodoStrategy = await upgrades.deployProxy(
+    DodoBase,
+    [
+      upgrader,
+      token.parse((100_000_000).toString()),
+      500, // 5%
+    ],
+    {
+      kind: "uups",
+      constructorArgs: [router, token.address, lpToken, dodoToken, pool, farm],
+      unsafeAllow: ['delegatecall'],
+      initializer: 'initialize(address, uint256, uint16)',
+    }
+  );
 
   return dodoStrategy;
 }

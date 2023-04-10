@@ -8,13 +8,15 @@ import "../interfaces/IDodoMine.sol";
 import "../interfaces/IDodoSingleAssetPool.sol";
 import "../StrategyRouter.sol";
 import "../lib/Math.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
 contract DodoBase is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    IStrategy
+    IStrategy,
+    AbstractBaseStrategyWithHardcap
 {
     using SafeERC20 for IERC20;
     using Math for uint256;
@@ -65,8 +67,12 @@ contract DodoBase is
         _disableInitializers();
     }
 
-    function initialize(address _upgrader) external initializer {
-        __Ownable_init();
+    function initialize(
+        address _upgrader,
+        uint256 _hardcapTargetInToken,
+        uint16 _hardcapDeviationInBps
+    ) external initializer {
+        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
     }
@@ -79,10 +85,6 @@ contract DodoBase is
 
     function depositToken() external view override returns (address) {
         return address(token);
-    }
-
-    function deposit(uint256 amount) external override onlyOwner {
-        _deposit(amount);
     }
 
     function withdraw(uint256 strategyTokenAmountToWithdraw)
@@ -134,12 +136,7 @@ contract DodoBase is
     }
 
     function totalTokens() public view override returns (uint256) {
-        uint256 currentTokenBalance = token.balanceOf(address(this));
-        return
-            currentTokenBalance +
-            _getAmountFromLpAmount(
-                farm.getUserLpBalance(address(lpToken), address(this))
-            );
+        return _totalTokens();
     }
 
     function withdrawAll()
@@ -168,8 +165,8 @@ contract DodoBase is
         return isBase ? baseExpectedTarget : quoteExpectedTarget;
     }
 
-    function _deposit(uint256 amount) internal {
-        if(amount == 0) return;
+    function _deposit(uint256 amount) internal override {
+        if (amount == 0) return;
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
         token.safeApprove(address(pool), amount);
         
@@ -179,6 +176,17 @@ contract DodoBase is
             lpToken.safeApprove(address(farm), lpTokens);
             farm.deposit(address(lpToken), lpTokens);
         }
+    }
+
+    function _totalTokens() internal override view returns (uint256)
+    {
+        uint256 currentTokenBalance = token.balanceOf(address(this));
+
+        return currentTokenBalance +
+            _getAmountFromLpAmount(
+                farm.getUserLpBalance(address(lpToken), address(this))
+            )
+        ;
     }
 
     function _depositToDodoLp(uint256 _amount) internal returns (uint256) {

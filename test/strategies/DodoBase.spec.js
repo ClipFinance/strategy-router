@@ -53,7 +53,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
 
       const dodoStrategy = await deployDodoStrategy({
         router: router.address,
-        token: depositToken.address,
+        token: depositToken,
         lpToken: lpToken.address,
         dodoToken: dodoToken.address,
         pool: dodoPool.address,
@@ -154,7 +154,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
         const { owner, router, dodoToken, lpToken, dodoPool, dodoMine, } = await loadFixture(initialState);
         await expect(deployDodoStrategy({
           router: router.address,
-          token: router.address, // set invalid deposit token
+          token: lpToken, // set invalid deposit token
           lpToken: lpToken.address,
           dodoToken: dodoToken.address,
           pool: dodoPool.address,
@@ -202,7 +202,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
         await depositToken.transfer(dodoStrategy.address, testAmount);
 
         await expect(
-          dodoStrategy.deposit(MaxUint256)
+          dodoStrategy.deposit(testAmount.add(parseDepositToken("10000")))
         ).to.be.revertedWithCustomError(dodoStrategy, "DepositAmountExceedsBalance");
 
       });
