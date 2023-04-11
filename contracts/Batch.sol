@@ -50,6 +50,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
+    uint256 private constant DEPOSIT_FEE_AMOUNT_THRESHOLD = 50e18; // 50 USD
+    uint256 private constant DEPOSIT_FEE_PERCENT_THRESHOLD = 300; // 3% in basis points
+    uint256 private constant MAX_BPS = 10000; // 100%
+
     DepositFeeSettings public depositFeeSettings;
 
     ReceiptNFT public receiptContract;
@@ -110,10 +114,14 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Owner function.
     function setDepositFeeSettings(DepositFeeSettings calldata _depositFeeSettings) external onlyOwner {
         // Ensure that maxFeeInUsd is not greater than the threshold of 50 USD
-        if (_depositFeeSettings.maxFeeInUsd > 50e18)revert MaxDepositFeeExceedsThreshold();
+        if (_depositFeeSettings.maxFeeInUsd > DEPOSIT_FEE_AMOUNT_THRESHOLD) {
+            revert MaxDepositFeeExceedsThreshold();
+        }
 
         // Ensure that feeInBps is not greater than the threshold of 300 bps (3%)
-        if (_depositFeeSettings.feeInBps > 300) revert DepositFeePercentExceedsFeePercentageThreshold();
+        if (_depositFeeSettings.feeInBps > DEPOSIT_FEE_PERCENT_THRESHOLD) {
+            revert DepositFeePercentExceedsFeePercentageThreshold();
+        }
 
         // Ensure that minFeeInUsd is not greater than maxFeeInUsd
         if (_depositFeeSettings.maxFeeInUsd < _depositFeeSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
@@ -527,7 +535,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     {
         DepositFeeSettings memory _depositFeeSettings = depositFeeSettings;
 
-        feeAmountInUsd = amountInUsd * _depositFeeSettings.feeInBps / 10000;
+        feeAmountInUsd = amountInUsd * _depositFeeSettings.feeInBps / MAX_BPS;
 
         // check ranges and apply needed fee limits
         if (feeAmountInUsd < _depositFeeSettings.minFeeInUsd) feeAmountInUsd = _depositFeeSettings.minFeeInUsd;
