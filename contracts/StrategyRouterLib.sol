@@ -96,17 +96,13 @@ library StrategyRouterLib {
         uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
         balances = new uint256[](strategiesLength);
         for (uint256 i; i < strategiesLength; i++) {
-            address token = supportedTokenPrices[
-                strategyIndexToSupportedTokenIndex[i]
-            ].token;
-
             uint256 balanceInUsd = IStrategy(strategies[i].strategyAddress).totalTokens();
 
             StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[
                 strategyIndexToSupportedTokenIndex[i]
             ];
             balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
-            balanceInUsd = toUniform(balanceInUsd, token);
+            balanceInUsd = toUniform(balanceInUsd, tokenPrice.token);
             balances[i] = balanceInUsd;
             totalBalance += balanceInUsd;
             totalStrategyBalance += balanceInUsd;
@@ -115,13 +111,11 @@ library StrategyRouterLib {
         uint256 idleStrategiesLength = supportedTokenPrices.length;
         idleBalances = new uint256[](idleStrategiesLength);
         for (uint256 i; i < idleStrategiesLength; i++) {
-            address token = supportedTokenPrices[i].token;
-
             uint256 balanceInUsd = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
 
             StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
             balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
-            balanceInUsd = toUniform(balanceInUsd, token);
+            balanceInUsd = toUniform(balanceInUsd, tokenPrice.token);
             idleBalances[i] = balanceInUsd;
             totalBalance += balanceInUsd;
             totalIdleStrategyBalance += balanceInUsd;
