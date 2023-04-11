@@ -195,6 +195,69 @@ describe("Test Batch", function () {
 
     });
 
+    describe("getSupportedTokensValueInUsd", function () {
+
+        it("0 supported tokens", async function () {
+            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(0);
+        });
+
+        it("1 supported token", async function () {
+            let price = parseBusd("0.5");
+            await oracle.setPrice(busd.address, price);
+            let priceDecimals = (await oracle.getTokenUsdPrice(busd.address)).decimals;
+            // setup supported tokens
+            await router.addSupportedToken(busd);
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+
+            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(1);
+            expect(supportedTokenPrices[0].price).to.be.equal(price);
+            expect(supportedTokenPrices[0].token).to.be.equal(busd.address);
+            expect(supportedTokenPrices[0].priceDecimals).to.be.equal(priceDecimals);
+        });
+
+        it("3 supported token", async function () {
+
+            let price = parseBusd("0.5");
+            let testData = [
+                { token: usdc, price: parseBusd("0.7"), priceDecimals: 0 },
+                { token: busd, price: parseBusd("0.5"), priceDecimals: 0 },
+                { token: usdt, price: parseBusd("0.8"), priceDecimals: 0 },
+            ]
+
+            for (let i = 0; i < testData.length; i++) {
+                await oracle.setPrice(testData[i].token.address, testData[i].price);
+                testData[i].priceDecimals = (await oracle.getTokenUsdPrice(testData[i].token.address)).decimals;
+            }
+
+            // setup supported tokens 
+            await router.addSupportedToken(usdc);
+            await router.addSupportedToken(busd);
+            await router.addSupportedToken(usdt);
+
+            // add fake strategies
+            await deployFakeStrategy({ router, token: busd });
+            await deployFakeStrategy({ router, token: usdc });
+            await deployFakeStrategy({ router, token: usdt });
+
+            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(3);
+
+            for (let i = 0; i < testData.length; i++) {
+                expect(supportedTokenPrices[i].price).to.be.equal(testData[i].price);
+                expect(supportedTokenPrices[i].token).to.be.equal(testData[i].token.address);
+                expect(supportedTokenPrices[i].priceDecimals).to.be.equal(testData[i].priceDecimals);
+            }
+            
+        });
+
+    });
+
     describe("withdraw", function () {
 
         // snapshot to revert state changes that are made in this scope
