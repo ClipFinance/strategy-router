@@ -397,22 +397,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         );
     }
 
-    /// @notice Returns usd value of the token balances and their sum in the strategies.
-    /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
-    /// @return totalBalance Total usd value.
-    /// @return balances Array of usd value of strategy token balances.
-    /// @return idleBalances Array of usd value of idle strategy token balances.
-    function getStrategiesValueWithoutOracleCalls(
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-            uint256[] memory strategyIndexToSupportedTokenIndex,
-            address[] memory _supportedTokens
-    )
-        private
-        view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
-    {
-    }
-
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batch usd value.
