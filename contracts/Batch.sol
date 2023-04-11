@@ -105,7 +105,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit SetAddresses(_exchange, _oracle, _router, _receiptNft);
     }
 
-    /// @notice Set deposit settings in the batch.
+    /// @notice Set deposit fee settings in the batch.
     /// @param _depositFeeSettings Deposit settings.
     /// @dev Owner function.
     function setDepositFeeSettings(DepositFeeSettings calldata _depositFeeSettings) external onlyOwner {

@@ -229,6 +229,7 @@ describe("Test Batch", function () {
           owner.address,
           busd.address,
           amount,
+          amount,
           0,
         );
     });
@@ -300,6 +301,7 @@ describe("Test Batch", function () {
         .withArgs(
           owner.address,
           busd.address,
+          amount,
           depositAmount,
           depositFeeAmount,
         );
