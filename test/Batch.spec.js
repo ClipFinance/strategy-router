@@ -154,9 +154,19 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
     });
 
+    it("should revert if treasury address is not set when set min fee as a fixed fee and fee percentage is zero", async function () {
+      await expect(
+        batch.setDepositFeeSettings({
+          minFeeInUsd: parseUniform("0.15"),
+          maxFeeInUsd: parseUniform("0.15"),
+          feeInBps: 0,
+          feeTreasury: ethers.constants.AddressZero,
+        })
+      ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
+    });
+
     it("can set zero address as treasury address if set deposit max fee and fee percentage are zero values", async function () {
       await batch.setDepositFeeSettings({
-        ...depositFeeSettings,
         minFeeInUsd: 0,
         maxFeeInUsd: 0,
         feeInBps: 0,
@@ -176,6 +186,22 @@ describe("Test Batch", function () {
       expect(batchDepositFeeSettings.minFeeInUsd).to.equal(depositFeeSettings.minFeeInUsd);
       expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(depositFeeSettings.maxFeeInUsd);
       expect(batchDepositFeeSettings.feeInBps).to.equal(depositFeeSettings.feeInBps);
+      expect(batchDepositFeeSettings.feeTreasury).to.equal(depositFeeSettings.feeTreasury);
+    });
+
+    it("should set deposit settings with correct values with fixed fee", async function () {
+      await batch.setDepositFeeSettings({
+        ...depositFeeSettings,
+        minFeeInUsd: parseUniform("0.15"),
+        maxFeeInUsd: parseUniform("0.15"),
+        feeInBps: 0,
+      });
+
+      const batchDepositFeeSettings = await batch.depositFeeSettings();
+
+      expect(batchDepositFeeSettings.minFeeInUsd).to.equal(parseUniform("0.15"));
+      expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(parseUniform("0.15"));
+      expect(batchDepositFeeSettings.feeInBps).to.equal(0);
       expect(batchDepositFeeSettings.feeTreasury).to.equal(depositFeeSettings.feeTreasury);
     });
 
@@ -284,7 +310,7 @@ describe("Test Batch", function () {
 
       await expect(
         router.depositToBatch(usdc.address, amount)
-      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmount");
+      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
     });
 
     it("should fire Deposit event with exact values (with fee) after deposit", async function () {

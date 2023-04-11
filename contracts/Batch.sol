@@ -34,7 +34,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error CycleClosed();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
-    error DepositFeeExceedsDepositAmount();
+    error DepositFeeExceedsDepositAmountOrTheyAreEqual();
     error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsFeePercentageThreshold();
@@ -124,7 +124,13 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
 
         if (
-            _depositFeeSettings.maxFeeInUsd != 0 && _depositFeeSettings.feeInBps != 0 &&
+            (
+                // Ensure that either maxFeeInUsd or feeInBps is set
+                (_depositFeeSettings.maxFeeInUsd != 0 && _depositFeeSettings.feeInBps != 0) ||
+                // Or ensure that minFeeInUsd set as fixed fee when feeInBps is not set
+                (_depositFeeSettings.minFeeInUsd != 0 && _depositFeeSettings.feeInBps == 0)
+            )
+            &&
             _depositFeeSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
         ) revert DepositFeeTreasuryNotSet();
 
@@ -170,13 +176,23 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (uint256 feeAmount)
     {
-        uint256 depositAmountInUsd = convertTokensToUsd(depositAmount, depositToken);
-        if (depositAmountInUsd == 0) return 0;
+        // convert deposit amount to USD
+        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(depositToken);
+        if (tokenUsdPrice == 0) return 0; // token is not supported by oracle
+        uint256 depositAmountInUsd = (depositAmount * tokenUsdPrice) / 10**oraclePriceDecimals;
+        depositAmountInUsd = toUniform(depositAmountInUsd, depositToken);
 
+        // calculate fee amount in USD
         uint256 feeAmountInUsd = calculateDepositFee(depositAmountInUsd);
-        if (feeAmountInUsd > depositAmountInUsd) revert DepositFeeExceedsDepositAmount();
+        if (feeAmountInUsd == 0) return 0;
 
-        feeAmount = convertUsdToTokens(feeAmountInUsd, depositToken);
+        // ensure that fee amount is not exceed deposit amount to avoid overflow
+        // and they are not equal to avoid 0 deposit
+        if (feeAmountInUsd >= depositAmountInUsd) revert DepositFeeExceedsDepositAmountOrTheyAreEqual();
+
+        // convert fee amount in usd to tokens amount
+        feeAmount = (feeAmountInUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
+        feeAmount = fromUniform(feeAmount, depositToken);
     }
 
     // User Functions
@@ -501,36 +517,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
     }
 
-    /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
-    /// @param amountInUsd Amount tokens in USD with `UNIFORM_DECIMALS`.
-    /// @param token token address
-    /// @dev returns amount of tokens in token decimals. Returns 0 if token price is not available or 0.
-    function convertUsdToTokens(uint256 amountInUsd, address token)
-        internal
-        view
-        returns (uint256 amount)
-    {
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
-        if (tokenUsdPrice == 0) return 0;
-
-        amount = (amountInUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
-        amount = fromUniform(amount, token);
-    }
-
-    /// @notice converting token amount to token USD amount, i.e 2000 tokens with price of $0.5 is $1000 worth of token
-    /// @param amount Amount tokens in token decimals.
-    /// @param token token address
-    /// @dev returns amount of tokens in USD with `UNIFORM_DECIMALS`.
-    function convertTokensToUsd(uint256 amount, address token)
-        internal
-        view
-        returns (uint256 amountInUsd)
-    {
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
-        amountInUsd = (amount * tokenUsdPrice) / 10**oraclePriceDecimals;
-        amountInUsd = toUniform(amountInUsd, token);
-    }
-
     /// @notice calculate deposit fee in USD
     /// @param amountInUsd Amount tokens in USD with `UNIFORM_DECIMALS`.
     /// @dev returns fee amount of tokens in USD.
@@ -541,15 +527,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     {
         DepositFeeSettings memory _depositFeeSettings = depositFeeSettings;
 
-        if (_depositFeeSettings.feeInBps == 0) {
-            return 0;
-        }
-
         feeAmountInUsd = amountInUsd * _depositFeeSettings.feeInBps / 10000;
 
-        // check ranges and apply needed limits
+        // check ranges and apply needed fee limits
         if (feeAmountInUsd < _depositFeeSettings.minFeeInUsd) feeAmountInUsd = _depositFeeSettings.minFeeInUsd;
-        if (feeAmountInUsd > _depositFeeSettings.maxFeeInUsd) feeAmountInUsd = _depositFeeSettings.maxFeeInUsd;
+        else if (feeAmountInUsd > _depositFeeSettings.maxFeeInUsd) feeAmountInUsd = _depositFeeSettings.maxFeeInUsd;
 
     }
 }
