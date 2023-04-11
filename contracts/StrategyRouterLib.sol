@@ -43,7 +43,7 @@ library StrategyRouterLib {
     }
 
     function getStrategiesValue(
-        IUsdOracle oracle,
+        Batch batch,
         StrategyRouter.StrategyInfo[] storage strategies,
         StrategyRouter.IdleStrategyInfo[] storage idleStrategies
     )
@@ -51,33 +51,24 @@ library StrategyRouterLib {
         view
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        uint256 strategiesLength = strategies.length;
-        balances = new uint256[](strategiesLength);
-        for (uint256 i; i < strategiesLength; i++) {
-            address token = strategies[i].depositToken;
+        (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices,
+            address[] memory _supportedTokens
+        ) = batch.getSupportedTokensValueInUsd();
 
-            uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
+        uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
 
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            balances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
-        }
-
-        uint256 idleStrategiesLength = idleStrategies.length;
-        idleBalances = new uint256[](idleStrategiesLength);
-        for (uint256 i; i < idleStrategiesLength; i++) {
-            address token = idleStrategies[i].depositToken;
-
-            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
-
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            idleBalances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
-        }
+        (
+            totalBalance, 
+            balances, 
+            idleBalances
+        ) = getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
+            strategyIndexToSupportedTokenIndex,
+            _supportedTokens
+        );
     }
 
     function getStrategiesValueWithoutOracleCalls(
@@ -98,15 +89,15 @@ library StrategyRouterLib {
                 strategyIndexToSupportedTokenIndex[i]
             ];
 
-            uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
+            uint256 balanceInUsd = IStrategy(strategies[i].strategyAddress).totalTokens();
 
             StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[
                 strategyIndexToSupportedTokenIndex[i]
             ];
-            balanceInDepositToken = ((balanceInDepositToken * tokenPrice.price) / 10**tokenPrice.priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            balances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
+            balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInUsd = toUniform(balanceInUsd, token);
+            balances[i] = balanceInUsd;
+            totalBalance += balanceInUsd;
         }
 
         uint256 idleStrategiesLength = _supportedTokens.length;
@@ -114,13 +105,13 @@ library StrategyRouterLib {
         for (uint256 i; i < idleStrategiesLength; i++) {
             address token = _supportedTokens[i];
 
-            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
+            uint256 balanceInUsd = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
 
             StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
-            balanceInDepositToken = ((balanceInDepositToken * tokenPrice.price) / 10**tokenPrice.priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            idleBalances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
+            balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInUsd = toUniform(balanceInUsd, token);
+            idleBalances[i] = balanceInUsd;
+            totalBalance += balanceInUsd;
         }
     }
 

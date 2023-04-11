@@ -1,4 +1,3 @@
-//SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -233,11 +232,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         (   
             StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-            uint256[] memory strategyIndexToSupportedTokenIndex,
             address[] memory _supportedTokens
         ) = batch.getSupportedTokensValueInUsd();
+        uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
 
-        (uint256 batchValueInUsd, ) = getBatchValueUsd(
+        (uint256 batchValueInUsd, ) = getBatchValueUsdWithoutOracleCalls(
             supportedTokenPrices,
             _supportedTokens
         );
@@ -271,11 +270,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         // step 5
         uint256 totalShares = sharesToken.totalSupply();
-        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = getStrategiesValueWithoutOracleCalls(
-            supportedTokenPrices, 
+        (uint256 strategiesBalanceAfterCompoundInUsd, , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
             strategyIndexToSupportedTokenIndex,
             _supportedTokens
         );
+
         uint256[] memory depositAmountsInTokens = batch.rebalance();
         emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
 
@@ -291,12 +293,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-
-        (uint256 strategiesBalanceAfterDepositInUsd, , ) = getStrategiesValueWithoutOracleCalls(
-            supportedTokenPrices, 
+        (uint256 strategiesBalanceAfterDepositInUsd, , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
             strategyIndexToSupportedTokenIndex,
             _supportedTokens
         );
+
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
@@ -392,7 +396,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
         (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValue(
-            oracle,
+            batch,
             strategies,
             idleStrategies
         );
@@ -412,24 +416,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         view
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
-        (totalBalance, balances, idleBalances) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
-            strategies,
-            idleStrategies,
-            supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex,
-            _supportedTokens
-        );
     }
 
     /// @notice Returns usd values of the tokens balances and their sum in the batch.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total batch usd value.
     /// @return balances Array of usd value of token balances in the batch.
-    function getBatchValueUsd(
+    function getBatchValueUsdWithoutOracleCalls(
             StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
             address[] memory _supportedTokens
     ) public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batch.getBatchValueUsd(
+        return batch.getBatchValueUsdWithoutOracleCalls(
             supportedTokenPrices,
             _supportedTokens
         );

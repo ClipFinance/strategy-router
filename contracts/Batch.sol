@@ -98,7 +98,19 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return supportedTokens.values();
     }
 
-    function getBatchValueUsd(
+    function getBatchValueUsd()
+        public
+        view
+        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
+    {
+        (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices,
+            address[] memory _supportedTokens
+        ) = getSupportedTokensValueInUsd();
+        return this.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices, _supportedTokens);
+    }
+
+    function getBatchValueUsdWithoutOracleCalls(
         StrategyRouter.TokenPrice[] calldata supportedTokenPrices, 
         address[] calldata _supportedTokens
     )
@@ -123,7 +135,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (
             StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-            uint256[] memory strategyIndexToSupportedTokenIndex,
             address[] memory _supportedTokens
         )
     {
@@ -136,7 +147,13 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 priceDecimals: priceDecimals
             });
         }
+    }
 
+    function getStrategyIndexToSupportedTokenIndexMap() 
+        public 
+        view 
+        returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
+    {
         strategyIndexToSupportedTokenIndex = new uint256[](router.getStrategiesCount());
         for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             strategyIndexToSupportedTokenIndex[i] = supportedTokens.indexOf(
