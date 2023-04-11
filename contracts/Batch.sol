@@ -38,7 +38,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error MaxDepositFeeExceedsThreshold();
     error MinDepositFeeExceedsMax();
     error DepositFeePercentExceedsFeePercentageThreshold();
-    error DepositFeePercentOrMaxFeeInUsdCanNotBeZeroIfOneOfThemExists();
+    error NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
     error DepositFeeTreasuryNotSet();
     error DepositUnderDepositFeeValue();
     error InvalidToken();
@@ -109,19 +109,19 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @param _depositFeeSettings Deposit settings.
     /// @dev Owner function.
     function setDepositFeeSettings(DepositFeeSettings calldata _depositFeeSettings) external onlyOwner {
-        // 50 USD is a deposit fee threshold that can be set as max fee in USD
-        if (_depositFeeSettings.maxFeeInUsd > 50e18) revert MaxDepositFeeExceedsThreshold();
+        // Ensure that maxFeeInUsd is not greater than the threshold of 50 USD
+        if (_depositFeeSettings.maxFeeInUsd > 50e18)revert MaxDepositFeeExceedsThreshold();
 
-        // min fee can't be more than max fee
-        if (_depositFeeSettings.maxFeeInUsd < _depositFeeSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
-
-        // 300 bps or 3% is a deposit fee percentage threshold that can be set as max percentage
+        // Ensure that feeInBps is not greater than the threshold of 300 bps (3%)
         if (_depositFeeSettings.feeInBps > 300) revert DepositFeePercentExceedsFeePercentageThreshold();
 
-        if (
-            _depositFeeSettings.feeInBps == 0 && _depositFeeSettings.maxFeeInUsd != 0 ||
-            _depositFeeSettings.maxFeeInUsd == 0 && _depositFeeSettings.feeInBps != 0
-        ) revert DepositFeePercentOrMaxFeeInUsdCanNotBeZeroIfOneOfThemExists();
+        // Ensure that minFeeInUsd is not greater than maxFeeInUsd
+        if (_depositFeeSettings.maxFeeInUsd < _depositFeeSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
+
+        // Ensure that maxFeeInUsd also has a value if feeInBps is set
+        if (_depositFeeSettings.maxFeeInUsd == 0 && _depositFeeSettings.feeInBps != 0) {
+            revert NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
+        }
 
         if (
             _depositFeeSettings.maxFeeInUsd != 0 && _depositFeeSettings.feeInBps != 0 &&
@@ -129,7 +129,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         ) revert DepositFeeTreasuryNotSet();
 
         depositFeeSettings = _depositFeeSettings;
-
         emit SetDepositFeeSettings(depositFeeSettings);
     }
 
@@ -165,7 +164,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // @notice Get a deposit fee amount in tokens.
     // @param depositAmount Amount of tokens to deposit.
     // @param depositToken Token address.
-    // @dev Returns a deposit fee amount and value in USD.
+    // @dev Returns a deposit fee amount with token decimals.
     function getDepositFeeInTokens(uint256 depositAmount, address depositToken)
         public
         view
