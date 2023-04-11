@@ -50,8 +50,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
-    uint256 public constant DEPOSIT_FEE_THRESHOLD = 10e18; // 10 USD
-    uint256 public constant MAX_DEPOSIT_FEE_PERCENTAGE = 300; // 3%
 
     DepositSettings public depositSettings;
 
@@ -116,10 +114,14 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // can't set min fee above min value, because deposit can be fail with underflow
         if (_depositSettings.minFeeInUsd > _depositSettings.minUsdValue) revert MinDepositFeeExceedsMinUsdValue();
 
-        if (_depositSettings.maxFeeInUsd > DEPOSIT_FEE_THRESHOLD) revert MaxDepositFeeExceedsThreshold();
+        // 50 USD is a max deposit fee threshold that can be set
+        if (_depositSettings.maxFeeInUsd > 50e18) revert MaxDepositFeeExceedsThreshold();
+
+        // min fee can't be more than max fee
         if (_depositSettings.maxFeeInUsd < _depositSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
-        if (_depositSettings.feeInBps > MAX_DEPOSIT_FEE_PERCENTAGE)
-            revert DepositFeePercentExceedsMaxPercentage();
+
+        // 300 bps or 3% is a max deposit fee percentage that can be set
+        if (_depositSettings.feeInBps > 300) revert DepositFeePercentExceedsMaxPercentage();
 
         if (
             _depositSettings.feeInBps == 0 && _depositSettings.maxFeeInUsd > 0 ||

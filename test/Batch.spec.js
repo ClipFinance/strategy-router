@@ -104,12 +104,12 @@ describe("Test Batch", function () {
      })).to.be.revertedWithCustomError(batch, "MinDepositFeeExceedsMinUsdValue");
    });
 
-    it("should revert when if set max deposit fee exceeds trheshold", async function () {
-      // deposit fee threshold is 10 USD
+    it("should revert when if set max deposit fee exceeds threshold", async function () {
+      // deposit fee threshold is 50 USD
       await expect(
         batch.setDepositSettings({
           ...depositSettings,
-          maxFeeInUsd: parseUniform("11"), // 11 USD
+          maxFeeInUsd: parseUniform("51"), // 51 USD
         })
       ).to.be.revertedWithCustomError(batch, "MaxDepositFeeExceedsThreshold");
     });
@@ -125,8 +125,8 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "MinDepositFeeExceedsMax");
     });
 
-    it("should revert when if set deposit fee percentage exceeds max percentage (3% at the moment)", async function () {
-      // max deposit fee percentage is 3% in BPS
+    it("should revert when if set deposit fee percentage exceeds percentage threshold", async function () {
+      // deposit fee percentage threshold is 3% in BPS
       await expect(
         batch.setDepositSettings({
           ...depositSettings,
