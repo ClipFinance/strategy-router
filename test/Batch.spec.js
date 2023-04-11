@@ -7,7 +7,16 @@ const {
   setupTestParams,
   deployFakeStrategy,
 } = require("./shared/commonSetup");
-const { provider, parseUniform, deployProxyIdleStrategy, toUniform, fromUniform } = require("./utils");
+const {
+  provider,
+  parseUniform,
+  deployProxyIdleStrategy,
+  toUniform,
+  fromUniform,
+  ZERO_BN,
+  USD_DELTA,
+  MAX_BPS,
+} = require("./utils");
 
 describe("Test Batch", function () {
   let owner, nonReceiptOwner;
@@ -330,7 +339,7 @@ describe("Test Batch", function () {
       const treasuryBalanceAfter = await busd.balanceOf(depositFeeSettings.feeTreasury);
       expect(batchBalanceAfter).to.be.equal(depositAmount);
       expect(treasuryBalanceAfter).to.be.equal(depositFeeAmount);
-      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(depositFeeSettings.minFeeInUsd);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.closeTo(depositFeeSettings.minFeeInUsd, USD_DELTA);
     });
 
     it("should take the minimum fee value ($0.15) until $1,500 ($1,000)", async function () {
@@ -340,7 +349,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(usdc.address, amount);
 
       const treasuryBalanceAfter = await usdc.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(usdc.address, treasuryBalanceAfter)).to.be.equal(depositFeeSettings.minFeeInUsd);
+      expect(await getTokenValue(usdc.address, treasuryBalanceAfter)).to.be.closeTo(depositFeeSettings.minFeeInUsd, USD_DELTA);
     });
 
     it("should take the minimum fee value ($0.15) until $1,500 ($1,490)", async function () {
@@ -350,7 +359,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(usdt.address, amount);
 
       const treasuryBalanceAfter = await usdt.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.equal(depositFeeSettings.minFeeInUsd);
+      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.closeTo(depositFeeSettings.minFeeInUsd, USD_DELTA);
     });
 
     it("should take a 0.01% fee value between $1,500 and $10,000 ($1,501)", async function () {
@@ -361,7 +370,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(busd.address, amount);
 
       const treasuryBalanceAfter = await busd.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.closeTo(expectedFeeValue, USD_DELTA);
     });
 
     it("should take a 0.01% fee value between $1,500 and $10,000 ($5,000)", async function () {
@@ -372,7 +381,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(usdt.address, amount);
 
       const treasuryBalanceAfter = await usdt.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.closeTo(expectedFeeValue, USD_DELTA);
     });
 
     it("should take a 0.01% fee value between $1,500 and $10,000 ($9,990)", async function () {
@@ -383,7 +392,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(usdc.address, amount);
 
       const treasuryBalanceAfter = await usdc.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(usdc.address, treasuryBalanceAfter)).to.be.equal(expectedFeeValue);
+      expect(await getTokenValue(usdc.address, treasuryBalanceAfter)).to.be.closeTo(expectedFeeValue, USD_DELTA);
     });
 
     it("should take the max fee value ($1) above $10,000 ($11,000)", async function () {
@@ -393,7 +402,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(busd.address, amount);
 
       const treasuryBalanceAfter = await busd.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(depositFeeSettings.maxFeeInUsd);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.closeTo(depositFeeSettings.maxFeeInUsd, USD_DELTA);
     });
 
     it("should take the max fee value ($1) above $10,000 ($50,000)", async function () {
@@ -403,7 +412,7 @@ describe("Test Batch", function () {
       await router.depositToBatch(usdt.address, amount);
 
       const treasuryBalanceAfter = await usdt.balanceOf(depositFeeSettings.feeTreasury);
-      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.equal(depositFeeSettings.maxFeeInUsd);
+      expect(await getTokenValue(usdt.address, treasuryBalanceAfter)).to.be.closeTo(depositFeeSettings.maxFeeInUsd, USD_DELTA);
     });
 
   });
@@ -624,8 +633,7 @@ describe("Test Batch", function () {
       let newBalance = await usdt.balanceOf(owner.address);
 
       const expectedAmount = amount.sub(amountFee);
-      // use closeTo with 1 delta because of division in the getTokenAmount function
-      expect(newBalance.sub(oldBalance)).to.be.closeTo(expectedAmount, 1);
+      expect(newBalance.sub(oldBalance)).to.be.equal(expectedAmount);
     });
 
     it("should withdraw two receipts and receive tokens noted in them", async function () {
@@ -639,8 +647,8 @@ describe("Test Batch", function () {
       newBalance = await usdt.balanceOf(owner.address);
       newBalance2 = await busd.balanceOf(owner.address);
 
-      expect(newBalance.sub(oldBalance)).to.be.closeTo(parseUsdt("100"), parseUsdt("1"));
-      expect(newBalance2.sub(oldBalance2)).to.be.closeTo(parseBusd("100"), parseBusd("1"));
+      expect(newBalance.sub(oldBalance)).to.be.equal(parseUsdt("100"));
+      expect(newBalance2.sub(oldBalance2)).to.be.equal(parseBusd("100"));
     });
   });
 
@@ -710,41 +718,34 @@ describe("Test Batch", function () {
 
   const calculateExpectedDepositStates = async (amount, depositTokenAddress) => {
     const value = await getTokenValue(depositTokenAddress, amount);
-
     const depositFeeSettings = await batch.depositFeeSettings();
-    if (
-        depositFeeSettings.maxFeeInUsd.gt(0) && depositFeeSettings.feeInBps.gt(0)
-        && value.gt(0)
-    ) {
 
-      const MAX_BPS = ethers.BigNumber.from(10000); // is 100% in BPS
-
-      let depositFeeValue = value.mul(depositFeeSettings.feeInBps).div(MAX_BPS);
-      if (depositFeeValue.lt(depositFeeSettings.minFeeInUsd)) {
-          depositFeeValue = depositFeeSettings.minFeeInUsd;
-      } else if (depositFeeValue.gt(depositFeeSettings.maxFeeInUsd)) {
-          depositFeeValue = depositFeeSettings.maxFeeInUsd;
-      }
-
-      const depositValue = value.sub(depositFeeValue);
-
-      const depositAmount = amount.mul(depositValue).div(value);
-      const depositFeeAmount = amount.sub(depositAmount);
-
-      return {
-        depositAmount,
-        depositAmountUniform: await toUniform(depositAmount, depositTokenAddress),
-        depositFeeAmount,
-        depositValue,
-        depositFeeValue
-      };
-
-    } else return {
+    if (depositFeeSettings.feeInBps.eq(ZERO_BN) || value.eq(ZERO_BN)) return {
       depositAmount: amount,
       depositAmountUniform: await toUniform(amount, depositTokenAddress),
-      depositFeeAmount: ethers.BigNumber.from(0),
+      depositFeeAmount: ZERO_BN,
       depositValue: value,
-      depositFeeValue: ethers.BigNumber.from(0)
+      depositFeeValue: ZERO_BN
+    };
+
+    let depositFeeValue = value.mul(depositFeeSettings.feeInBps).div(MAX_BPS);
+    if (depositFeeValue.lt(depositFeeSettings.minFeeInUsd)) {
+        depositFeeValue = depositFeeSettings.minFeeInUsd;
+    } else if (depositFeeValue.gt(depositFeeSettings.maxFeeInUsd)) {
+        depositFeeValue = depositFeeSettings.maxFeeInUsd;
+    }
+
+    const depositValue = value.sub(depositFeeValue);
+
+    const depositFeeAmount = await getTokenAmount(depositTokenAddress, depositFeeValue);
+    const depositAmount = amount.sub(depositFeeAmount);
+
+    return {
+      depositAmount,
+      depositAmountUniform: await toUniform(depositAmount, depositTokenAddress),
+      depositFeeAmount,
+      depositValue,
+      depositFeeValue
     };
 
   }

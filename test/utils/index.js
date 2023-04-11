@@ -10,9 +10,13 @@ MaxUint256 = ethers.constants.MaxUint256;
 provider = ethers.provider;
 const parseUniform = (args) => parseUnits(args, 18);
 
+USD_DELTA = parseUniform("0.000001");
+ZERO_BN = ethers.BigNumber.from(0);
+MAX_BPS = ethers.BigNumber.from(10000); // is 100% in BPS
+
 module.exports = {
   getTokens, skipBlocks, skipTimeAndBlocks,
-  printStruct, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
+  printStruct, ZERO_BN, USD_DELTA, MAX_BPS, BLOCKS_MONTH, BLOCKS_DAY, MONTH_SECONDS, MaxUint256,
   parseUniform, provider, getUSDC, getBUSD, getUSDT, fromUniform, toUniform,
   deploy, deployProxy, saturateTokenBalancesInStrategies,
   convertFromUsdToTokenAmount, applySlippageInBps,
