@@ -27,7 +27,7 @@ describe("Test Batch", function () {
   // core contracts
   let router, oracle, exchange, batch, receiptContract, sharesToken;
   // deposit settings
-  let defaultDepositFeeSettings, depositFeeSettingsWithFixedFee;
+  let initialDepositFeeSettings, defaultDepositFeeSettings, depositFeeSettingsWithFixedFee;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -40,6 +40,13 @@ describe("Test Batch", function () {
     // deploy core contracts
     ({ router, oracle, exchange, batch, receiptContract, sharesToken } =
       await setupCore());
+
+    initialDepositFeeSettings = {
+      minFeeInUsd: 0,
+      maxFeeInUsd: 0,
+      feeInBps: 0,
+      feeTreasury: ethers.constants.AddressZero,
+    };
 
     defaultDepositFeeSettings = {
       minFeeInUsd: parseUniform("0.15"),
@@ -474,6 +481,8 @@ describe("Test Batch", function () {
   describe("getDepositFeeInTokens", function () {
 
     it("should return 0 fee amount when deposit settings is not set and the token price is 1 USD", async function () {
+      // set initial deposit fee settings
+      await batch.setDepositFeeSettings(initialDepositFeeSettings);
       const amount = parseUsdc("20"); // 20 USDC
 
       const feeAmount = await batch.getDepositFeeInTokens(amount, usdc.address);
@@ -497,41 +506,53 @@ describe("Test Batch", function () {
     it("should return min deposit fee amount when the deposit fee is set as default", async function () {
       // set deposit fee as default
       await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
 
       const amount = parseUsdt("20"); // 20 USDT
 
-      const { depositFeeAmount } = await calculateExpectedDepositStates(amount, usdt.address);
-
       const feeAmount = await batch.getDepositFeeInTokens(amount, usdt.address);
 
-      // expect that fee amount is the same as the min fee amount
-      expect(feeAmount).to.be.equal(depositFeeAmount);
+      // expect that fee amount is the same as the min fee amount (0.15 USD = 0.15 USDT)
+      expect(feeAmount).to.be.equal(parseUsdt("0.15"));
     });
 
     it("should return max deposit fee amount when the deposit fee is set as default", async function () {
       // set deposit fee as default
       await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
 
       const amount = parseUsdt("15000"); // 15,000 USDT
 
-      const { depositFeeAmount } = await calculateExpectedDepositStates(amount, usdt.address);
-
       const feeAmount = await batch.getDepositFeeInTokens(amount, usdt.address);
 
-      // expect that fee amount is the same as the max fee amount
-      expect(feeAmount).to.be.equal(depositFeeAmount);
+      // expect that fee amount is the same as the max fee amount (1 USD = 1 USDT)
+      expect(feeAmount).to.be.equal(parseUsdt("1"));
     });
 
     it("should return correct deposit fee amount depends on the fee percentage (0.01%) when the deposit fee is set as default", async function () {
       // set deposit fee as default
       await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
 
-      const amount = parseUsdt("5000"); // 5,000 USDT
-      const expectedFeeAmount = parseUsdt("0.5"); // 0.01% fee of 5,000 USDT
+      const amount = parseUsdt("6000"); // 6,000 USDT
 
       const feeAmount= await batch.getDepositFeeInTokens(amount, usdt.address);
 
-      expect(feeAmount).to.be.equal(expectedFeeAmount);
+      // expect that fee amount is the same as expected fee amount (0.6 USD = 0.6 USDT = 0.01% of 6,000 USDT)
+      expect(feeAmount).to.be.equal(parseUsdt("0.6"));
+    });
+
+    it("should return correct deposit fee amount depends when the deposit fee is set as fixed", async function () {
+      // set deposit fee as fixed (0.5 USD)
+      await batch.setDepositFeeSettings(depositFeeSettingsWithFixedFee);
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+
+      const amount = parseUsdt("700"); // 700 USDT
+
+      const feeAmount = await batch.getDepositFeeInTokens(amount, usdt.address);
+
+      // expect that fee amount is the same as the fixed fee amount (0.5 USD = 0.5 USDT)
+      expect(feeAmount).to.be.equal(parseUsdt("0.5"));
     });
   });
 
