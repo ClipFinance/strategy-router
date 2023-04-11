@@ -105,7 +105,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     {
         (
             StrategyRouter.TokenPrice[] memory supportedTokenPrices
-        ) = getSupportedTokensValueInUsd();
+        ) = getSupportedTokensWithPriceInUsd();
         return this.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
     }
 
@@ -128,7 +128,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function getSupportedTokensValueInUsd()
+    function getSupportedTokensWithPriceInUsd()
         public
         view
         returns (

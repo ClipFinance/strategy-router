@@ -59,7 +59,7 @@ library StrategyRouterLib {
     {
         (
             StrategyRouter.TokenPrice[] memory supportedTokenPrices
-        ) = batch.getSupportedTokensValueInUsd();
+        ) = batch.getSupportedTokensWithPriceInUsd();
 
         uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
 

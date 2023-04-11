@@ -195,10 +195,10 @@ describe("Test Batch", function () {
 
     });
 
-    describe("getSupportedTokensValueInUsd", function () {
+    describe("getSupportedTokensWithPriceInUsd", function () {
 
         it("0 supported tokens", async function () {
-            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
 
             expect(supportedTokenPrices.length).to.be.equal(0);
         });
@@ -209,10 +209,8 @@ describe("Test Batch", function () {
             let priceDecimals = (await oracle.getTokenUsdPrice(busd.address)).decimals;
             // setup supported tokens
             await router.addSupportedToken(busd);
-            // add fake strategies
-            await deployFakeStrategy({ router, token: busd });
 
-            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
 
             expect(supportedTokenPrices.length).to.be.equal(1);
             expect(supportedTokenPrices[0].price).to.be.equal(price);
@@ -239,12 +237,7 @@ describe("Test Batch", function () {
             await router.addSupportedToken(busd);
             await router.addSupportedToken(usdt);
 
-            // add fake strategies
-            await deployFakeStrategy({ router, token: busd });
-            await deployFakeStrategy({ router, token: usdc });
-            await deployFakeStrategy({ router, token: usdt });
-
-            let supportedTokenPrices = await batch.getSupportedTokensValueInUsd();
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
 
             expect(supportedTokenPrices.length).to.be.equal(3);
 
