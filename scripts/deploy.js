@@ -35,8 +35,7 @@ async function main() {
   FEE_PERCENT = 1000;
   INITIAL_DEPOSIT = parseUsdc("1");
 
-  const depositSettings = {
-    minUsdValue: parseUniform("0.15"), // 0.15 USD
+  const depositFeeSettings = {
     minFeeInUsd: parseUniform("0.15"), // 0.15 USD
     maxFeeInUsd: parseUniform("1"), // 1 USD
     feeInBps: 1, // is 0.01% in BPS
@@ -230,7 +229,7 @@ async function main() {
     router.address,
     receiptContract.address
   )).wait();
-  await (await batch.setDepositSettings(depositSettings)).wait();
+  await (await batch.setDepositFeeSettings(depositFeeSettings)).wait();
 
   // setup StrategyRouter 
   console.log("StrategyRouter settings setup...");
