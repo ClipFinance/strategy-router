@@ -259,11 +259,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         uint256 feeAmount = getDepositFeeInTokens(amount, depositToken);
 
-        if (feeAmount != 0) {
-            IERC20(depositToken).safeTransfer(depositFeeSettings.feeTreasury, feeAmount);
-            depositAmount = amount - feeAmount;
-        } else depositAmount = amount;
-
+        // set actual deposit amount depending on fee amount
+        if (feeAmount != 0) depositAmount = amount - feeAmount;
+        else depositAmount = amount;
 
         uint256 amountUniform = toUniform(depositAmount, depositToken);
 

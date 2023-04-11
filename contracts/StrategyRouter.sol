@@ -539,13 +539,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     function depositToBatch(address depositToken, uint256 _amount) external {
-        if (!supportsToken(depositToken)) revert UnsupportedToken();
-        IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
+        (uint256 depositAmount, uint256 depositFeeAmount) = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
 
-        (
-            uint256 depositAmount,
-            uint256 depositFeeAmount
-        ) = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
+        IERC20(depositToken).transferFrom(msg.sender, address(batch), depositAmount);
+
+        if (depositFeeAmount != 0) {
+            (,,,address feeTreasury) = batch.depositFeeSettings();
+            IERC20(depositToken).transferFrom(msg.sender, feeTreasury, depositFeeAmount);
+        }
 
         currentCycleDepositsCount++;
         if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;

@@ -249,7 +249,7 @@ describe("Test Batch", function () {
     it("should revert depositToBatch if token unsupported", async function () {
       await expect(
         router.depositToBatch(router.address, parseBusd("100"))
-      ).to.be.revertedWithCustomError(router, "UnsupportedToken");
+      ).to.be.revertedWithCustomError(batch, "UnsupportedToken");
     });
 
     it("should fire Deposit event with exact values (without fee) after deposit to the batch", async function () {
