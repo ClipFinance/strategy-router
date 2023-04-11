@@ -52,8 +52,7 @@ library StrategyRouterLib {
         returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
     {
         (
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices,
-            address[] memory _supportedTokens
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
         ) = batch.getSupportedTokensValueInUsd();
 
         uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
@@ -66,8 +65,7 @@ library StrategyRouterLib {
             strategies,
             idleStrategies,
             supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex,
-            _supportedTokens
+            strategyIndexToSupportedTokenIndex
         );
     }
 
@@ -75,8 +73,7 @@ library StrategyRouterLib {
         StrategyRouter.StrategyInfo[] storage strategies,
         StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
         StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-        uint256[] memory strategyIndexToSupportedTokenIndex,
-        address[] memory _supportedTokens
+        uint256[] memory strategyIndexToSupportedTokenIndex
     )
         public
         view
@@ -85,9 +82,9 @@ library StrategyRouterLib {
         uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
         balances = new uint256[](strategiesLength);
         for (uint256 i; i < strategiesLength; i++) {
-            address token = _supportedTokens[
+            address token = supportedTokenPrices[
                 strategyIndexToSupportedTokenIndex[i]
-            ];
+            ].token;
 
             uint256 balanceInUsd = IStrategy(strategies[i].strategyAddress).totalTokens();
 
@@ -100,10 +97,10 @@ library StrategyRouterLib {
             totalBalance += balanceInUsd;
         }
 
-        uint256 idleStrategiesLength = _supportedTokens.length;
+        uint256 idleStrategiesLength = supportedTokenPrices.length;
         idleBalances = new uint256[](idleStrategiesLength);
         for (uint256 i; i < idleStrategiesLength; i++) {
-            address token = _supportedTokens[i];
+            address token = supportedTokenPrices[i].token;
 
             uint256 balanceInUsd = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
 

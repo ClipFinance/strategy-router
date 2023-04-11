@@ -90,6 +90,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     struct TokenPrice {
         uint256 price;
         uint8 priceDecimals;
+        address token;
     }
 
     struct StrategyInfo {
@@ -231,15 +232,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // step 1
 
         (   
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-            address[] memory _supportedTokens
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
         ) = batch.getSupportedTokensValueInUsd();
         uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
 
-        (uint256 batchValueInUsd, ) = getBatchValueUsdWithoutOracleCalls(
-            supportedTokenPrices,
-            _supportedTokens
-        );
+        (uint256 batchValueInUsd, ) = getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
         uint256 _currentCycleId = currentCycleId;
 
         // step 2
@@ -251,9 +248,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         // step 3
         {
             // address[] memory _supportedTokens = getSupported_supportedTokens();
-            for (uint256 i = 0; i < _supportedTokens.length; i++) {
-                if (ERC20(_supportedTokens[i]).balanceOf(address(batch)) > 0) {
-                    cycles[_currentCycleId].prices[_supportedTokens[i]] = StrategyRouterLib.changeDecimals(
+            for (uint256 i = 0; i < supportedTokenPrices.length; i++) {
+                if (ERC20(supportedTokenPrices[i].token).balanceOf(address(batch)) > 0) {
+                    cycles[_currentCycleId].prices[supportedTokenPrices[i].token] = StrategyRouterLib.changeDecimals(
                         supportedTokenPrices[i].price,
                         supportedTokenPrices[i].priceDecimals,
                         UNIFORM_DECIMALS
@@ -274,8 +271,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             strategies,
             idleStrategies,
             supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex,
-            _supportedTokens
+            strategyIndexToSupportedTokenIndex
         );
 
         uint256[] memory depositAmountsInTokens = batch.rebalance();
@@ -297,8 +293,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             strategies,
             idleStrategies,
             supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex,
-            _supportedTokens
+            strategyIndexToSupportedTokenIndex
         );
 
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
@@ -423,13 +418,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @return totalBalance Total batch usd value.
     /// @return balances Array of usd value of token balances in the batch.
     function getBatchValueUsdWithoutOracleCalls(
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
-            address[] memory _supportedTokens
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
     ) public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batch.getBatchValueUsdWithoutOracleCalls(
-            supportedTokenPrices,
-            _supportedTokens
-        );
+        return batch.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
     }
 
     /// @notice Returns stored address of the `Exchange` contract.
