@@ -2,11 +2,11 @@ pragma solidity ^0.8.0;
 
 import "./DistortedWithdrawalMockStrategy.sol";
 
-// this strategy mocks situation when an external protocol withdraws amount less than the amount requested
+// this strategy mocks situation when an external protocol withdraws amount more than the amount requested
 // for withdrawal
-// e.g. is is requested to withdraw 100 BUSD from Dodo, but the actual withdrawn amount is 80 BUSD due to other
-// 20 BUSD locked by Dodo (not by Clip)
-contract UnderFulfilledWithdrawalMockStrategy is DistortedWithdrawalMockStrategy {
+// e.g. is is requested to withdraw 100 BUSD from Dodo, but the actual withdrawn amount is 120 BUSD swap profits
+// NOTE! has to get extra funds allocated to it to be able to serve overfulfillment
+contract OverFulfilledWithdrawalMockStrategy is DistortedWithdrawalMockStrategy {
     constructor(
         uint16 _distortedWithdrawalInBps,
         address _depositToken,
@@ -15,7 +15,7 @@ contract UnderFulfilledWithdrawalMockStrategy is DistortedWithdrawalMockStrategy
         uint256 _hardcapTargetInToken,
         uint16 _hardcapDeviationInBps
     ) DistortedWithdrawalMockStrategy(
-        true,
+        false,
         _distortedWithdrawalInBps,
         _depositToken,
         _rewardPerCompoundPeriodInBps,

@@ -16,7 +16,7 @@ import {SharesToken} from "./SharesToken.sol";
 import "./Batch.sol";
 import "./StrategyRouter.sol";
 
-// import "hardhat/console.sol";
+ import "hardhat/console.sol";
 
 library StrategyRouterLib {
     using SafeERC20 for IERC20;
@@ -49,7 +49,13 @@ library StrategyRouterLib {
     )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+        returns (
+            uint256 totalBalance,
+            uint256 totalStrategyBalance,
+            uint256 totalIdleStrategyBalance,
+            uint256[] memory balances,
+            uint256[] memory idleBalances
+        )
     {
         (
             StrategyRouter.TokenPrice[] memory supportedTokenPrices
@@ -59,6 +65,8 @@ library StrategyRouterLib {
 
         (
             totalBalance, 
+            totalStrategyBalance,
+            totalIdleStrategyBalance,
             balances, 
             idleBalances
         ) = getStrategiesValueWithoutOracleCalls(
@@ -77,7 +85,13 @@ library StrategyRouterLib {
     )
         public
         view
-        returns (uint256 totalBalance, uint256[] memory balances, uint256[] memory idleBalances)
+        returns (
+            uint256 totalBalance, 
+            uint256 totalStrategyBalance, 
+            uint256 totalIdleStrategyBalance, 
+            uint256[] memory balances, 
+            uint256[] memory idleBalances
+        )
     {
         uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
         balances = new uint256[](strategiesLength);
@@ -95,6 +109,7 @@ library StrategyRouterLib {
             balanceInUsd = toUniform(balanceInUsd, token);
             balances[i] = balanceInUsd;
             totalBalance += balanceInUsd;
+            totalStrategyBalance += balanceInUsd;
         }
 
         uint256 idleStrategiesLength = supportedTokenPrices.length;
@@ -109,6 +124,7 @@ library StrategyRouterLib {
             balanceInUsd = toUniform(balanceInUsd, token);
             idleBalances[i] = balanceInUsd;
             totalBalance += balanceInUsd;
+            totalIdleStrategyBalance += balanceInUsd;
         }
     }
 
@@ -311,7 +327,12 @@ library StrategyRouterLib {
                         // we do not care where withdrawn tokens will be allocated
                         uint256 withdrawnBalance = IStrategy(strategyDatas[i].strategyAddress)
                             .withdraw(balanceToWithdraw);
-                        balances[i] -= withdrawnBalance;
+                        // could happen if we withdrew more tokens than expected
+                        if (withdrawnBalance > balances[i]) {
+                            balances[i] = 0;
+                        } else {
+                            balances[i] -= withdrawnBalance;
+                        }
                         currentTokenDatas[strategyDatas[i].tokenIndexInSupportedTokens].currentBalance += withdrawnBalance;
                         withdrawnBalance = toUniform(
                             withdrawnBalance,
@@ -625,5 +646,53 @@ library StrategyRouterLib {
                 })
             );
         }
+    }
+
+    function _removeIdleStrategy(
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        Batch batch,
+        Exchange exchange,
+        StrategyRouter.StrategyInfo[] storage strategies,
+        uint256 allStrategiesWeightSum,
+        address tokenAddress
+    ) public {
+        StrategyRouter.IdleStrategyInfo memory idleStrategyToRemove;
+        for (uint256 i; i < idleStrategies.length; i++) {
+            if (tokenAddress == idleStrategies[i].depositToken) {
+                idleStrategyToRemove = idleStrategies[i];
+                idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
+                idleStrategies.pop();
+                // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
+                // so the shifted indexes must match
+                // but better to double check
+                // TODO add tests for idleStrategyLength = 0 after removal
+                if (
+                    idleStrategies.length != 0
+                    && i != idleStrategies.length
+                    && idleStrategies[i].depositToken != batch.getSupportedTokens()[i]
+                ) {
+                    revert StrategyRouter.IdleStrategySupportedTokenMismatch();
+                }
+                break;
+            }
+        }
+
+        if (IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll() != 0) {
+            address[] memory supportedTokens = batch.getSupportedTokens();
+            address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
+            supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
+            for (uint256 i; i < supportedTokens.length; i++) {
+                supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+            }
+            rebalanceStrategies(
+                exchange,
+                strategies,
+                allStrategiesWeightSum,
+                supportedTokensWithRemovedToken
+            );
+        }
+
+        // TODO test
+        Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
     }
 }

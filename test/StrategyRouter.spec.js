@@ -254,7 +254,12 @@ describe("Test StrategyRouter", function () {
 
     // deploy new farm
     const Farm = await ethers.getContractFactory("MockStrategy");
-    farm2 = await Farm.deploy(usdc.address, 10000);
+    farm2 = await Farm.deploy(
+      usdc.address,
+      10000,
+      usdc.parse((1_000_000).toString()),
+      500 // 5%
+    );
     await farm2.deployed();
     await farm2.transferOwnership(router.address);
 

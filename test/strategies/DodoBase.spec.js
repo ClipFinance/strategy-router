@@ -53,7 +53,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
 
       const dodoStrategy = await deployDodoStrategy({
         router: router.address,
-        token: depositToken.address,
+        token: depositToken,
         lpToken: lpToken.address,
         dodoToken: dodoToken.address,
         pool: dodoPool.address,
@@ -65,10 +65,19 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
       async function turnonWithdrawalPenaltyOnPool() {
         // sell counterToken to unbalance pool
         await counterToken.approve(dodoPool.address, MaxUint256);
-        if (isBase)
-          await dodoPool.buyBaseToken(parseCounterToken("1000000"), MaxUint256, []);
-        else
-          await dodoPool.sellBaseToken(parseCounterToken("1000000"), 0, []);
+        async function trade() {
+          if (isBase)
+            await dodoPool.buyBaseToken(parseCounterToken("300000"), MaxUint256, []);
+          else
+            await dodoPool.sellBaseToken(parseCounterToken("300000"), 0, []);
+        }
+        for (let i = 0; i < 15; i++) {
+          const tradeAmount = parseDepositToken("1000000");
+          const penalty = await getPenaltyAmount(tradeAmount);
+          if(penalty > 0) return;
+          await trade();
+        }
+        throw new Error("Was unable to set non zero penalty!");
       }
 
       async function setZeroWithdrawalPenaltyOnPool() {
@@ -154,7 +163,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
         const { owner, router, dodoToken, lpToken, dodoPool, dodoMine, } = await loadFixture(initialState);
         await expect(deployDodoStrategy({
           router: router.address,
-          token: router.address, // set invalid deposit token
+          token: lpToken, // set invalid deposit token
           lpToken: lpToken.address,
           dodoToken: dodoToken.address,
           pool: dodoPool.address,
@@ -202,7 +211,7 @@ function testSuite(depositTokenAddress, counterTokenAddress, poolAddress, dodoMi
         await depositToken.transfer(dodoStrategy.address, testAmount);
 
         await expect(
-          dodoStrategy.deposit(MaxUint256)
+          dodoStrategy.deposit(testAmount.add(parseDepositToken("10000")))
         ).to.be.revertedWithCustomError(dodoStrategy, "DepositAmountExceedsBalance");
 
       });
