@@ -320,12 +320,13 @@ describe("Test Batch", function () {
     });
 
     it("should fire Deposit event with exact values (with fee) after deposit", async function () {
-      const amount = parseBusd("100");
+      // Set price 1 BUSD = 1 USD
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      const amount = parseBusd("7000");
 
-      const {
-        depositAmount,
-        depositFeeAmount,
-      } = await calculateExpectedDepositStates(amount, busd.address);
+      // expected values
+      const depositFeeAmount = parseBusd("0.7"); // 0.1% of 7000 BUSD
+      const depositAmount = amount.sub(depositFeeAmount);
 
       await expect(
         router.depositToBatch(busd.address, amount)
@@ -340,15 +341,17 @@ describe("Test Batch", function () {
     });
 
     it("should deposit tokens with min deposit fee and set correct values to a receipt", async function () {
+      // Set price 1 BUSD = 1 USD
+      await oracle.setPrice(busd.address, parseBusd("1"));
+
       const amount = parseBusd("100");
 
-      const {
-        depositAmount,
-        depositAmountUniform,
-        depositFeeAmount,
-      } = await calculateExpectedDepositStates(amount, busd.address);
-
       await router.depositToBatch(busd.address, amount);
+
+      // expected values
+      const minFeeInBusd = parseBusd("0.15"); // min fee is 0.15 USD = 0.15 BUSD
+      const depositAmount = amount.sub(minFeeInBusd);
+      const depositAmountUniform = await toUniform(depositAmount, busd.address);
 
       // Check receipt
       const newReceipt = await receiptContract.getReceipt(1);
@@ -361,8 +364,8 @@ describe("Test Batch", function () {
       const batchBalanceAfter = await busd.balanceOf(batch.address);
       const treasuryBalanceAfter = await busd.balanceOf(defaultDepositFeeSettings.feeTreasury);
       expect(batchBalanceAfter).to.be.equal(depositAmount);
-      expect(treasuryBalanceAfter).to.be.equal(depositFeeAmount);
-      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.closeTo(defaultDepositFeeSettings.minFeeInUsd, USD_DELTA);
+      expect(treasuryBalanceAfter).to.be.equal(minFeeInBusd);
+      expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(defaultDepositFeeSettings.minFeeInUsd);
     });
 
     it("should take the minimum fee value ($0.15) until $1,500 ($1,000)", async function () {
@@ -753,37 +756,4 @@ describe("Test Batch", function () {
     );
   };
 
-  const calculateExpectedDepositStates = async (amount, depositTokenAddress) => {
-    const value = await getTokenValue(depositTokenAddress, amount);
-    const defaultDepositFeeSettings = await batch.depositFeeSettings();
-
-    if (defaultDepositFeeSettings.feeInBps.eq(ZERO_BN) || value.eq(ZERO_BN)) return {
-      depositAmount: amount,
-      depositAmountUniform: await toUniform(amount, depositTokenAddress),
-      depositFeeAmount: ZERO_BN,
-      depositValue: value,
-      depositFeeValue: ZERO_BN
-    };
-
-    let depositFeeValue = value.mul(defaultDepositFeeSettings.feeInBps).div(MAX_BPS);
-    if (depositFeeValue.lt(defaultDepositFeeSettings.minFeeInUsd)) {
-        depositFeeValue = defaultDepositFeeSettings.minFeeInUsd;
-    } else if (depositFeeValue.gt(defaultDepositFeeSettings.maxFeeInUsd)) {
-        depositFeeValue = defaultDepositFeeSettings.maxFeeInUsd;
-    }
-
-    const depositValue = value.sub(depositFeeValue);
-
-    const depositFeeAmount = await getTokenAmount(depositTokenAddress, depositFeeValue);
-    const depositAmount = amount.sub(depositFeeAmount);
-
-    return {
-      depositAmount,
-      depositAmountUniform: await toUniform(depositAmount, depositTokenAddress),
-      depositFeeAmount,
-      depositValue,
-      depositFeeValue
-    };
-
-  }
 });
