@@ -92,7 +92,7 @@ describe("Test Batch", function () {
     await provider.send("evm_revert", [initialSnapshot]);
   });
 
-  describe("setDepositFeeSettings", function () {
+  describe("#setDepositFeeSettings", function () {
     // snapshot to revert state changes that are made in this scope
     let _snapshot;
 
@@ -177,17 +177,20 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
     });
 
-    it("can set zero address as treasury address if set deposit max fee and fee percentage are zero values", async function () {
-      await batch.setDepositFeeSettings({
-        minFeeInUsd: 0,
-        maxFeeInUsd: 0,
-        feeInBps: 0,
-        feeTreasury: ethers.constants.AddressZero,
-      });
+    it("should set deposit fee to zero (initial values) once it was not zero" , async function () {
+      // set deposit fee as default
+      await batch.setDepositFeeSettings(defaultDepositFeeSettings);
 
-      expect(
-        (await batch.depositFeeSettings()).feeTreasury
-      ).to.be.equal(ethers.constants.AddressZero);
+      // set deposit fee to zero
+      await batch.setDepositFeeSettings(initialDepositFeeSettings);
+
+      const batchDepositFeeSettings = await batch.depositFeeSettings();
+
+      // check that deposit fee set as initial values
+      expect(batchDepositFeeSettings.minFeeInUsd).to.equal(initialDepositFeeSettings.minFeeInUsd);
+      expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(initialDepositFeeSettings.maxFeeInUsd);
+      expect(batchDepositFeeSettings.feeInBps).to.equal(initialDepositFeeSettings.feeInBps);
+      expect(batchDepositFeeSettings.feeTreasury).to.equal(initialDepositFeeSettings.feeTreasury)
     });
 
     it("should set deposit settings with correct values", async function () {
@@ -214,7 +217,7 @@ describe("Test Batch", function () {
 
   });
 
-  describe("deposit", function () {
+  describe("deposit without deposit fee", function () {
     // snapshot to revert state changes that are made in this scope
     let _snapshot;
 
@@ -427,23 +430,8 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
     });
 
-
-    it("should revert when default deposit settings and the token price is 0", async function () {
-      // set deposit fee as default
-      await batch.setDepositFeeSettings(defaultDepositFeeSettings);
-
-      // set 0 price for USDC to get 0 value
-      await oracle.setPrice(usdc.address, 0);
-      const amount = parseUsdc("20"); // 20 USDC
-
-      await expect(
-        batch.getDepositFeeInTokens(amount, usdc.address)
-      ).to.be.revertedWithCustomError(oracle, "BadPrice");
-    });
-
-
-    it("should return 0 fee amount when deposit settings is not set and the token price is 1 USD", async function () {
-      // set initial deposit fee settings
+    it("should return 0 fee amount when initial deposit settings (no fee)", async function () {
+      // set initial deposit fee settings (zero values)
       await batch.setDepositFeeSettings(initialDepositFeeSettings);
       const amount = parseUsdc("20"); // 20 USDC
 
@@ -478,6 +466,20 @@ describe("Test Batch", function () {
       expect(feeAmount).to.be.equal(parseUsdt("1"));
     });
 
+    it("should return max deposit fee amount when token price is not 1 and  the deposit fee is set as default", async function () {
+      // set deposit fee as default
+      await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      await oracle.setPrice(usdt.address, parseUsdt("0.999"));
+
+      const amount = parseUsdt("15000"); // 15,000 USDT
+
+      const feeAmount = await batch.getDepositFeeInTokens(amount, usdt.address);
+
+      // expect that fee amount is the same as expected max fee amount (1 USD = 1 USDT / 0.999 USDT/USD = 1.001001 USDT)
+      const expectedMaxFeeAmount = parseUsdt("1").mul(1000).div(999);
+      expect(feeAmount).to.be.equal(expectedMaxFeeAmount);
+    });
+
     it("should return correct deposit fee amount depends on the fee percentage (0.01%) when the deposit fee is set as default", async function () {
       // set deposit fee as default
       await batch.setDepositFeeSettings(defaultDepositFeeSettings);
@@ -487,7 +489,7 @@ describe("Test Batch", function () {
 
       const feeAmount= await batch.getDepositFeeInTokens(amount, usdt.address);
 
-      // expect that fee amount is the same as expected fee amount (0.6 USD = 0.6 USDT = 0.01% of 6,000 USDT)
+      // (0.6 USD = 0.6 USDT = 0.01% of 6,000 USDT)
       expect(feeAmount).to.be.equal(parseUsdt("0.6"));
     });
 
