@@ -147,19 +147,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function getStrategyIndexToSupportedTokenIndexMap() 
-        public 
-        view 
-        returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
-    {
-        strategyIndexToSupportedTokenIndex = new uint256[](router.getStrategiesCount());
-        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
-            strategyIndexToSupportedTokenIndex[i] = supportedTokens.indexOf(
-                router.getStrategyDepositToken(i)
-            );
-        }
-    }
-
     // User Functions
 
     /// @notice Withdraw tokens from batch while receipts are in batch.

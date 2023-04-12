@@ -234,7 +234,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         (   
             StrategyRouter.TokenPrice[] memory supportedTokenPrices
         ) = batch.getSupportedTokensWithPriceInUsd();
-        uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
+        uint256[] memory strategyIndexToSupportedTokenIndex = 
+            StrategyRouterLib.getStrategyIndexToSupportedTokenIndexMap(
+                supportedTokenPrices,
+                strategies
+            );
 
         (uint256 batchValueInUsd, ) = batch.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
         

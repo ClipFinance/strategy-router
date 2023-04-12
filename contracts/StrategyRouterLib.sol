@@ -42,6 +42,26 @@ library StrategyRouterLib {
         bool isBalanceInsufficient;
     }
 
+    function getStrategyIndexToSupportedTokenIndexMap(
+        StrategyRouter.TokenPrice[] memory supportedTokenPrices,
+        StrategyRouter.StrategyInfo[] storage strategies
+    ) 
+        public 
+        view 
+        returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
+    {
+        strategyIndexToSupportedTokenIndex = new uint256[](strategies.length);
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
+            for (uint256 j; j < supportedTokenPrices.length; j++) {
+                if (strategies[i].depositToken == supportedTokenPrices[j].token) {
+                    strategyIndexToSupportedTokenIndex[i] = j;
+                    break;
+                }
+            }
+        }
+    }
+
+
     function getStrategiesValue(
         Batch batch,
         StrategyRouter.StrategyInfo[] storage strategies,
@@ -61,7 +81,10 @@ library StrategyRouterLib {
             StrategyRouter.TokenPrice[] memory supportedTokenPrices
         ) = batch.getSupportedTokensWithPriceInUsd();
 
-        uint256[] memory strategyIndexToSupportedTokenIndex = batch.getStrategyIndexToSupportedTokenIndexMap();
+        uint256[] memory strategyIndexToSupportedTokenIndex = getStrategyIndexToSupportedTokenIndexMap(
+            supportedTokenPrices,
+            strategies
+        );
 
         (
             totalBalance, 

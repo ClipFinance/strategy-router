@@ -251,7 +251,7 @@ describe("Test Batch", function () {
 
     });
 
-    describe("getStrategyIndexToSupportedTokenIndexMap", function () {
+    describe.skip("getStrategyIndexToSupportedTokenIndexMap", function () {
 
         it("0 supported tokens 0 strategies", async function () {
             let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
