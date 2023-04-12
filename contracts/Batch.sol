@@ -131,15 +131,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             revert NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
         }
 
+        // Ensure that treasury address is valid when there is a possibility that fee will be charged
         if (
-            (
-                // Ensure that either maxFeeInUsd or feeInBps is set
-                (_depositFeeSettings.maxFeeInUsd != 0 && _depositFeeSettings.feeInBps != 0) ||
-                // Or ensure that minFeeInUsd set as fixed fee when feeInBps is not set
-                (_depositFeeSettings.minFeeInUsd != 0 && _depositFeeSettings.feeInBps == 0)
-            )
-            &&
-            _depositFeeSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
+            (_depositFeeSettings.feeInBps != 0 || _depositFeeSettings.minFeeInUsd != 0)
+            && _depositFeeSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
         ) revert DepositFeeTreasuryNotSet();
 
         depositFeeSettings = _depositFeeSettings;
@@ -256,17 +251,15 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     ) external onlyStrategyRouter returns (uint256 depositAmount, uint256 depositFeeAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
 
-        uint256 feeAmount = getDepositFeeInTokens(amount, depositToken);
+        depositFeeAmount = getDepositFeeInTokens(amount, depositToken);
 
         // set actual deposit amount depending on fee amount
-        if (feeAmount != 0) depositAmount = amount - feeAmount;
+        if (depositFeeAmount != 0) depositAmount = amount - depositFeeAmount;
         else depositAmount = amount;
 
-        uint256 amountUniform = toUniform(depositAmount, depositToken);
+        uint256 depositAmountUniform = toUniform(depositAmount, depositToken);
 
-        receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
-
-        return (depositAmount, feeAmount);
+        receiptContract.mint(_currentCycleId, depositAmountUniform, depositToken, depositor);
     }
 
     function transfer(

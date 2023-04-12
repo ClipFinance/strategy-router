@@ -148,7 +148,7 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeePercentExceedsFeePercentageThreshold");
     });
 
-    it("should revert when maxFeeInUsd has not a value if feeInBps is set", async function () {
+    it("should revert when maxFeeInUsd is 0 and feeInBps is set", async function () {
       await expect(
         batch.setDepositFeeSettings({
           ...defaultDepositFeeSettings,
@@ -159,7 +159,7 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "NotSetMaxFeeInUsdWhenFeeInBpsIsSet");
     });
 
-    it("should revert when set zero address as fee treasury with max fee and fee percentage values are not zero", async function () {
+    it("should revert when set zero address as fee treasury and fee percentage values are not zero", async function () {
       await expect(
         batch.setDepositFeeSettings({
           ...defaultDepositFeeSettings,
@@ -168,7 +168,7 @@ describe("Test Batch", function () {
       ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
     });
 
-    it("should revert if treasury address is not set when set min fee as a fixed fee and fee percentage is zero", async function () {
+    it("should revert when set zero address as fee treasury amd min fee set as a fixed fee", async function () {
       await expect(
         batch.setDepositFeeSettings({
           ...depositFeeSettingsWithFixedFee,
