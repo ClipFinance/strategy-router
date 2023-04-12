@@ -269,8 +269,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
-
-        // step 5
         uint256 totalShares = sharesToken.totalSupply();
         (uint256 strategiesBalanceAfterCompoundInUsd, , , , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
             strategies,
@@ -279,8 +277,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             strategyIndexToSupportedTokenIndex
         );
 
-        uint256[] memory depositAmountsInTokens = batch.rebalance();
         emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
+
+        // step 5
+        uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
         for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
