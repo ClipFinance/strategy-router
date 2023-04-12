@@ -1,9 +1,11 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { setupCore, setupFakeTokens, setupTestParams, setupTokensLiquidityOnPancake, deployFakeStrategy } = require("./shared/commonSetup");
-const { parseUniform, saturateTokenBalancesInStrategies } = require("./utils");
+const { parseUniform, saturateTokenBalancesInStrategies, deploy } = require("./utils");
 const { applySlippageInBps, convertFromUsdToTokenAmount } = require("./utils");
 const { constants } = require("@openzeppelin/test-helpers");
+const { loadFixture, impersonateAccount } = require("@nomicfoundation/hardhat-network-helpers");
+const { smock } = require('@defi-wonderland/smock');
 
 
 
@@ -393,4 +395,109 @@ describe("Test StrategyRouter", function () {
     });
 
   }); 
+
+  describe("#getStrategyIndexToSupportedTokenIndexMap", function () {
+      let libTest;
+      let localSnapshot;
+      beforeEach(async function() {
+          localSnapshot = await provider.send("evm_snapshot");
+
+          let lib = await deploy("StrategyRouterLib");
+          libTest = await ethers.getContractFactory("StrategyRouterLibTest", {
+            libraries: {
+              StrategyRouterLib: lib.address,
+            },
+          });
+          libTest = await libTest.deploy();
+          libTest = await libTest.deployed();
+      });
+
+      afterEach(async function () {
+        await provider.send("evm_revert", [localSnapshot]);
+      });
+
+      it("0 supported tokens 0 strategies", async function () {
+          let indexMap = await libTest.getStrategyIndexToSupportedTokenIndexMap();
+          expect(indexMap.length).to.be.equal(0);
+      });
+
+      it("1 supported tokens 0 strategies", async function () {
+          let supportedTokenPrices = [
+            { token: busd.address, price: 0, priceDecimals: 0 },
+          ]
+          await libTest.setSupportedTokenPrices(supportedTokenPrices);
+
+          let indexMap = await libTest.getStrategyIndexToSupportedTokenIndexMap();
+
+          expect(indexMap.length).to.be.equal(0);
+      });
+
+      it("1 supported token 1 strategy", async function () {
+          let supportedTokenPrices = [
+            { token: busd.address, price: 0, priceDecimals: 0 },
+          ]
+          await libTest.setSupportedTokenPrices(supportedTokenPrices);
+
+          let strategies = [
+            { depositToken: busd.address, strategyAddress: ethers.constants.AddressZero, weight: 0 },
+          ]
+          await libTest.setStrategies(strategies);
+
+          let indexMap = await libTest.getStrategyIndexToSupportedTokenIndexMap();
+
+          let strategyIndex = 0;
+          let supportedTokenIndex = 0;
+          expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
+          expect(indexMap.length).to.be.equal(1);
+      });
+
+      it("2 supported token 1 strategy", async function () {
+          let supportedTokenPrices = [
+            { token: usdc.address, price: 0, priceDecimals: 0 },
+            { token: busd.address, price: 0, priceDecimals: 0 },
+          ]
+          await libTest.setSupportedTokenPrices(supportedTokenPrices);
+
+          let strategies = [
+            { depositToken: busd.address, strategyAddress: ethers.constants.AddressZero, weight: 0 },
+          ]
+          await libTest.setStrategies(strategies);
+
+          let indexMap = await libTest.getStrategyIndexToSupportedTokenIndexMap();
+
+          let strategyIndex = 0;
+          let supportedTokenIndex = 1;
+          expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
+          expect(indexMap.length).to.be.equal(1);
+      });
+
+      it("2 supported token 3 strategy", async function () {
+          let supportedTokenPrices = [
+            { token: usdc.address, price: 0, priceDecimals: 0 },
+            { token: busd.address, price: 0, priceDecimals: 0 },
+          ]
+          await libTest.setSupportedTokenPrices(supportedTokenPrices);
+
+          let strategies = [
+            { depositToken: busd.address, strategyAddress: ethers.constants.AddressZero, weight: 0 },
+            { depositToken: usdc.address, strategyAddress: ethers.constants.AddressZero, weight: 0 },
+            { depositToken: busd.address, strategyAddress: ethers.constants.AddressZero, weight: 0 },
+          ]
+          await libTest.setStrategies(strategies);
+
+          let indexMap = await libTest.getStrategyIndexToSupportedTokenIndexMap();
+
+          let strategyIndex = 0;
+          let supportedTokenIndex = 1;
+          expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
+          strategyIndex = 1;
+          supportedTokenIndex = 0;
+          expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
+          strategyIndex = 2;
+          supportedTokenIndex = 1;
+          expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
+          expect(indexMap.length).to.be.equal(3);
+      });
+
+  });
 });

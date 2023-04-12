@@ -56,7 +56,7 @@ describe("Test Batch", function () {
         await provider.send("evm_revert", [initialSnapshot]);
     });
 
-    describe("deposit", function () {
+    describe("#deposit", function () {
         // snapshot to revert state changes that are made in this scope
         let _snapshot;
 
@@ -151,7 +151,7 @@ describe("Test Batch", function () {
         });
     });
 
-    describe("getBatchTotalUsdValue", function () {
+    describe("#getBatchTotalUsdValue", function () {
 
         it("happy paths: 1 supported token", async function () {
             await oracle.setPrice(busd.address, parseBusd("0.5"));
@@ -195,7 +195,7 @@ describe("Test Batch", function () {
 
     });
 
-    describe("getSupportedTokensWithPriceInUsd", function () {
+    describe("#getSupportedTokensWithPriceInUsd", function () {
 
         it("0 supported tokens", async function () {
             let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
@@ -251,68 +251,7 @@ describe("Test Batch", function () {
 
     });
 
-    describe.skip("getStrategyIndexToSupportedTokenIndexMap", function () {
-
-        it("0 supported tokens 0 strategies", async function () {
-            let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
-
-            expect(indexMap.length).to.be.equal(0);
-        });
-
-        it("1 supported tokens 0 strategies", async function () {
-            await router.addSupportedToken(busd);
-
-            let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
-
-            expect(indexMap.length).to.be.equal(0);
-        });
-
-        it("1 supported token 1 strategy", async function () {
-            await router.addSupportedToken(busd);
-            await deployFakeStrategy({ router, token: busd });
-            let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
-            expect(indexMap.length).to.be.equal(1);
-
-            let strategyIndex = 0;
-            let supportedTokenIndex = 0;
-            expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
-        });
-
-        it("2 supported token 1 strategy", async function () {
-            await router.addSupportedToken(usdc);
-            await router.addSupportedToken(busd);
-            await deployFakeStrategy({ router, token: busd });
-            let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
-
-            expect(indexMap.length).to.be.equal(1);
-            let strategyIndex = 0;
-            let supportedTokenIndex = 1;
-            expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
-        });
-
-        it("2 supported token 3 strategy", async function () {
-            await router.addSupportedToken(usdc);
-            await router.addSupportedToken(busd);
-            await deployFakeStrategy({ router, token: busd });
-            await deployFakeStrategy({ router, token: usdc });
-            await deployFakeStrategy({ router, token: busd });
-            let indexMap = await batch.getStrategyIndexToSupportedTokenIndexMap();
-
-            expect(indexMap.length).to.be.equal(3);
-            let strategyIndex = 0;
-            let supportedTokenIndex = 1;
-            expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
-            strategyIndex = 1;
-            supportedTokenIndex = 0;
-            expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
-            strategyIndex = 2;
-            supportedTokenIndex = 1;
-            expect(indexMap[strategyIndex]).to.be.equal(supportedTokenIndex);
-        });
-
-    });
-
-    describe("withdraw", function () {
+    describe("#withdraw", function () {
 
         // snapshot to revert state changes that are made in this scope
         let _snapshot;
@@ -385,9 +324,9 @@ describe("Test Batch", function () {
 
     });
 
-    describe("setSupportedToken", function () {
+    describe("#setSupportedToken", function () {
 
-        it("should add supported token", async function () {
+        it("should add supported tok en", async function () {
             await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${usdt.address}`
