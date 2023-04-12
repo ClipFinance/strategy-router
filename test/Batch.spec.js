@@ -310,29 +310,6 @@ describe("Test Batch", function () {
       await provider.send("evm_revert", [_snapshot]);
     });
 
-    it("should revert when min deposit fee ($0.15) exceeds user deposit amount with default deposit settings", async function () {
-      // Set price 1 USDC = 1 USD
-      await oracle.setPrice(usdc.address, parseUsdc("1"));
-
-      const amount = parseUsdc("0.149"); // 0.149 USDC = 0.149 USD < 0.15 USD
-
-      await expect(
-        router.depositToBatch(usdc.address, amount)
-      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
-    });
-
-    it("should revert when min deposit fee ($0.15) equal to user deposit amount with default deposit settings", async function () {
-      // Set price 1 USDC = 1 USD
-      await oracle.setPrice(usdc.address, parseUsdc("1"));
-
-      const amount = parseUsdc("0.15"); // 0.15 USDC = 0.15 USD
-
-      await expect(
-        router.depositToBatch(usdc.address, amount)
-      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
-    });
-
-
     it("should fire Deposit event with exact values (with fee) after deposit", async function () {
       // Set price 1 BUSD = 1 USD
       await oracle.setPrice(busd.address, parseBusd("1"));
@@ -422,24 +399,52 @@ describe("Test Batch", function () {
     });
   });
 
-  describe("getDepositFeeInTokens", function () {
+  describe("#getDepositFeeInTokens", function () {
 
-    it("should return 0 fee amount when deposit settings is not set and the token price is 1 USD", async function () {
-      // set initial deposit fee settings
-      await batch.setDepositFeeSettings(initialDepositFeeSettings);
-      const amount = parseUsdc("20"); // 20 USDC
+    it("should revert when min deposit fee ($0.15) exceeds user deposit amount with default deposit settings", async function () {
+      // set deposit fee as default
+      await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      // set price 1 USDC = 1 USD
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
 
-      const feeAmount = await batch.getDepositFeeInTokens(amount, usdc.address);
+      const amount = parseUsdc("0.149"); // 0.149 USDC = 0.149 USD < 0.15 USD
 
-      expect(feeAmount).to.be.equal(0);
+      await expect(
+        batch.getDepositFeeInTokens(amount, usdc.address)
+      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
     });
 
-    it("should return 0 deposit fee amount when default deposit settings and the token price is 0", async function () {
+    it("should revert when min deposit fee ($0.15) equal to user deposit amount with default deposit settings", async function () {
+      // set deposit fee as default
+      await batch.setDepositFeeSettings(defaultDepositFeeSettings);
+      // set price 1 USDC = 1 USD
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const amount = parseUsdc("0.15"); // 0.15 USDC = 0.15 USD
+
+      await expect(
+        batch.getDepositFeeInTokens(amount, usdc.address)
+      ).to.be.revertedWithCustomError(batch, "DepositFeeExceedsDepositAmountOrTheyAreEqual");
+    });
+
+
+    it("should revert when default deposit settings and the token price is 0", async function () {
       // set deposit fee as default
       await batch.setDepositFeeSettings(defaultDepositFeeSettings);
 
       // set 0 price for USDC to get 0 value
       await oracle.setPrice(usdc.address, 0);
+      const amount = parseUsdc("20"); // 20 USDC
+
+      await expect(
+        batch.getDepositFeeInTokens(amount, usdc.address)
+      ).to.be.revertedWithCustomError(oracle, "BadPrice");
+    });
+
+
+    it("should return 0 fee amount when deposit settings is not set and the token price is 1 USD", async function () {
+      // set initial deposit fee settings
+      await batch.setDepositFeeSettings(initialDepositFeeSettings);
       const amount = parseUsdc("20"); // 20 USDC
 
       const feeAmount = await batch.getDepositFeeInTokens(amount, usdc.address);
@@ -633,7 +638,7 @@ describe("Test Batch", function () {
     });
   });
 
-  describe("setSupportedToken", function () {
+  describe("#setSupportedToken", function () {
     it("should add supported token", async function () {
       await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
       expect((await router.getSupportedTokens()).toString()).to.be.equal(

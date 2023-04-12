@@ -186,7 +186,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     {
         // convert deposit amount to USD
         (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        if (tokenUsdPrice == 0) return 0; // token is not supported by oracle
         uint256 depositAmountInUsd = (depositAmount * tokenUsdPrice) / 10**oraclePriceDecimals;
         depositAmountInUsd = toUniform(depositAmountInUsd, depositToken);
 
