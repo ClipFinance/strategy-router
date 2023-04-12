@@ -136,8 +136,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         )
     {
         address[] memory _supportedTokens = getSupportedTokens();
-        supportedTokenPrices = new StrategyRouter.TokenPrice[](_supportedTokens.length);
-        for (uint256 i; i < supportedTokenPrices.length; i++) {
+        uint256 supportedTokensLength = _supportedTokens.length;
+        supportedTokenPrices = new StrategyRouter.TokenPrice[](supportedTokensLength);
+        for (uint256 i; i < supportedTokensLength; i++) {
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(_supportedTokens[i]);
             supportedTokenPrices[i] = StrategyRouter.TokenPrice({
                 price: price,
