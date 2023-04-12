@@ -86,20 +86,20 @@ module.exports = {
             runs: 200,
           },
           evmVersion: "istanbul",
-          // outputSelection: {
-          //   "*": {
-          //     "": ["ast"],
-          //     "*": [
-          //       "evm.bytecode.object",
-          //       "evm.deployedBytecode.object",
-          //       "abi",
-          //       "evm.bytecode.sourceMap",
-          //       "evm.deployedBytecode.sourceMap",
-          //       "metadata",
-          //       "storageLayout",
-          //     ],
-          //   },
-          // },
+          outputSelection: {
+            "*": {
+              "": ["ast"],
+              "*": [
+                "evm.bytecode.object",
+                "evm.deployedBytecode.object",
+                "abi",
+                "evm.bytecode.sourceMap",
+                "evm.deployedBytecode.sourceMap",
+                "metadata",
+                "storageLayout",
+              ],
+            },
+          },
         },
       },
       {

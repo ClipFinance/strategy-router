@@ -51,8 +51,10 @@ library StrategyRouterLib {
         returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
     {
         strategyIndexToSupportedTokenIndex = new uint256[](strategies.length);
-        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
-            for (uint256 j; j < supportedTokenPrices.length; j++) {
+        uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
+        uint256 supportedTokensLength = supportedTokenPrices.length;
+        for (uint256 i; i < strategiesLength; i++) {
+            for (uint256 j; j < supportedTokensLength; j++) {
                 if (strategies[i].depositToken == supportedTokenPrices[j].token) {
                     strategyIndexToSupportedTokenIndex[i] = j;
                     break;
