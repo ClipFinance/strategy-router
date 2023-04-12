@@ -219,17 +219,14 @@ describe("Test Batch", function () {
         });
 
         it("3 supported token", async function () {
-
-            let price = parseBusd("0.5");
             let testData = [
-                { token: usdc, price: parseBusd("0.7"), priceDecimals: 0 },
-                { token: busd, price: parseBusd("0.5"), priceDecimals: 0 },
-                { token: usdt, price: parseBusd("0.8"), priceDecimals: 0 },
+                { token: usdc, price: parseUsdc("0.7"), priceDecimals: await usdc.decimals() },
+                { token: busd, price: parseBusd("0.5"), priceDecimals: await busd.decimals() },
+                { token: usdt, price: parseUsdt("0.8"), priceDecimals: await usdt.decimals() },
             ]
 
             for (let i = 0; i < testData.length; i++) {
                 await oracle.setPrice(testData[i].token.address, testData[i].price);
-                testData[i].priceDecimals = (await oracle.getTokenUsdPrice(testData[i].token.address)).decimals;
             }
 
             // setup supported tokens 
