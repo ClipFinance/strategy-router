@@ -526,6 +526,59 @@ describe("Test Batch", function () {
     });
   });
 
+    describe("#getSupportedTokensWithPriceInUsd", function () {
+
+        it("0 supported tokens", async function () {
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(0);
+        });
+
+        it("1 supported token", async function () {
+            let price = parseBusd("0.5");
+            await oracle.setPrice(busd.address, price);
+            let priceDecimals = (await oracle.getTokenUsdPrice(busd.address)).decimals;
+            // setup supported tokens
+            await router.addSupportedToken(busd);
+
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(1);
+            expect(supportedTokenPrices[0].price).to.be.equal(price);
+            expect(supportedTokenPrices[0].token).to.be.equal(busd.address);
+            expect(supportedTokenPrices[0].priceDecimals).to.be.equal(priceDecimals);
+        });
+
+        it("3 supported token", async function () {
+            let testData = [
+                { token: usdc, price: parseUsdc("0.7"), priceDecimals: await usdc.decimals() },
+                { token: busd, price: parseBusd("0.5"), priceDecimals: await busd.decimals() },
+                { token: usdt, price: parseUsdt("0.8"), priceDecimals: await usdt.decimals() },
+            ]
+
+            for (let i = 0; i < testData.length; i++) {
+                await oracle.setPrice(testData[i].token.address, testData[i].price);
+            }
+
+            // setup supported tokens 
+            await router.addSupportedToken(usdc);
+            await router.addSupportedToken(busd);
+            await router.addSupportedToken(usdt);
+
+            let supportedTokenPrices = await batch.getSupportedTokensWithPriceInUsd();
+
+            expect(supportedTokenPrices.length).to.be.equal(3);
+
+            for (let i = 0; i < testData.length; i++) {
+                expect(supportedTokenPrices[i].price).to.be.equal(testData[i].price);
+                expect(supportedTokenPrices[i].token).to.be.equal(testData[i].token.address);
+                expect(supportedTokenPrices[i].priceDecimals).to.be.equal(testData[i].priceDecimals);
+            }
+            
+        });
+
+    });
+
   describe("withdraw", function () {
     // snapshot to revert state changes that are made in this scope
     let _snapshot;

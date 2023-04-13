@@ -150,16 +150,48 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
     {
-        supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
-        for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
-            address token = supportedTokens.at(i);
-            uint256 balance = IERC20(token).balanceOf(address(this));
+        (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
+        ) = getSupportedTokensWithPriceInUsd();
+        return this.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
+    }
 
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balance = ((balance * price) / 10**priceDecimals);
+    function getBatchValueUsdWithoutOracleCalls(
+        StrategyRouter.TokenPrice[] calldata supportedTokenPrices
+    )
+        public
+        view
+        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
+    {
+        supportedTokenBalancesUsd = new uint256[](supportedTokenPrices.length);
+        for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
+            address token = supportedTokenPrices[i].token;
+            uint256 balance = ERC20(token).balanceOf(address(this));
+
+            balance = ((balance * supportedTokenPrices[i].price) / 10**supportedTokenPrices[i].priceDecimals);
             balance = toUniform(balance, token);
             supportedTokenBalancesUsd[i] = balance;
             totalBalanceUsd += balance;
+        }
+    }
+
+    function getSupportedTokensWithPriceInUsd()
+        public
+        view
+        returns (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
+        )
+    {
+        address[] memory _supportedTokens = getSupportedTokens();
+        uint256 supportedTokensLength = _supportedTokens.length;
+        supportedTokenPrices = new StrategyRouter.TokenPrice[](supportedTokensLength);
+        for (uint256 i; i < supportedTokensLength; i++) {
+            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(_supportedTokens[i]);
+            supportedTokenPrices[i] = StrategyRouter.TokenPrice({
+                price: price,
+                priceDecimals: priceDecimals,
+                token: _supportedTokens[i]
+            });
         }
     }
 

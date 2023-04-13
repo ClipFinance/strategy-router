@@ -42,8 +42,30 @@ library StrategyRouterLib {
         bool isBalanceInsufficient;
     }
 
+    function getStrategyIndexToSupportedTokenIndexMap(
+        StrategyRouter.TokenPrice[] memory supportedTokenPrices,
+        StrategyRouter.StrategyInfo[] storage strategies
+    ) 
+        public 
+        view 
+        returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
+    {
+        uint256 strategiesLength = strategies.length;
+        strategyIndexToSupportedTokenIndex = new uint256[](strategiesLength);
+        uint256 supportedTokensLength = supportedTokenPrices.length;
+        for (uint256 i; i < strategiesLength; i++) {
+            for (uint256 j; j < supportedTokensLength; j++) {
+                if (strategies[i].depositToken == supportedTokenPrices[j].token) {
+                    strategyIndexToSupportedTokenIndex[i] = j;
+                    break;
+                }
+            }
+        }
+    }
+
+
     function getStrategiesValue(
-        IUsdOracle oracle,
+        Batch batch,
         StrategyRouter.StrategyInfo[] storage strategies,
         StrategyRouter.IdleStrategyInfo[] storage idleStrategies
     )
@@ -57,34 +79,71 @@ library StrategyRouterLib {
             uint256[] memory idleBalances
         )
     {
-        uint256 strategiesLength = strategies.length;
+        (
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
+        ) = batch.getSupportedTokensWithPriceInUsd();
+
+        uint256[] memory strategyIndexToSupportedTokenIndex = getStrategyIndexToSupportedTokenIndexMap(
+            supportedTokenPrices,
+            strategies
+        );
+
+        (
+            totalBalance, 
+            totalStrategyBalance,
+            totalIdleStrategyBalance,
+            balances, 
+            idleBalances
+        ) = getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
+            strategyIndexToSupportedTokenIndex
+        );
+    }
+
+    function getStrategiesValueWithoutOracleCalls(
+        StrategyRouter.StrategyInfo[] storage strategies,
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        StrategyRouter.TokenPrice[] memory supportedTokenPrices, 
+        uint256[] memory strategyIndexToSupportedTokenIndex
+    )
+        public
+        view
+        returns (
+            uint256 totalBalance, 
+            uint256 totalStrategyBalance, 
+            uint256 totalIdleStrategyBalance, 
+            uint256[] memory balances, 
+            uint256[] memory idleBalances
+        )
+    {
+        uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
         balances = new uint256[](strategiesLength);
         for (uint256 i; i < strategiesLength; i++) {
-            address token = strategies[i].depositToken;
+            uint256 balanceInUsd = IStrategy(strategies[i].strategyAddress).totalTokens();
 
-            uint256 balanceInDepositToken = IStrategy(strategies[i].strategyAddress).totalTokens();
-
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            balances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
-            totalStrategyBalance += balanceInDepositToken;
+            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[
+                strategyIndexToSupportedTokenIndex[i]
+            ];
+            balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInUsd = toUniform(balanceInUsd, tokenPrice.token);
+            balances[i] = balanceInUsd;
+            totalBalance += balanceInUsd;
+            totalStrategyBalance += balanceInUsd;
         }
 
-        uint256 idleStrategiesLength = idleStrategies.length;
+        uint256 idleStrategiesLength = supportedTokenPrices.length;
         idleBalances = new uint256[](idleStrategiesLength);
         for (uint256 i; i < idleStrategiesLength; i++) {
-            address token = idleStrategies[i].depositToken;
+            uint256 balanceInUsd = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
 
-            uint256 balanceInDepositToken = IIdleStrategy(idleStrategies[i].strategyAddress).totalTokens();
-
-            (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
-            balanceInDepositToken = ((balanceInDepositToken * price) / 10**priceDecimals);
-            balanceInDepositToken = toUniform(balanceInDepositToken, token);
-            idleBalances[i] = balanceInDepositToken;
-            totalBalance += balanceInDepositToken;
-            totalIdleStrategyBalance += balanceInDepositToken;
+            StrategyRouter.TokenPrice memory tokenPrice = supportedTokenPrices[i];
+            balanceInUsd = ((balanceInUsd * tokenPrice.price) / 10**tokenPrice.priceDecimals);
+            balanceInUsd = toUniform(balanceInUsd, tokenPrice.token);
+            idleBalances[i] = balanceInUsd;
+            totalBalance += balanceInUsd;
+            totalIdleStrategyBalance += balanceInUsd;
         }
     }
 
@@ -606,5 +665,53 @@ library StrategyRouterLib {
                 })
             );
         }
+    }
+
+    function _removeIdleStrategy(
+        StrategyRouter.IdleStrategyInfo[] storage idleStrategies,
+        Batch batch,
+        Exchange exchange,
+        StrategyRouter.StrategyInfo[] storage strategies,
+        uint256 allStrategiesWeightSum,
+        address tokenAddress
+    ) public {
+        StrategyRouter.IdleStrategyInfo memory idleStrategyToRemove;
+        for (uint256 i; i < idleStrategies.length; i++) {
+            if (tokenAddress == idleStrategies[i].depositToken) {
+                idleStrategyToRemove = idleStrategies[i];
+                idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
+                idleStrategies.pop();
+                // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
+                // so the shifted indexes must match
+                // but better to double check
+                // TODO add tests for idleStrategyLength = 0 after removal
+                if (
+                    idleStrategies.length != 0
+                    && i != idleStrategies.length
+                    && idleStrategies[i].depositToken != batch.getSupportedTokens()[i]
+                ) {
+                    revert StrategyRouter.IdleStrategySupportedTokenMismatch();
+                }
+                break;
+            }
+        }
+
+        if (IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll() != 0) {
+            address[] memory supportedTokens = batch.getSupportedTokens();
+            address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
+            supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
+            for (uint256 i; i < supportedTokens.length; i++) {
+                supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
+            }
+            rebalanceStrategies(
+                exchange,
+                strategies,
+                allStrategiesWeightSum,
+                supportedTokensWithRemovedToken
+            );
+        }
+
+        // TODO test
+        Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
     }
 }

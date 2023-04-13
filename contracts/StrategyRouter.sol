@@ -1,4 +1,3 @@
-//SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -19,6 +18,7 @@ import "./StrategyRouterLib.sol";
 import "./idle-strategies/DefaultIdleStrategy.sol";
 
 // import "hardhat/console.sol";
+
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
 contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
@@ -86,6 +86,12 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     error InvalidIdleStrategy();
     error InvalidIndexForIdleStrategy();
     error IdleStrategySupportedTokenMismatch();
+
+    struct TokenPrice {
+        uint256 price;
+        uint8 priceDecimals;
+        address token;
+    }
 
     struct StrategyInfo {
         address strategyAddress;
@@ -222,24 +228,36 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
         step 9 - store remaining information for the current cycle
         */
+
         // step 1
+
+        (   
+            StrategyRouter.TokenPrice[] memory supportedTokenPrices
+        ) = batch.getSupportedTokensWithPriceInUsd();
+        uint256[] memory strategyIndexToSupportedTokenIndex = 
+            StrategyRouterLib.getStrategyIndexToSupportedTokenIndexMap(
+                supportedTokenPrices,
+                strategies
+            );
+
+        (uint256 batchValueInUsd, ) = batch.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
+        
         uint256 _currentCycleId = currentCycleId;
-        (uint256 batchValueInUsd, ) = getBatchValueUsd();
 
         // step 2
         if (batchValueInUsd == 0) revert CycleNotClosableYet();
 
         currentCycleFirstDepositAt = 0;
 
+
         // step 3
         {
-            address[] memory tokens = getSupportedTokens();
-            for (uint256 i = 0; i < tokens.length; i++) {
-                if (ERC20(tokens[i]).balanceOf(address(batch)) > 0) {
-                    (uint256 priceUsd, uint8 priceDecimals) = oracle.getTokenUsdPrice(tokens[i]);
-                    cycles[_currentCycleId].prices[tokens[i]] = StrategyRouterLib.changeDecimals(
-                        priceUsd,
-                        priceDecimals,
+            // address[] memory _supportedTokens = getSupported_supportedTokens();
+            for (uint256 i = 0; i < supportedTokenPrices.length; i++) {
+                if (ERC20(supportedTokenPrices[i].token).balanceOf(address(batch)) > 0) {
+                    cycles[_currentCycleId].prices[supportedTokenPrices[i].token] = StrategyRouterLib.changeDecimals(
+                        supportedTokenPrices[i].price,
+                        supportedTokenPrices[i].priceDecimals,
                         UNIFORM_DECIMALS
                     );
                 }
@@ -247,21 +265,25 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 4
-        uint256 strategiesLength = strategies.length;
-        for (uint256 i; i < strategiesLength; i++) {
+        // uint256 strategiesLength = strategies.length;
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
-
-        (uint256 balanceAfterCompoundInUsd, , , , ) = getStrategiesValue();
         uint256 totalShares = sharesToken.totalSupply();
-        emit AfterCompound(_currentCycleId, balanceAfterCompoundInUsd, totalShares);
+        (uint256 strategiesBalanceAfterCompoundInUsd, , , , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
+            strategyIndexToSupportedTokenIndex
+        );
+
+        emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
 
         // step 5
-        (uint256 strategiesBalanceAfterCompoundInUsd, , , , ) = getStrategiesValue();
         uint256[] memory depositAmountsInTokens = batch.rebalance();
 
         // step 6
-        for (uint256 i; i < strategiesLength; i++) {
+        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
             address strategyDepositToken = strategies[i].depositToken;
 
             if (depositAmountsInTokens[i] > 0) {
@@ -272,7 +294,13 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 7
-        (uint256 strategiesBalanceAfterDepositInUsd, , , , ) = getStrategiesValue();
+        (uint256 strategiesBalanceAfterDepositInUsd, , , , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
+            strategies,
+            idleStrategies,
+            supportedTokenPrices,
+            strategyIndexToSupportedTokenIndex
+        );
+
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
@@ -357,6 +385,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         return strategies[i].depositToken;
     }
 
+    function getBatchValueUsd()
+        public
+        view
+        returns (uint256 totalBalance, uint256[] memory balances)
+    {
+        return batch.getBatchValueUsd();
+    }
+
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total usd value.
@@ -377,18 +413,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     {
         (totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances, idleBalances)
             = StrategyRouterLib.getStrategiesValue(
-                oracle,
+                batch,
                 strategies,
                 idleStrategies
             );
-    }
-
-    /// @notice Returns usd values of the tokens balances and their sum in the batch.
-    /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
-    /// @return totalBalance Total batch usd value.
-    /// @return balances Array of usd value of token balances in the batch.
-    function getBatchValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
-        return batch.getBatchValueUsd();
     }
 
     /// @notice Returns stored address of the `Exchange` contract.
@@ -592,7 +620,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 supportedTokens.length - 1,
                 idleStrategy);
         } else {
-            _removeIdleStrategy(tokenAddress);
+            StrategyRouterLib._removeIdleStrategy(
+                idleStrategies,
+                batch,
+                exchange,
+                strategies,
+                allStrategiesWeightSum,
+                tokenAddress
+            );
         }
     }
 
@@ -705,47 +740,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             i,
             idleStrategy
         );
-    }
-
-    function _removeIdleStrategy(address tokenAddress) internal {
-        IdleStrategyInfo memory idleStrategyToRemove;
-        for (uint256 i; i < idleStrategies.length; i++) {
-            if (tokenAddress == idleStrategies[i].depositToken) {
-                idleStrategyToRemove = idleStrategies[i];
-                idleStrategies[i] = idleStrategies[idleStrategies.length - 1];
-                idleStrategies.pop();
-                // !!!IMPORTANT: idle strategy removal pattern follows supported token removal pattern
-                // so the shifted indexes must match
-                // but better to double check
-                // TODO add tests for idleStrategyLength = 0 after removal
-                if (
-                    idleStrategies.length != 0
-                    && i != idleStrategies.length
-                    && idleStrategies[i].depositToken != getSupportedTokens()[i]
-                ) {
-                    revert IdleStrategySupportedTokenMismatch();
-                }
-                break;
-            }
-        }
-
-        if (IIdleStrategy(idleStrategyToRemove.strategyAddress).withdrawAll() != 0) {
-            address[] memory supportedTokens = getSupportedTokens();
-            address[] memory supportedTokensWithRemovedToken = new address[](supportedTokens.length + 1);
-            supportedTokensWithRemovedToken[0] = idleStrategyToRemove.depositToken;
-            for (uint256 i; i < supportedTokens.length; i++) {
-                supportedTokensWithRemovedToken[i + 1] = supportedTokens[i];
-            }
-            StrategyRouterLib.rebalanceStrategies(
-                exchange,
-                strategies,
-                allStrategiesWeightSum,
-                supportedTokensWithRemovedToken
-            );
-        }
-
-        // TODO test
-        Ownable(address(idleStrategyToRemove.strategyAddress)).transferOwnership(msg.sender);
     }
 
     /// @notice Rebalance batch, so that token balances will match strategies weight.

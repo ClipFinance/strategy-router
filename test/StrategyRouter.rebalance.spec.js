@@ -11,7 +11,7 @@ describe("Test rebalance functions", function () {
   // helper functions to parse amounts of mock tokens
   let parseUsdc, parseBusd, parseUsdt;
   // core contracts
-  let router, oracle, exchange;
+  let router, oracle, exchange, batch;
   // revert to test-ready state
   let snapshotId;
   // revert to fresh fork state
@@ -23,7 +23,7 @@ describe("Test rebalance functions", function () {
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts`
-    ({ router, oracle, exchange } = await setupCore());
+    ({ router, oracle, exchange, batch } = await setupCore());
 
     // deploy mock tokens 
     ({ usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router));
@@ -130,7 +130,6 @@ describe("Test rebalance functions", function () {
       await router.depositToBatch(usdt.address, parseUsdt("1"));
       await router.depositToBatch(busd.address, parseBusd("1"));
       await router.depositToBatch(usdc.address, parseUsdc("1"));
-      // console.log(await router.getBatchValueUsd());
 
       await verifyTokensRatio([1, 1, 1]);
 
