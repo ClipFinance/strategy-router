@@ -544,8 +544,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         IERC20(depositToken).transferFrom(msg.sender, address(batch), depositAmount);
 
         if (depositFeeAmount != 0) {
-            (,,,address feeTreasury) = batch.depositFeeSettings();
-            IERC20(depositToken).transferFrom(msg.sender, feeTreasury, depositFeeAmount);
+            IERC20(depositToken).transferFrom(msg.sender, feeAddress, depositFeeAmount);
         }
 
         currentCycleDepositsCount++;

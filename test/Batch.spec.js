@@ -45,21 +45,18 @@ describe("Test Batch", function () {
       minFeeInUsd: 0,
       maxFeeInUsd: 0,
       feeInBps: 0,
-      feeTreasury: ethers.constants.AddressZero,
     };
 
     defaultDepositFeeSettings = {
       minFeeInUsd: parseUniform("0.15"),
       maxFeeInUsd: parseUniform("1"),
       feeInBps: 1, // is 0.01% in BPS
-      feeTreasury: hre.networkVariables.depositFeeTreasuryForTests,
     };
 
     depositFeeSettingsWithFixedFee = {
       minFeeInUsd: parseUniform("0.5"),
       maxFeeInUsd: parseUniform("0.5"),
       feeInBps: 0,
-      feeTreasury: hre.networkVariables.depositFeeTreasuryForTests,
     };
 
     // deploy mock tokens
@@ -151,30 +148,11 @@ describe("Test Batch", function () {
     it("should revert when maxFeeInUsd is 0 and feeInBps is set", async function () {
       await expect(
         batch.setDepositFeeSettings({
-          ...defaultDepositFeeSettings,
           minFeeInUsd: 0,
           maxFeeInUsd: 0,
           feeInBps: 1,
         })
       ).to.be.revertedWithCustomError(batch, "NotSetMaxFeeInUsdWhenFeeInBpsIsSet");
-    });
-
-    it("should revert when set zero address as fee treasury and fee percentage values are not zero", async function () {
-      await expect(
-        batch.setDepositFeeSettings({
-          ...defaultDepositFeeSettings,
-          feeTreasury: ethers.constants.AddressZero,
-        })
-      ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
-    });
-
-    it("should revert when set zero address as fee treasury amd min fee set as a fixed fee", async function () {
-      await expect(
-        batch.setDepositFeeSettings({
-          ...depositFeeSettingsWithFixedFee,
-          feeTreasury: ethers.constants.AddressZero,
-        })
-      ).to.be.revertedWithCustomError(batch, "DepositFeeTreasuryNotSet");
     });
 
     it("should set deposit fee to zero (initial values) once it was not zero" , async function () {
@@ -190,7 +168,6 @@ describe("Test Batch", function () {
       expect(batchDepositFeeSettings.minFeeInUsd).to.equal(initialDepositFeeSettings.minFeeInUsd);
       expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(initialDepositFeeSettings.maxFeeInUsd);
       expect(batchDepositFeeSettings.feeInBps).to.equal(initialDepositFeeSettings.feeInBps);
-      expect(batchDepositFeeSettings.feeTreasury).to.equal(initialDepositFeeSettings.feeTreasury)
     });
 
     it("should set deposit settings with correct values", async function () {
@@ -201,7 +178,6 @@ describe("Test Batch", function () {
       expect(batchDepositFeeSettings.minFeeInUsd).to.equal(defaultDepositFeeSettings.minFeeInUsd);
       expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(defaultDepositFeeSettings.maxFeeInUsd);
       expect(batchDepositFeeSettings.feeInBps).to.equal(defaultDepositFeeSettings.feeInBps);
-      expect(batchDepositFeeSettings.feeTreasury).to.equal(defaultDepositFeeSettings.feeTreasury);
     });
 
     it("should set deposit settings with correct values with fixed fee", async function () {
@@ -212,7 +188,6 @@ describe("Test Batch", function () {
       expect(batchDepositFeeSettings.minFeeInUsd).to.equal(depositFeeSettingsWithFixedFee.minFeeInUsd);
       expect(batchDepositFeeSettings.maxFeeInUsd).to.equal(depositFeeSettingsWithFixedFee.minFeeInUsd);
       expect(batchDepositFeeSettings.feeInBps).to.equal(depositFeeSettingsWithFixedFee.feeInBps);
-      expect(batchDepositFeeSettings.feeTreasury).to.equal(depositFeeSettingsWithFixedFee.feeTreasury);
     });
 
   });
@@ -356,7 +331,7 @@ describe("Test Batch", function () {
 
       // Check deposited amount and deposit fee
       const batchBalanceAfter = await busd.balanceOf(batch.address);
-      const treasuryBalanceAfter = await busd.balanceOf(defaultDepositFeeSettings.feeTreasury);
+      const treasuryBalanceAfter = await busd.balanceOf(await router.feeAddress());
       expect(batchBalanceAfter).to.be.equal(depositAmount);
       expect(treasuryBalanceAfter).to.be.equal(minFeeInBusd);
       expect(await getTokenValue(busd.address, treasuryBalanceAfter)).to.be.equal(defaultDepositFeeSettings.minFeeInUsd);

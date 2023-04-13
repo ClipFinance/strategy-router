@@ -43,9 +43,6 @@ function bnbChain() {
   bnb.stargateUsdtLpPool = "0x9aA83081AA06AF7208Dcc7A4cB72C94d057D2cda";
   bnb.stargateBusdLpPool = "0x98a5737749490856b401DB5Dc27F522fC314A4e1";
 
-  // TODO: set another address. It is test address
-  bnb.depositFeeTreasuryForTests = "0xEB9B2Ff8dB850DADB329694bFb639C03b804e7C4";
-
   return bnb;
 }
 

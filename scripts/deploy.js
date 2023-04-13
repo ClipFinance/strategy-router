@@ -39,7 +39,6 @@ async function main() {
     minFeeInUsd: parseUniform("0.15"), // 0.15 USD
     maxFeeInUsd: parseUniform("1"), // 1 USD
     feeInBps: 1, // is 0.01% in BPS
-    feeTreasury: FEE_ADDRESS, // TODO: set another address if needed
   };
 
   // ~~~~~~~~~~~ DEPLOY Oracle ~~~~~~~~~~~ 

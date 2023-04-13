@@ -67,7 +67,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         uint256 minFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
         uint256 maxFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
         uint256 feeInBps;       // Percentage of deposit fee, in basis points
-        address feeTreasury;    // Address to send deposit fee to
     }
 
     struct TokenInfo {
@@ -130,12 +129,6 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         if (_depositFeeSettings.maxFeeInUsd == 0 && _depositFeeSettings.feeInBps != 0) {
             revert NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
         }
-
-        // Ensure that treasury address is valid when there is a possibility that fee will be charged
-        if (
-            (_depositFeeSettings.feeInBps != 0 || _depositFeeSettings.minFeeInUsd != 0)
-            && _depositFeeSettings.feeTreasury == address(0) // set 0x000...0dEaD if you want to use a burn address
-        ) revert DepositFeeTreasuryNotSet();
 
         depositFeeSettings = _depositFeeSettings;
         emit SetDepositFeeSettings(depositFeeSettings);
