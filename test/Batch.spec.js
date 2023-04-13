@@ -323,7 +323,7 @@ describe("Test Batch", function () {
 
     describe("#setSupportedToken", function () {
 
-        it("should add supported tok en", async function () {
+        it("should add supported token", async function () {
             await router.setSupportedToken(usdt.address, true, usdt.idleStrategy.address);
             expect((await router.getSupportedTokens()).toString()).to.be.equal(
                 `${usdt.address}`
