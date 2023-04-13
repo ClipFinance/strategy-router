@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./deps/OwnableUpgradeable.sol";
@@ -15,11 +16,12 @@ import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
 import "./interfaces/IUsdOracle.sol";
 
-//import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
 contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
 
@@ -30,18 +32,29 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     error UnsupportedToken();
     error NotReceiptOwner();
     error CycleClosed();
-    error DepositUnderMinimum();
     error NotEnoughBalanceInBatch();
     error CallerIsNotStrategyRouter();
+    error DepositFeeExceedsDepositAmountOrTheyAreEqual();
+    error MaxDepositFeeExceedsThreshold();
+    error MinDepositFeeExceedsMax();
+    error DepositFeePercentExceedsFeePercentageThreshold();
+    error NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
+    error DepositFeeTreasuryNotSet();
+    error DepositUnderDepositFeeValue();
     error InvalidToken();
 
     event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
+    event SetDepositFeeSettings(Batch.DepositFeeSettings newDepositFeeSettings);
 
     uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
-    uint256 public minDeposit;
+    uint256 private constant DEPOSIT_FEE_AMOUNT_THRESHOLD = 50e18; // 50 USD
+    uint256 private constant DEPOSIT_FEE_PERCENT_THRESHOLD = 300; // 3% in basis points
+    uint256 private constant MAX_BPS = 10000; // 100%
+
+    DepositFeeSettings public depositFeeSettings;
 
     ReceiptNFT public receiptContract;
     Exchange public exchange;
@@ -49,6 +62,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private supportedTokens;
+
+    struct DepositFeeSettings {
+        uint256 minFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 maxFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 feeInBps;       // Percentage of deposit fee, in basis points
+    }
 
     struct TokenInfo {
         address tokenAddress;
@@ -72,6 +91,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
     }
 
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // Owner Functions
+
     function setAddresses(
         Exchange _exchange,
         IUsdOracle _oracle,
@@ -85,7 +108,31 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit SetAddresses(_exchange, _oracle, _router, _receiptNft);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    /// @notice Set deposit fee settings in the batch.
+    /// @param _depositFeeSettings Deposit settings.
+    /// @dev Owner function.
+    function setDepositFeeSettings(DepositFeeSettings calldata _depositFeeSettings) external onlyOwner {
+        // Ensure that maxFeeInUsd is not greater than the threshold of 50 USD
+        if (_depositFeeSettings.maxFeeInUsd > DEPOSIT_FEE_AMOUNT_THRESHOLD) {
+            revert MaxDepositFeeExceedsThreshold();
+        }
+
+        // Ensure that feeInBps is not greater than the threshold of 300 bps (3%)
+        if (_depositFeeSettings.feeInBps > DEPOSIT_FEE_PERCENT_THRESHOLD) {
+            revert DepositFeePercentExceedsFeePercentageThreshold();
+        }
+
+        // Ensure that minFeeInUsd is not greater than maxFeeInUsd
+        if (_depositFeeSettings.maxFeeInUsd < _depositFeeSettings.minFeeInUsd) revert MinDepositFeeExceedsMax();
+
+        // Ensure that maxFeeInUsd also has a value if feeInBps is set
+        if (_depositFeeSettings.maxFeeInUsd == 0 && _depositFeeSettings.feeInBps != 0) {
+            revert NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
+        }
+
+        depositFeeSettings = _depositFeeSettings;
+        emit SetDepositFeeSettings(depositFeeSettings);
+    }
 
     // Universal Functions
 
@@ -106,7 +153,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         supportedTokenBalancesUsd = new uint256[](supportedTokens.length());
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             address token = supportedTokens.at(i);
-            uint256 balance = ERC20(token).balanceOf(address(this));
+            uint256 balance = IERC20(token).balanceOf(address(this));
 
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(token);
             balance = ((balance * price) / 10**priceDecimals);
@@ -114,6 +161,33 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             supportedTokenBalancesUsd[i] = balance;
             totalBalanceUsd += balance;
         }
+    }
+
+    // @notice Get a deposit fee amount in tokens.
+    // @param depositAmount Amount of tokens to deposit.
+    // @param depositToken Token address.
+    // @dev Returns a deposit fee amount with token decimals.
+    function getDepositFeeInTokens(uint256 depositAmount, address depositToken)
+        public
+        view
+        returns (uint256 feeAmount)
+    {
+        // convert deposit amount to USD
+        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(depositToken);
+        uint256 depositAmountInUsd = (depositAmount * tokenUsdPrice) / 10**oraclePriceDecimals;
+        depositAmountInUsd = toUniform(depositAmountInUsd, depositToken);
+
+        // calculate fee amount in USD
+        uint256 feeAmountInUsd = calculateDepositFee(depositAmountInUsd);
+        if (feeAmountInUsd == 0) return 0;
+
+        // ensure that fee amount is not exceed deposit amount to avoid overflow
+        // and they are not equal to avoid 0 deposit
+        if (feeAmountInUsd >= depositAmountInUsd) revert DepositFeeExceedsDepositAmountOrTheyAreEqual();
+
+        // convert fee amount in usd to tokens amount
+        feeAmount = (feeAmountInUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
+        feeAmount = fromUniform(feeAmount, depositToken);
     }
 
     // User Functions
@@ -146,7 +220,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
 
             uint256 transferAmount = fromUniform(receipt.tokenAmountUniform, receipt.token);
-            ERC20(receipt.token).transfer(receiptOwner, transferAmount);
+            IERC20(receipt.token).safeTransfer(receiptOwner, transferAmount);
             receiptContract.burn(receiptId);
 
             tokens[i] = receipt.token;
@@ -155,37 +229,30 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return (receiptIds, tokens, withdrawnTokenAmounts);
     }
 
-    /// @notice converting token USD amount to token amount, i.e $1000 worth of token with price of $0.5 is 2000 tokens
-    function calculateTokenAmountFromUsdAmount(uint256 valueUsd, address token)
-        internal
-        view
-        returns (uint256 tokenAmountToTransfer)
-    {
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(token);
-        tokenAmountToTransfer = (valueUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
-        tokenAmountToTransfer = fromUniform(tokenAmountToTransfer, token);
-    }
-
     /// @notice Deposit token into batch.
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
-    /// @param _amount Amount to deposit.
-    /// @dev User should approve `_amount` of `depositToken` to this contract.
+    /// @param amount Amount to deposit.
+    /// @dev Returns deposited token amount and taken fee amount.
+    /// @dev User should approve `amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function deposit(
         address depositor,
         address depositToken,
-        uint256 _amount,
+        uint256 amount,
         uint256 _currentCycleId
-    ) external onlyStrategyRouter {
+    ) external onlyStrategyRouter returns (uint256 depositAmount, uint256 depositFeeAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
-        (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        uint256 depositedUsd = toUniform((_amount * price) / 10**priceDecimals, depositToken);
-        if (minDeposit > depositedUsd) revert DepositUnderMinimum();
 
-        uint256 amountUniform = toUniform(_amount, depositToken);
+        depositFeeAmount = getDepositFeeInTokens(amount, depositToken);
 
-        receiptContract.mint(_currentCycleId, amountUniform, depositToken, depositor);
+        // set actual deposit amount depending on fee amount
+        if (depositFeeAmount != 0) depositAmount = amount - depositFeeAmount;
+        else depositAmount = amount;
+
+        uint256 depositAmountUniform = toUniform(depositAmount, depositToken);
+
+        receiptContract.mint(_currentCycleId, depositAmountUniform, depositToken, depositor);
     }
 
     function transfer(
@@ -193,17 +260,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address to,
         uint256 amount
     ) external onlyStrategyRouter {
-        ERC20(token).transfer(to, amount);
+        IERC20(token).safeTransfer(to, amount);
     }
 
     // Admin functions
-
-    /// @notice Minimum to be deposited in the batch.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Admin function.
-    function setMinDepositUsd(uint256 amount) external onlyStrategyRouter {
-        minDeposit = amount;
-    }
 
     function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {
         uint256 totalBatchUnallocatedTokens;
@@ -214,7 +274,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         // point 2
         for (uint256 i; i < tokenInfos.length; i++) {
             tokenInfos[i].tokenAddress = supportedTokens.at(i);
-            tokenInfos[i].balance = ERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
+            tokenInfos[i].balance = IERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
 
             uint tokenBalanceUniform = toUniform(
                 tokenInfos[i].balance,
@@ -433,7 +493,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address to // tokenTo
     ) private returns (uint256 result) {
         if (from != to) {
-            IERC20(from).transfer(address(exchange), amount);
+            IERC20(from).safeTransfer(address(exchange), amount);
             result = exchange.swap(amount, from, to, address(this));
             return result;
         }
@@ -448,5 +508,23 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @dev Convert decimal places from `UNIFORM_DECIMALS` to token decimals.
     function fromUniform(uint256 amount, address token) private view returns (uint256) {
         return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
+    }
+
+    /// @notice calculate deposit fee in USD
+    /// @param amountInUsd Amount tokens in USD with `UNIFORM_DECIMALS`.
+    /// @dev returns fee amount of tokens in USD.
+    function calculateDepositFee(uint256 amountInUsd)
+        internal
+        view
+        returns (uint256 feeAmountInUsd)
+    {
+        DepositFeeSettings memory _depositFeeSettings = depositFeeSettings;
+
+        feeAmountInUsd = amountInUsd * _depositFeeSettings.feeInBps / MAX_BPS;
+
+        // check ranges and apply needed fee limits
+        if (feeAmountInUsd < _depositFeeSettings.minFeeInUsd) feeAmountInUsd = _depositFeeSettings.minFeeInUsd;
+        else if (feeAmountInUsd > _depositFeeSettings.maxFeeInUsd) feeAmountInUsd = _depositFeeSettings.maxFeeInUsd;
+
     }
 }
