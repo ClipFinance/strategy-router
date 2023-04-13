@@ -50,8 +50,8 @@ library StrategyRouterLib {
         view 
         returns (uint256[] memory strategyIndexToSupportedTokenIndex) 
     {
-        strategyIndexToSupportedTokenIndex = new uint256[](strategies.length);
-        uint256 strategiesLength = strategyIndexToSupportedTokenIndex.length;
+        uint256 strategiesLength = strategies.length;
+        strategyIndexToSupportedTokenIndex = new uint256[](strategiesLength);
         uint256 supportedTokensLength = supportedTokenPrices.length;
         for (uint256 i; i < strategiesLength; i++) {
             for (uint256 j; j < supportedTokensLength; j++) {
