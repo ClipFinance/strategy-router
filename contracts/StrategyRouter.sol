@@ -26,8 +26,9 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Fires when user deposits in batch.
     /// @param token Supported token that user want to deposit.
-    /// @param amount Amount of `token` transferred from user.
-    event Deposit(address indexed user, address token, uint256 amount);
+    /// @param amountAfterFee Amount of `token` transferred from user after fee.
+    /// @param feeAmount Amount of `token` fee taken for deposit to the batch.
+    event Deposit(address indexed user, address token, uint256 amountAfterFee, uint256 feeAmount);
     /// @notice Fires when batch is deposited into strategies.
     /// @param closedCycleId Index of the cycle that is closed.
     /// @param amount Sum of different tokens deposited into strategies.
@@ -57,7 +58,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
 
     // Events for setters.
-    event SetMinDeposit(uint256 newAmount);
     event SetAllocationWindowTime(uint256 newDuration);
     event SetFeeAddress(address newAddress);
     event SetFeePercent(uint256 newPercent);
@@ -388,7 +388,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     function getBatchValueUsd()
         public
         view
-        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
+        returns (uint256 totalBalance, uint256[] memory balances)
     {
         return batch.getBatchValueUsd();
     }
@@ -592,13 +592,18 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _amount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
     function depositToBatch(address depositToken, uint256 _amount) external {
-        batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
-        IERC20(depositToken).transferFrom(msg.sender, address(batch), _amount);
+        (uint256 depositAmount, uint256 depositFeeAmount) = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
+
+        IERC20(depositToken).transferFrom(msg.sender, address(batch), depositAmount);
+
+        if (depositFeeAmount != 0) {
+            IERC20(depositToken).transferFrom(msg.sender, feeAddress, depositFeeAmount);
+        }
 
         currentCycleDepositsCount++;
         if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
 
-        emit Deposit(msg.sender, depositToken, _amount);
+        emit Deposit(msg.sender, depositToken, depositAmount, depositFeeAmount);
     }
 
     // Admin functions
@@ -646,14 +651,6 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         require(percent <= MAX_FEE_PERCENT, "20% Max!");
         feePercent = percent;
         emit SetFeePercent(percent);
-    }
-
-    /// @notice Minimum to be deposited in the batch.
-    /// @param amount Amount of usd, must be `UNIFORM_DECIMALS` decimals.
-    /// @dev Admin function.
-    function setMinDepositUsd(uint256 amount) external onlyOwner {
-        batch.setMinDepositUsd(amount);
-        emit SetMinDeposit(amount);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.

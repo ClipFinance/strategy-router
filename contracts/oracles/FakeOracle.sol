@@ -49,6 +49,8 @@ contract FakeOracle is IUsdOracle, Ownable {
      */
     function getTokenUsdPrice(address base) public view override returns (uint256 price, uint8 decimals) {
         price = prices[base][Denominations.USD].price;
+        if (price <= 0) revert BadPrice();
+
         decimals = prices[base][Denominations.USD].decimals;
     }
 }

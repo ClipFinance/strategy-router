@@ -13,6 +13,7 @@ describe("Test ChainlinkOracle", function () {
 
     return {
       fakeOracle,
+      fakeToken1,
       fakeToken1Address: fakeToken1.address,
       fakeToken2Address: fakeToken2.address,
     };
@@ -44,4 +45,35 @@ describe("Test ChainlinkOracle", function () {
       ).to.be.true;
     });
   });
+
+  describe("#getTokenUsdPrice", function() {
+
+    it('revert when token price is not set or set as 0', async function () {
+      const { fakeOracle, fakeToken1Address }
+        = await loadFixture(initialState);
+
+      await expect(
+        fakeOracle.getTokenUsdPrice(fakeToken1Address)
+      ).to.be.revertedWithCustomError(fakeOracle, "BadPrice");
+
+      await fakeOracle.setPrice(fakeToken1Address, 0);
+
+      await expect(
+        fakeOracle.getTokenUsdPrice(fakeToken1Address)
+      ).to.be.revertedWithCustomError(fakeOracle, "BadPrice");
+    });
+
+    it('returns correct price and decimals', async function () {
+      const { fakeOracle, fakeToken1, fakeToken1Address, }
+        = await loadFixture(initialState);
+
+      await fakeOracle.setPrice(fakeToken1Address, 1);
+
+      const [price, priceDecimals] = await fakeOracle.getTokenUsdPrice(fakeToken1Address);
+
+      expect(price).to.equal(1);
+      expect(priceDecimals).to.equal(await fakeToken1.decimals());
+    });
+  });
+
 });
