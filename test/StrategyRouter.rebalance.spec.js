@@ -432,7 +432,7 @@ describe("Test rebalance functions", function () {
   }
 
   async function getTokenBalances() {
-    let [total, balances] = await batch.getBatchValueUsd();
+    let [total, balances] = await router.getBatchValueUsd();
     return { total, balances };
   }
 

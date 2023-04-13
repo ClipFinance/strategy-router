@@ -385,6 +385,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         return strategies[i].depositToken;
     }
 
+    function getBatchValueUsd()
+        public
+        view
+        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
+    {
+        return batch.getBatchValueUsd();
+    }
+
     /// @notice Returns usd value of the token balances and their sum in the strategies.
     /// @notice All returned amounts have `UNIFORM_DECIMALS` decimals.
     /// @return totalBalance Total usd value.
