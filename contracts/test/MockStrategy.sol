@@ -16,17 +16,30 @@ contract MockStrategy is IStrategy, AbstractBaseStrategyWithHardcap {
         address depositToken_,
         uint256 _mockProfitPercent,
         uint256 _hardcapTargetInToken,
-        uint16 _hardcapDeviationInBps
+        uint16 _hardcapDeviationInBps,
+        address[] memory depositors
     ) {
         _transferOwnership(_msgSender());
         _depositToken = depositToken_;
         mockProfitPercent = _mockProfitPercent;
         hardcapTargetInToken = _hardcapTargetInToken;
         hardcapDeviationInBps = _hardcapDeviationInBps;
+        _setupRole(DEFAULT_ADMIN_ROLE, owner());
+        for (uint256 i; i < depositors.length; i++) {
+            _setupRole(DEPOSITOR_ROLE, depositors[i]);
+        }
     }
 
     function depositToken() external view override returns (address) {
         return _depositToken;
+    }
+
+    function rewardToken() external view override returns (address) {
+        return _depositToken;
+    }
+
+    function getPendingReward() external view override returns (uint256) {
+        return balance * mockProfitPercent / 1000000;
     }
 
     function _deposit(uint256 amount) internal override {

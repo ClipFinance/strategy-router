@@ -9,9 +9,7 @@ const {
 } = require("../shared/forkHelper");
 const { provider, deploy, skipBlocks, parseUniform } = require("../utils");
 
-const {
-  setStorageAt,
-} = require("@nomicfoundation/hardhat-network-helpers");
+const { setStorageAt } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("Test StargateBase", function () {
   const USDT_POOL_ID = 2;
@@ -22,6 +20,8 @@ describe("Test StargateBase", function () {
   let stargateFarm, stargateRouter;
   // mainnet tokens
   let token, stg, lpToken;
+  // create2 deploy data
+  let create2Deployer, ProxyBytecode;
   // core contracts
   let router, oracle, mockExchange, batch, receiptContract, sharesToken;
   // stg strategy
@@ -46,12 +46,22 @@ describe("Test StargateBase", function () {
     initialSnapshot = await provider.send("evm_snapshot");
 
     // deploy core contracts
-    ({ router, oracle, batch, receiptContract, sharesToken } =
-      await setupCore());
+    ({
+      router,
+      oracle,
+      batch,
+      admin,
+      receiptContract,
+      sharesToken,
+      create2Deployer,
+      ProxyBytecode,
+    } = await setupCore());
 
     mockExchange = await deploy("MockExchange");
 
-    await router.setAddresses(
+    await router.setFeesCollectionAddress(admin.address);
+
+    await admin.setAddresses(
       mockExchange.address,
       oracle.address,
       sharesToken.address,
@@ -113,8 +123,10 @@ describe("Test StargateBase", function () {
       poolId: USDT_POOL_ID,
       farmId: USDT_LP_FARM_ID,
       upgrader: owner.address,
+      depositors: [owner.address],
+      create2Deployer,
+      ProxyBytecode,
     });
-
   });
 
   beforeEach(async function () {
@@ -131,17 +143,25 @@ describe("Test StargateBase", function () {
 
   describe("constructor & initialize", function () {
     it("revert if deposit token is invalid", async function () {
-      await expect(deployStargateStrategy({
-        router: router.address,
-        token: stg, // set invalid deposit token
-        lpToken: lpToken.address,
-        stgToken: stg.address,
-        stargateRouter: stargateRouter.address,
-        stargateFarm: stargateFarm.address,
-        poolId: USDT_POOL_ID,
-        farmId: USDT_LP_FARM_ID,
-        upgrader: owner.address,
-      })).eventually.be.rejectedWith("reverted with custom error 'InvalidInput()'");
+      await expect(
+        deployStargateStrategy({
+          router: router.address,
+          token: stg, // set invalid deposit token
+          lpToken: lpToken.address,
+          stgToken: stg.address,
+          stargateRouter: stargateRouter.address,
+          stargateFarm: stargateFarm.address,
+          poolId: USDT_POOL_ID,
+          farmId: USDT_LP_FARM_ID,
+          upgrader: owner.address,
+          depositors: [owner.address],
+          create2Deployer,
+          ProxyBytecode,
+          saltAddition: "Dummy",
+        })
+      ).eventually.be.rejectedWith(
+        "reverted with custom error 'InvalidInput()'"
+      );
     });
 
     it("check initial values", async function () {
@@ -167,7 +187,7 @@ describe("Test StargateBase", function () {
         stargateStrategy.connect(alice).deposit(testUsdtAmount)
       ).to.be.revertedWithCustomError(
         stargateStrategy,
-        "Ownable__CallerIsNotTheOwner"
+        "OnlyDepositorsAllowedToDeposit"
       );
     });
 
@@ -176,8 +196,10 @@ describe("Test StargateBase", function () {
 
       await expect(
         stargateStrategy.deposit(testUsdtAmountWithDust)
-      ).to.be.revertedWithCustomError(stargateStrategy, "DepositAmountExceedsBalance");
-
+      ).to.be.revertedWithCustomError(
+        stargateStrategy,
+        "DepositAmountExceedsBalance"
+      );
     });
 
     it("swap token to LP and deposit to Stargate farm", async function () {
@@ -210,7 +232,9 @@ describe("Test StargateBase", function () {
       await token.transfer(stargateStrategy.address, dustLPinUSDT);
       await stargateStrategy.deposit(dustLPinUSDT);
 
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustLPinUSDT);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
+        dustLPinUSDT
+      );
       expect(
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
@@ -242,7 +266,9 @@ describe("Test StargateBase", function () {
       ).to.be.equal(expectedAmountLockedLP);
 
       // expect the remained dust to settle on the stargate strategy account
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustSDinUSDT);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
+        dustSDinUSDT
+      );
 
       // expect the dust allowance has decreased and we can make another deposit without any errors
       await token.transfer(stargateStrategy.address, testUsdtAmount);
@@ -252,8 +278,9 @@ describe("Test StargateBase", function () {
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.equal(expectedAmountLockedLP.add(await amountLDtoLP(testUsdtAmount)));
-
+      ).to.be.equal(
+        expectedAmountLockedLP.add(await amountLDtoLP(testUsdtAmount))
+      );
     });
   });
 
@@ -290,12 +317,16 @@ describe("Test StargateBase", function () {
       // Test when STG reward is greater than 0
       expect(stgRewardAmount).to.greaterThan(0);
 
-      const newStakedLpAmount = await amountLDtoLP(receivedTokenAmountForSoldReward);
+      const newStakedLpAmount = await amountLDtoLP(
+        receivedTokenAmountForSoldReward
+      );
 
       await stargateStrategy.compound();
 
       // The Underlying token balance should be zero or a dust amount (less than 1 SD) after compound
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(oneSD);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(
+        oneSD
+      );
 
       // Mock Exchange contract should receive STG reward amount
       expect(await stg.balanceOf(mockExchange.address)).to.be.greaterThan(
@@ -310,14 +341,18 @@ describe("Test StargateBase", function () {
     });
 
     it("the accrued dust should be deposited once its sum with compound reward", async function () {
-      const initialTokenBalance = await token.balanceOf(stargateStrategy.address); // after each deposit it is less than 1 SD
+      const initialTokenBalance = await token.balanceOf(
+        stargateStrategy.address
+      ); // after each deposit it is less than 1 SD
       const initialStakedLpAmount = (
         await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
       )[0];
 
       // Set required amount to have 1.999 SD of balance to get less than 1 LP token
       // and don't deposit to the farm during 1st compound
-      const amountToDustLPinUSDT = oneLPinUSDT.sub(initialTokenBalance).sub(remainingDust);
+      const amountToDustLPinUSDT = oneLPinUSDT
+        .sub(initialTokenBalance)
+        .sub(remainingDust);
       await setReceivedAmountDuringSellReward(amountToDustLPinUSDT);
       await token.transfer(mockExchange.address, amountToDustLPinUSDT);
 
@@ -326,7 +361,9 @@ describe("Test StargateBase", function () {
       await stargateStrategy.compound();
 
       // The Underlying token balance should be dustLPinUSDT after 1st compound
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(dustLPinUSDT);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.equal(
+        dustLPinUSDT
+      );
 
       // expect the staked LP amount has not increased
       expect(
@@ -334,7 +371,6 @@ describe("Test StargateBase", function () {
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
       ).to.be.equal(initialStakedLpAmount);
-
 
       // transfer the remaining dust to get 1 LP during compound and stake it
       await setReceivedAmountDuringSellReward(remainingDust);
@@ -352,7 +388,9 @@ describe("Test StargateBase", function () {
       ).to.be.equal(initialStakedLpAmount.add(await amountLDtoLP(oneLPinUSDT)));
 
       // The Underlying token balance should be zero or a dust amount (less than 1 SD) after 2nd compound
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(oneSD);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(
+        oneSD
+      );
     });
   });
 
@@ -363,7 +401,10 @@ describe("Test StargateBase", function () {
     });
 
     it("should return correct amount of the locked and deposited tokens", async function () {
-      const [stakedLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const [stakedLpAmount] = await stargateFarm.userInfo(
+        USDT_LP_FARM_ID,
+        stargateStrategy.address
+      );
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
       await token.transfer(stargateStrategy.address, testUsdtAmount);
@@ -371,13 +412,16 @@ describe("Test StargateBase", function () {
       const tokenBalance = await token.balanceOf(stargateStrategy.address);
       const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
 
-      expect(
-        await stargateStrategy.totalTokens()
-      ).to.be.equal(totalStrategyTokens);
+      expect(await stargateStrategy.totalTokens()).to.be.equal(
+        totalStrategyTokens
+      );
     });
 
     it("should return the correct amount of the locked and deposited dust amount of tokens", async function () {
-      const [stakedLpAmount] = await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address);
+      const [stakedLpAmount] = await stargateFarm.userInfo(
+        USDT_LP_FARM_ID,
+        stargateStrategy.address
+      );
       const stakedTokenAmount = await lpToken.amountLPtoLD(stakedLpAmount);
 
       await token.transfer(stargateStrategy.address, dustSDinUSDT); // dust deposit
@@ -385,11 +429,10 @@ describe("Test StargateBase", function () {
       const tokenBalance = await token.balanceOf(stargateStrategy.address);
       const totalStrategyTokens = tokenBalance.add(stakedTokenAmount);
 
-      expect(
-        await stargateStrategy.totalTokens()
-      ).to.be.equal(totalStrategyTokens);
+      expect(await stargateStrategy.totalTokens()).to.be.equal(
+        totalStrategyTokens
+      );
     });
-
   });
 
   describe("#withdraw", function () {
@@ -421,7 +464,9 @@ describe("Test StargateBase", function () {
       await stargateStrategy.withdraw(withdrawAmount);
 
       // The Underlying token balance should be zero or a dust amount (less than 1 SD)
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(oneSD);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(
+        oneSD
+      );
 
       // Should have same staked balance after withdraw
       expect(
@@ -439,7 +484,9 @@ describe("Test StargateBase", function () {
     it("should take the staked balance to withdraw if the remaining token balance is not enough to cover the withdrawal amount", async function () {
       // prepare and save states before
       await token.transfer(stargateStrategy.address, testUsdtAmount);
-      const initialTokenBalance = await token.balanceOf(stargateStrategy.address);
+      const initialTokenBalance = await token.balanceOf(
+        stargateStrategy.address
+      );
 
       const extraWithdrawalAmount = parseUsdt("100");
       const withdrawAmount = initialTokenBalance.add(extraWithdrawalAmount);
@@ -468,14 +515,13 @@ describe("Test StargateBase", function () {
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.equal(
-        initialStakedLpAmount.sub(extraWithdrawalLpAmount)
-      );
+      ).to.be.equal(initialStakedLpAmount.sub(extraWithdrawalLpAmount));
 
       // Owner should have all tokens, also with 1 SD delta
-      expect(
-        await token.balanceOf(owner.address)
-      ).to.be.closeTo(initialOwnerBalance.add(withdrawAmount), oneSD);
+      expect(await token.balanceOf(owner.address)).to.be.closeTo(
+        initialOwnerBalance.add(withdrawAmount),
+        oneSD
+      );
     });
 
     it("Withdraw all tokens if requested amount is higher than total tokens", async function () {
@@ -494,7 +540,9 @@ describe("Test StargateBase", function () {
       const totalTokens = await stargateStrategy.totalTokens();
 
       expect(
-        await stargateStrategy.callStatic.withdraw(totalTokens.add(parseUsdt("1000")))
+        await stargateStrategy.callStatic.withdraw(
+          totalTokens.add(parseUsdt("1000"))
+        )
       ).to.be.equal(totalTokens.add(receivedTokenAmountForSoldReward));
 
       // perform withdraw because of callStatic doesn't change any state
@@ -519,13 +567,17 @@ describe("Test StargateBase", function () {
       const ownerBalanceAfter = await token.balanceOf(owner.address);
       // Owner should have all tokens
       expect(ownerBalanceAfter).to.be.equal(
-        initialOwnerBalance.add(totalTokens).add(receivedTokenAmountForSoldReward)
+        initialOwnerBalance
+          .add(totalTokens)
+          .add(receivedTokenAmountForSoldReward)
       );
     });
 
     it("should withdraw a less amount of tokens that expected with 2 SD delta due to standard decimals handling and calculating LP tokens on Stargate", async function () {
       // remove the dust balance of the strategy for this test
-      await stargateStrategy.withdraw(await token.balanceOf(stargateStrategy.address));
+      await stargateStrategy.withdraw(
+        await token.balanceOf(stargateStrategy.address)
+      );
 
       // prepare and save states before
       const initialOwnerBalance = await token.balanceOf(owner.address);
@@ -537,7 +589,9 @@ describe("Test StargateBase", function () {
       // check amountLDtoLP function description to get more details
       const withdrawAmount = parseUsdt("33.333333333"); // 33333333.333 SD
       const lpAmountToWithdraw = await amountLDtoLP(withdrawAmount);
-      const actualWithdrawAmount = await lpToken.amountLPtoLD(lpAmountToWithdraw); // 33333332.000 SD
+      const actualWithdrawAmount = await lpToken.amountLPtoLD(
+        lpAmountToWithdraw
+      ); // 33333332.000 SD
 
       // expect the actual withdraw amount to be close to the withdraw amount
       expect(actualWithdrawAmount).to.be.closeTo(withdrawAmount, oneLPinUSDT);
@@ -559,9 +613,7 @@ describe("Test StargateBase", function () {
         (
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
-      ).to.be.equal(
-        initialStakedLpAmount.sub(lpAmountToWithdraw)
-      );
+      ).to.be.equal(initialStakedLpAmount.sub(lpAmountToWithdraw));
 
       // Owner should have all tokens
       expect(await token.balanceOf(owner.address)).to.be.equal(
@@ -575,7 +627,9 @@ describe("Test StargateBase", function () {
       await setReceivedAmountDuringSellReward(receivedTokenAmountForSoldReward);
 
       await token.transfer(stargateStrategy.address, testUsdtAmount);
-      const initialTokenBalance = await token.balanceOf(stargateStrategy.address);
+      const initialTokenBalance = await token.balanceOf(
+        stargateStrategy.address
+      );
 
       const initialOwnerBalance = await token.balanceOf(owner.address);
       const initialStakedLpAmount = (
@@ -587,15 +641,18 @@ describe("Test StargateBase", function () {
 
       // calculate dust token amount that will be left after withdrawal,
       // check amountLDtoLP function description to get more details
-      const extraWithdrawalLpAmount= await amountLDtoLP(extraWithdrawalAmount);
+      const extraWithdrawalLpAmount = await amountLDtoLP(extraWithdrawalAmount);
       const dustTokenAmount = extraWithdrawalAmount.sub(
         await lpToken.amountLPtoLD(extraWithdrawalLpAmount)
       );
 
       // calculate reinvested LP amount
       // rewards amount added the dust amount to withdraw amount and we need to subtract it
-      const reinvestedTokenAmountToFarm = receivedTokenAmountForSoldReward.sub(dustTokenAmount);
-      const reinvestedLpAmount = await amountLDtoLP(reinvestedTokenAmountToFarm);
+      const reinvestedTokenAmountToFarm =
+        receivedTokenAmountForSoldReward.sub(dustTokenAmount);
+      const reinvestedLpAmount = await amountLDtoLP(
+        reinvestedTokenAmountToFarm
+      );
 
       await skipBlocks(10);
 
@@ -607,7 +664,9 @@ describe("Test StargateBase", function () {
       await stargateStrategy.withdraw(withdrawAmount);
 
       // The Underlying token balance should be zero or a dust amount (less than 1 SD)
-      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(oneSD);
+      expect(await token.balanceOf(stargateStrategy.address)).to.be.lessThan(
+        oneSD
+      );
       // STG token balance should be zero
       expect(await stg.balanceOf(stargateStrategy.address)).to.be.equal(0);
 
@@ -617,7 +676,9 @@ describe("Test StargateBase", function () {
           await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
         )[0]
       ).to.be.equal(
-        initialStakedLpAmount.sub(extraWithdrawalLpAmount).add(reinvestedLpAmount)
+        initialStakedLpAmount
+          .sub(extraWithdrawalLpAmount)
+          .add(reinvestedLpAmount)
       );
 
       // Owner should have all tokens
@@ -682,19 +743,21 @@ describe("Test StargateBase", function () {
 
       // Owner should have all tokens
       expect(await token.balanceOf(owner.address)).to.be.equal(
-        initialOwnerBalance.add(totalTokens).add(receivedTokenAmountForSoldReward)
+        initialOwnerBalance
+          .add(totalTokens)
+          .add(receivedTokenAmountForSoldReward)
       );
 
       // expect 0 when nothing to withdraw
-      expect(
-        await stargateStrategy.callStatic.withdrawAll()
-      ).to.be.equal(0);
+      expect(await stargateStrategy.callStatic.withdrawAll()).to.be.equal(0);
     });
 
     it("should revert if insufficient pool liquidity", async function () {
       const initialDeltaCredit = await lpToken.deltaCredit(); // in SD
 
-      const totalTokensInLP = await amountLDtoLP(await stargateStrategy.totalTokens());
+      const totalTokensInLP = await amountLDtoLP(
+        await stargateStrategy.totalTokens()
+      );
       const oneLP = await amountLDtoLP(oneLPinUSDT);
 
       // set custom delta credit
@@ -718,9 +781,10 @@ describe("Test StargateBase", function () {
       await stargateStrategy.withdrawAll();
 
       expect(
-        (await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address))[0]
+        (
+          await stargateFarm.userInfo(USDT_LP_FARM_ID, stargateStrategy.address)
+        )[0]
       ).to.be.equal(0);
-
     });
   });
 
@@ -729,14 +793,14 @@ describe("Test StargateBase", function () {
     // for sell reward tokens which it gets during withdrawal from the farm
     await token.transfer(mockExchange.address, amountSD);
     await mockExchange.setAmountReceived(amountSD);
-  }
+  };
 
   const getDustFromAmount = async (amountLD) => {
     const convertRate = await lpToken.convertRate();
 
     const amountSDinLD = amountLD.div(convertRate).mul(convertRate);
     return amountLD.sub(amountSDinLD);
-  }
+  };
 
   // The function can return 0 LP if the amount is less than 2 SD,
   // because of the total supply being less than the total liquidity
@@ -751,11 +815,11 @@ describe("Test StargateBase", function () {
 
     const amountSD = amountLD.div(convertRate);
     return amountSD.mul(totalSupply).div(totalLiquidity);
-  }
+  };
 
   const amountLPtoSD = async (amountLP) => {
     const amountLD = await lpToken.amountLPtoLD(amountLP);
     const convertRate = await lpToken.convertRate();
     return amountLD.div(convertRate);
-  }
+  };
 });

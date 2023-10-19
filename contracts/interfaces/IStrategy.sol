@@ -8,6 +8,12 @@ interface IStrategy {
     /// @notice Token used to deposit to strategy.
     function depositToken() external view returns (address);
 
+    ///@notice Token used to reward in strategy.
+    function rewardToken() external view returns (address);
+
+    /// @notice Get pending rewards.
+    function getPendingReward() external view returns (uint256);
+
     /// @notice Deposit token to strategy.
     function deposit(uint256 amount) external;
 

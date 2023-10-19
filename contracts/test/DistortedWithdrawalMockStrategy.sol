@@ -26,7 +26,8 @@ contract DistortedWithdrawalMockStrategy is IStrategy, AbstractBaseStrategyWithH
         uint256 _rewardPerCompoundPeriodInBps,
         bool _isRewardPositive,
         uint256 _hardcapTargetInToken,
-        uint16 _hardcapDeviationInBps
+        uint16 _hardcapDeviationInBps,
+        address[] memory depositors
     ) {
         _transferOwnership(_msgSender());
         isUnderFulfilled = _isUnderFulfilled;
@@ -36,10 +37,21 @@ contract DistortedWithdrawalMockStrategy is IStrategy, AbstractBaseStrategyWithH
         isRewardPositive = _isRewardPositive;
         hardcapTargetInToken = _hardcapTargetInToken;
         hardcapDeviationInBps = _hardcapDeviationInBps;
+        for (uint256 i; i < depositors.length; i++) {
+            _setupRole(DEPOSITOR_ROLE, depositors[i]);
+        }
     }
 
     function depositToken() external view override returns (address) {
         return strategyDepositToken;
+    }
+
+    function rewardToken() external view override returns (address) {
+        return strategyDepositToken;
+    }
+
+    function getPendingReward() external pure override returns (uint256) {
+        return 0;
     }
 
     function _deposit(uint256 amount) internal override {

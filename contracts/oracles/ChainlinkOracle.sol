@@ -6,12 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "../interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
-
 contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
-    error StaleChainlinkPrice();
-    error BadPrice();
-
     // token address => token/usd feed address
     mapping(address => address) public feeds;
 
@@ -21,9 +16,13 @@ contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize() external initializer {
+    function initialize(bytes memory initializeData) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        // transer ownership and set proxi admin to address that deployed this contract from Create2Deployer
+        transferOwnership(tx.origin);
+        _changeAdmin(tx.origin);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -35,8 +34,7 @@ contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
         }
     }
 
-    function isTokenSupported(address base) external view override returns (bool isTokenSupported)
-    {
+    function isTokenSupported(address base) external view override returns (bool isTokenSupported) {
         return feeds[base] != address(0);
     }
 
@@ -53,4 +51,9 @@ contract ChainlinkOracle is IUsdOracle, UUPSUpgradeable, OwnableUpgradeable {
 
         return (uint256(_price), feed.decimals());
     }
+
+    /* ERRORS */
+
+    error StaleChainlinkPrice();
+    error BadPrice();
 }

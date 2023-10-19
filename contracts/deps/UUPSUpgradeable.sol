@@ -20,16 +20,12 @@ import "./Initializable.sol";
  * _Available since v4.1._
  */
 abstract contract UUPSUpgradeable is Initializable, IERC1822ProxiableUpgradeable, ERC1967UpgradeUpgradeable {
-    error FunctionMustBeCalledThroughDelegatecall();
-    error FunctionMustBeCalledThroughActiveProxy();
-    error UUPSUpgradeable__MustNotBeCalledThroughDelegatecall();
+    function __UUPSUpgradeable_init() internal onlyInitializing {}
 
-    function __UUPSUpgradeable_init() internal onlyInitializing {
-    }
+    function __UUPSUpgradeable_init_unchained() internal onlyInitializing {}
 
-    function __UUPSUpgradeable_init_unchained() internal onlyInitializing {
-    }
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable state-variable-assignment
+
     address private immutable __self = address(this);
 
     /**
@@ -42,8 +38,8 @@ abstract contract UUPSUpgradeable is Initializable, IERC1822ProxiableUpgradeable
     modifier onlyProxy() {
         // require(address(this) != __self, "Function must be called through delegatecall");
         // require(_getImplementation() == __self, "Function must be called through active proxy");
-        if(!(address(this) != __self)) revert FunctionMustBeCalledThroughDelegatecall();
-        if(!(_getImplementation() == __self)) revert FunctionMustBeCalledThroughActiveProxy();
+        if (!(address(this) != __self)) revert FunctionMustBeCalledThroughDelegatecall();
+        if (!(_getImplementation() == __self)) revert FunctionMustBeCalledThroughActiveProxy();
         _;
     }
 
@@ -53,7 +49,7 @@ abstract contract UUPSUpgradeable is Initializable, IERC1822ProxiableUpgradeable
      */
     modifier notDelegated() {
         // require(address(this) == __self, "UUPSUpgradeable: must not be called through delegatecall");
-        if(!(address(this) == __self)) revert UUPSUpgradeable__MustNotBeCalledThroughDelegatecall();
+        if (!(address(this) == __self)) revert UUPSUpgradeable__MustNotBeCalledThroughDelegatecall();
         _;
     }
 
@@ -112,4 +108,10 @@ abstract contract UUPSUpgradeable is Initializable, IERC1822ProxiableUpgradeable
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[50] private __gap;
+
+    /* ERRORS */
+
+    error FunctionMustBeCalledThroughDelegatecall();
+    error FunctionMustBeCalledThroughActiveProxy();
+    error UUPSUpgradeable__MustNotBeCalledThroughDelegatecall();
 }

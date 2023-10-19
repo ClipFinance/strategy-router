@@ -3,20 +3,22 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
 import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "./interfaces/IStrategy.sol";
-import {ReceiptNFT} from "./ReceiptNFT.sol";
-import {StrategyRouter} from "./StrategyRouter.sol";
-import {Exchange} from "./exchange/Exchange.sol";
 import "./deps/EnumerableSetExtension.sol";
-import "./interfaces/IUsdOracle.sol";
 
-// import "hardhat/console.sol";
+import {TokenPrice, StrategyInfo, IdleStrategyInfo, ReceiptData} from "./lib/Structs.sol";
+import {toUniform, fromUniform, MAX_BPS} from "./lib/Math.sol";
+
+import "./interfaces/IIdleStrategy.sol";
+import "./interfaces/IStrategy.sol";
+import "./interfaces/IUsdOracle.sol";
+import "./interfaces/IExchange.sol";
+import "./interfaces/IStrategyRouter.sol";
+import "./interfaces/IReceiptNFT.sol";
 
 /// @notice This contract contains batch related code, serves as part of StrategyRouter.
 /// @notice This contract should be owned by StrategyRouter.
@@ -25,54 +27,36 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSetExtension for EnumerableSet.AddressSet;
 
-    /* ERRORS */
-
-    error AlreadySupportedToken();
-    error CantRemoveTokenOfActiveStrategy();
-    error UnsupportedToken();
-    error NotReceiptOwner();
-    error CycleClosed();
-    error NotEnoughBalanceInBatch();
-    error CallerIsNotStrategyRouter();
-    error DepositFeeExceedsDepositAmountOrTheyAreEqual();
-    error MaxDepositFeeExceedsThreshold();
-    error MinDepositFeeExceedsMax();
-    error DepositFeePercentExceedsFeePercentageThreshold();
-    error NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
-    error DepositFeeTreasuryNotSet();
-    error DepositUnderDepositFeeValue();
-    error InvalidToken();
-
-    event SetAddresses(Exchange _exchange, IUsdOracle _oracle, StrategyRouter _router, ReceiptNFT _receiptNft);
-    event SetDepositFeeSettings(Batch.DepositFeeSettings newDepositFeeSettings);
-
-    uint8 public constant UNIFORM_DECIMALS = 18;
     // used in rebalance function, UNIFORM_DECIMALS, so 1e17 == 0.1
     uint256 public constant REBALANCE_SWAP_THRESHOLD = 1e17;
 
     uint256 private constant DEPOSIT_FEE_AMOUNT_THRESHOLD = 50e18; // 50 USD
     uint256 private constant DEPOSIT_FEE_PERCENT_THRESHOLD = 300; // 3% in basis points
-    uint256 private constant MAX_BPS = 10000; // 100%
 
     DepositFeeSettings public depositFeeSettings;
 
-    ReceiptNFT public receiptContract;
-    Exchange public exchange;
-    StrategyRouter public router;
+    IReceiptNFT public receiptContract;
+    IExchange public exchange;
+    IStrategyRouter public router;
     IUsdOracle public oracle;
 
     EnumerableSet.AddressSet private supportedTokens;
 
     struct DepositFeeSettings {
-        uint256 minFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
-        uint256 maxFeeInUsd;    // Amount of USD, must be `UNIFORM_DECIMALS` decimals
-        uint256 feeInBps;       // Percentage of deposit fee, in basis points
+        uint256 minFeeInUsd; // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 maxFeeInUsd; // Amount of USD, must be `UNIFORM_DECIMALS` decimals
+        uint256 feeInBps; // Percentage of deposit fee, in basis points
     }
 
     struct TokenInfo {
         address tokenAddress;
         uint256 balance;
         bool insufficientBalance;
+    }
+
+    struct CapacityData {
+        bool isLimitReached;
+        uint256 underflowUniform;
     }
 
     modifier onlyStrategyRouter() {
@@ -86,9 +70,12 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize() external initializer {
+    function initialize(bytes memory initializeData) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        // transer ownership to address that deployed this contract from Create2Deployer
+        transferOwnership(tx.origin);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -96,10 +83,10 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // Owner Functions
 
     function setAddresses(
-        Exchange _exchange,
+        IExchange _exchange,
         IUsdOracle _oracle,
-        StrategyRouter _router,
-        ReceiptNFT _receiptNft
+        IStrategyRouter _router,
+        IReceiptNFT _receiptNft
     ) external onlyOwner {
         exchange = _exchange;
         oracle = _oracle;
@@ -127,7 +114,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
         // Ensure that maxFeeInUsd also has a value if feeInBps is set
         if (_depositFeeSettings.maxFeeInUsd == 0 && _depositFeeSettings.feeInBps != 0) {
-            revert NotSetMaxFeeInUsdWhenFeeInBpsIsSet();
+            revert NotSetMaxFeeInStableWhenFeeInBpsIsSet();
         }
 
         depositFeeSettings = _depositFeeSettings;
@@ -150,44 +137,32 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         view
         returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
     {
-        (
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices
-        ) = getSupportedTokensWithPriceInUsd();
+        TokenPrice[] memory supportedTokenPrices = getSupportedTokensWithPriceInUsd();
         return this.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
     }
 
     function getBatchValueUsdWithoutOracleCalls(
-        StrategyRouter.TokenPrice[] calldata supportedTokenPrices
-    )
-        public
-        view
-        returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd)
-    {
+        TokenPrice[] calldata supportedTokenPrices
+    ) public view returns (uint256 totalBalanceUsd, uint256[] memory supportedTokenBalancesUsd) {
         supportedTokenBalancesUsd = new uint256[](supportedTokenPrices.length);
         for (uint256 i; i < supportedTokenBalancesUsd.length; i++) {
             address token = supportedTokenPrices[i].token;
-            uint256 balance = ERC20(token).balanceOf(address(this));
+            uint256 balance = IERC20(token).balanceOf(address(this));
 
-            balance = ((balance * supportedTokenPrices[i].price) / 10**supportedTokenPrices[i].priceDecimals);
+            balance = ((balance * supportedTokenPrices[i].price) / 10 ** supportedTokenPrices[i].priceDecimals);
             balance = toUniform(balance, token);
             supportedTokenBalancesUsd[i] = balance;
             totalBalanceUsd += balance;
         }
     }
 
-    function getSupportedTokensWithPriceInUsd()
-        public
-        view
-        returns (
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices
-        )
-    {
+    function getSupportedTokensWithPriceInUsd() public view returns (TokenPrice[] memory supportedTokenPrices) {
         address[] memory _supportedTokens = getSupportedTokens();
         uint256 supportedTokensLength = _supportedTokens.length;
-        supportedTokenPrices = new StrategyRouter.TokenPrice[](supportedTokensLength);
+        supportedTokenPrices = new TokenPrice[](supportedTokensLength);
         for (uint256 i; i < supportedTokensLength; i++) {
             (uint256 price, uint8 priceDecimals) = oracle.getTokenUsdPrice(_supportedTokens[i]);
-            supportedTokenPrices[i] = StrategyRouter.TokenPrice({
+            supportedTokenPrices[i] = TokenPrice({
                 price: price,
                 priceDecimals: priceDecimals,
                 token: _supportedTokens[i]
@@ -196,30 +171,18 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     // @notice Get a deposit fee amount in tokens.
-    // @param depositAmount Amount of tokens to deposit.
-    // @param depositToken Token address.
+    // @param amountInStableUniform Amount of tokens to deposit.
     // @dev Returns a deposit fee amount with token decimals.
-    function getDepositFeeInTokens(uint256 depositAmount, address depositToken)
-        public
-        view
-        returns (uint256 feeAmount)
-    {
-        // convert deposit amount to USD
-        (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(depositToken);
-        uint256 depositAmountInUsd = (depositAmount * tokenUsdPrice) / 10**oraclePriceDecimals;
-        depositAmountInUsd = toUniform(depositAmountInUsd, depositToken);
+    function getDepositFeeInBNB(uint256 amountInStableUniform) public view returns (uint256 feeAmountInBNB) {
+        uint256 feeAmountStableCoin = calculateDepositFee(amountInStableUniform);
 
-        // calculate fee amount in USD
-        uint256 feeAmountInUsd = calculateDepositFee(depositAmountInUsd);
-        if (feeAmountInUsd == 0) return 0;
+        // Now, find out the value of BNB in USD.
+        (uint256 bnbUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(
+            0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
+        );
 
-        // ensure that fee amount is not exceed deposit amount to avoid overflow
-        // and they are not equal to avoid 0 deposit
-        if (feeAmountInUsd >= depositAmountInUsd) revert DepositFeeExceedsDepositAmountOrTheyAreEqual();
-
-        // convert fee amount in usd to tokens amount
-        feeAmount = (feeAmountInUsd * 10**oraclePriceDecimals) / tokenUsdPrice;
-        feeAmount = fromUniform(feeAmount, depositToken);
+        // Convert the fee in USD to BNB.
+        feeAmountInBNB = (feeAmountStableCoin * (10 ** oraclePriceDecimals)) / bnbUsdPrice;
     }
 
     // User Functions
@@ -232,12 +195,11 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         address receiptOwner,
         uint256[] calldata receiptIds,
         uint256 _currentCycleId
-    ) public onlyStrategyRouter returns (
-        uint256[] memory _receiptIds,
-        address[] memory _tokens,
-        uint256[] memory _withdrawnTokenAmounts)
+    )
+        public
+        onlyStrategyRouter
+        returns (uint256[] memory _receiptIds, address[] memory _tokens, uint256[] memory _withdrawnTokenAmounts)
     {
-
         // withdrawn tokens/amounts will be sent in event. due to solidity design can't do token=>amount array
         address[] memory tokens = new address[](receiptIds.length);
         uint256[] memory withdrawnTokenAmounts = new uint256[](receiptIds.length);
@@ -246,7 +208,7 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             uint256 receiptId = receiptIds[i];
             if (receiptContract.ownerOf(receiptId) != receiptOwner) revert NotReceiptOwner();
 
-            ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
+            ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
 
             // only for receipts in current batch
             if (receipt.cycleId != _currentCycleId) revert CycleClosed();
@@ -264,54 +226,86 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Deposit token into batch.
     /// @notice Tokens not deposited into strategies immediately.
     /// @param depositToken Supported token to deposit.
-    /// @param amount Amount to deposit.
+    /// @param depositAmount Amount to deposit.
     /// @dev Returns deposited token amount and taken fee amount.
     /// @dev User should approve `amount` of `depositToken` to this contract.
     /// @dev Only callable by user wallets.
     function deposit(
         address depositor,
         address depositToken,
-        uint256 amount,
+        uint256 depositAmount,
         uint256 _currentCycleId
-    ) external onlyStrategyRouter returns (uint256 depositAmount, uint256 depositFeeAmount) {
+    ) external payable onlyStrategyRouter returns (uint256 depositFeeAmount) {
         if (!supportsToken(depositToken)) revert UnsupportedToken();
 
-        depositFeeAmount = getDepositFeeInTokens(amount, depositToken);
-
-        // set actual deposit amount depending on fee amount
-        if (depositFeeAmount != 0) depositAmount = amount - depositFeeAmount;
-        else depositAmount = amount;
-
         uint256 depositAmountUniform = toUniform(depositAmount, depositToken);
+        depositFeeAmount = getDepositFeeInBNB(depositAmountUniform);
+        if (msg.value < depositFeeAmount) {
+            revert DepositUnderDepositFeeValue();
+        }
 
         receiptContract.mint(_currentCycleId, depositAmountUniform, depositToken, depositor);
     }
 
-    function transfer(
-        address token,
-        address to,
-        uint256 amount
-    ) external onlyStrategyRouter {
+    function transfer(address token, address to, uint256 amount) external onlyStrategyRouter {
         IERC20(token).safeTransfer(to, amount);
     }
 
     // Admin functions
 
-    function rebalance() public onlyStrategyRouter returns (uint256[] memory balancesPendingAllocationToStrategy) {
+    function rebalance(
+        TokenPrice[] calldata supportedTokenPrices,
+        StrategyInfo[] calldata strategies,
+        uint256 remainingToAllocateStrategiesWeightSum,
+        IdleStrategyInfo[] calldata idleStrategies
+    ) public onlyStrategyRouter {
+        uint256[] memory balancesPendingAllocationToStrategy;
+        TokenInfo[] memory tokenInfos;
+
+        (balancesPendingAllocationToStrategy, tokenInfos) = _rebalanceNoAllocation(
+            supportedTokenPrices,
+            strategies,
+            remainingToAllocateStrategiesWeightSum
+        );
+
+        for (uint256 i; i < strategies.length; i++) {
+            if (balancesPendingAllocationToStrategy[i] > 0) {
+                IERC20(strategies[i].depositToken).safeTransfer(
+                    strategies[i].strategyAddress,
+                    balancesPendingAllocationToStrategy[i]
+                );
+                IStrategy(strategies[i].strategyAddress).deposit(balancesPendingAllocationToStrategy[i]);
+            }
+        }
+
+        for (uint256 i; i < tokenInfos.length; i++) {
+            uint256 supportedTokenBalance = tokenInfos[i].balance;
+            if (supportedTokenBalance > 0) {
+                IERC20(idleStrategies[i].depositToken).safeTransfer(
+                    idleStrategies[i].strategyAddress,
+                    supportedTokenBalance
+                );
+                IIdleStrategy(idleStrategies[i].strategyAddress).deposit(supportedTokenBalance);
+            }
+        }
+    }
+
+    function _rebalanceNoAllocation(
+        TokenPrice[] calldata supportedTokenPrices,
+        StrategyInfo[] memory strategies,
+        uint256 remainingToAllocateStrategiesWeightSum
+    ) internal returns (uint256[] memory balancesPendingAllocationToStrategy, TokenInfo[] memory tokenInfos) {
         uint256 totalBatchUnallocatedTokens;
 
         // point 1
-        TokenInfo[] memory tokenInfos = new TokenInfo[](supportedTokens.length());
+        tokenInfos = new TokenInfo[](supportedTokenPrices.length);
 
         // point 2
         for (uint256 i; i < tokenInfos.length; i++) {
-            tokenInfos[i].tokenAddress = supportedTokens.at(i);
+            tokenInfos[i].tokenAddress = supportedTokenPrices[i].token;
             tokenInfos[i].balance = IERC20(tokenInfos[i].tokenAddress).balanceOf(address(this));
 
-            uint tokenBalanceUniform = toUniform(
-                tokenInfos[i].balance,
-                tokenInfos[i].tokenAddress
-            );
+            uint256 tokenBalanceUniform = toUniform(tokenInfos[i].balance, tokenInfos[i].tokenAddress);
 
             // point 3
             if (tokenBalanceUniform > REBALANCE_SWAP_THRESHOLD) {
@@ -321,45 +315,48 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
             }
         }
 
-        (StrategyRouter.StrategyInfo[] memory strategies, uint256 remainingToAllocateStrategiesWeightSum)
-            = router.getStrategies();
-
         balancesPendingAllocationToStrategy = new uint256[](strategies.length);
-        uint256[] memory strategyToSupportedTokenIndexMap = new uint256[](strategies.length);
+        CapacityData[] memory capacityData = new CapacityData[](strategies.length);
         // first traversal over strategies
-        // 1. collect info: supported token index that corresponds to a strategy
-        // 2. try to allocate funds to a strategy if a batch has balance in strategy's deposit token
+        // 1. try to allocate funds to a strategy if a batch has balance in strategy's deposit token
         // that minimises swaps between tokens – prefer to put a token to strategy that natively support it
         for (uint256 i; i < strategies.length; i++) {
             // necessary check in assumption that some strategies could have 0 weight
             if (remainingToAllocateStrategiesWeightSum == 0) {
                 break;
             }
-            address strategyToken = strategies[i].depositToken;
-            uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
-                / remainingToAllocateStrategiesWeightSum;
+
+            (capacityData[i].isLimitReached, capacityData[i].underflowUniform, ) = IStrategy(
+                strategies[i].strategyAddress
+            ).getCapacityData();
+            capacityData[i].underflowUniform = toUniform(capacityData[i].underflowUniform, strategies[i].depositToken);
+
+            if (capacityData[i].isLimitReached || capacityData[i].underflowUniform <= REBALANCE_SWAP_THRESHOLD) {
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
+                strategies[i].weight = 0;
+
+                continue;
+            }
+
+            uint256 desiredStrategyBalanceUniform = (totalBatchUnallocatedTokens * strategies[i].weight) /
+                remainingToAllocateStrategiesWeightSum;
+
+            if (desiredStrategyBalanceUniform > capacityData[i].underflowUniform) {
+                desiredStrategyBalanceUniform = capacityData[i].underflowUniform;
+            }
 
             // nothing to deposit to this strategy
             if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                 continue;
             }
 
-            // figure out corresponding token index in supported tokens list
-            // TODO corresponding token index in supported tokens list should be known upfront
-            for (uint256 j; j < tokenInfos.length; j++) {
-                if (strategyToken == tokenInfos[j].tokenAddress) {
-                    strategyToSupportedTokenIndexMap[i] = j;
-                    break;
-                }
-            }
-
-            if (tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance) {
+            if (tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].insufficientBalance) {
                 continue;
             }
 
             uint256 batchTokenBalanceUniform = toUniform(
-                tokenInfos[strategyToSupportedTokenIndexMap[i]].balance,
-                strategyToken
+                tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].balance,
+                strategies[i].depositToken
             );
             // if there anything to allocate to a strategy
             if (batchTokenBalanceUniform >= desiredStrategyBalanceUniform) {
@@ -371,20 +368,18 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // send it to the current strategy
                 if (batchTokenBalanceUniform - desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                    balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                    // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
-                    tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
+                    balancesPendingAllocationToStrategy[i] += tokenInfos[
+                        strategies[i].depositTokenInSupportedTokensIndex
+                    ].balance;
+                    tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].balance = 0;
+                    tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].insufficientBalance = true;
                 } else {
-                    // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
-                    // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
-                    // because desiredStrategyBalanceUniform is a virtual value
-                    // that could mismatch the real token number
-                    // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
-                    // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
-                    // we should subtract 333333330000000000
-                    uint256 desiredStrategyBalance = fromUniform(desiredStrategyBalanceUniform, strategyToken);
-                    totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategyToken);
-                    tokenInfos[strategyToSupportedTokenIndexMap[i]].balance -= desiredStrategyBalance;
+                    uint256 desiredStrategyBalance = fromUniform(
+                        desiredStrategyBalanceUniform,
+                        strategies[i].depositToken
+                    );
+                    totalBatchUnallocatedTokens -= toUniform(desiredStrategyBalance, strategies[i].depositToken);
+                    tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].balance -= desiredStrategyBalance;
                     balancesPendingAllocationToStrategy[i] += desiredStrategyBalance;
                 }
             } else {
@@ -395,15 +390,26 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                 // we reduce the strategy weight by 80%
                 // strategy weight = 10,000 - 80% * 10,000 = 2,000
                 // total strategy weight = 100,000 - 80% * 10,000 = 92,000
-                uint256 strategyWeightFulfilled = strategies[i].weight * batchTokenBalanceUniform
-                    / desiredStrategyBalanceUniform;
-                remainingToAllocateStrategiesWeightSum -= strategyWeightFulfilled;
-                strategies[i].weight -= strategyWeightFulfilled;
-
+                uint256 unfulfilledStrategyTokens = desiredStrategyBalanceUniform - batchTokenBalanceUniform;
                 totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
-                balancesPendingAllocationToStrategy[i] += tokenInfos[strategyToSupportedTokenIndexMap[i]].balance;
-                // tokenInfos[strategyToSupportedTokenIndexMap[i]].balance = 0; CAREFUL!!! optimisation, works only with the following flag
-                tokenInfos[strategyToSupportedTokenIndexMap[i]].insufficientBalance = true;
+                capacityData[i].underflowUniform -= batchTokenBalanceUniform;
+
+                remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
+
+                if (unfulfilledStrategyTokens == totalBatchUnallocatedTokens) {
+                    strategies[i].weight = 100;
+                } else {
+                    strategies[i].weight =
+                        (unfulfilledStrategyTokens * remainingToAllocateStrategiesWeightSum) /
+                        (totalBatchUnallocatedTokens - unfulfilledStrategyTokens);
+                }
+
+                remainingToAllocateStrategiesWeightSum += strategies[i].weight;
+
+                balancesPendingAllocationToStrategy[i] += tokenInfos[strategies[i].depositTokenInSupportedTokensIndex]
+                    .balance;
+                tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].balance = 0;
+                tokenInfos[strategies[i].depositTokenInSupportedTokensIndex].insufficientBalance = true;
             }
         }
 
@@ -415,17 +421,24 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                     break;
                 }
 
-                uint256 desiredStrategyBalanceUniform = totalBatchUnallocatedTokens * strategies[i].weight
-                    / remainingToAllocateStrategiesWeightSum;
+                if (capacityData[i].isLimitReached) {
+                    continue;
+                }
+
+                uint256 desiredStrategyBalanceUniform = (totalBatchUnallocatedTokens * strategies[i].weight) /
+                    remainingToAllocateStrategiesWeightSum;
                 remainingToAllocateStrategiesWeightSum -= strategies[i].weight;
+
+                if (desiredStrategyBalanceUniform > capacityData[i].underflowUniform) {
+                    desiredStrategyBalanceUniform = capacityData[i].underflowUniform;
+                }
 
                 if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
                     continue;
                 }
 
-                address strategyToken = strategies[i].depositToken;
                 for (uint256 j; j < tokenInfos.length; j++) {
-                    if (j == strategyToSupportedTokenIndexMap[i]) {
+                    if (j == strategies[i].depositTokenInSupportedTokensIndex) {
                         continue;
                     }
 
@@ -445,16 +458,9 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                             totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                             toSell = tokenInfos[j].balance;
                             desiredStrategyBalanceUniform = 0;
-                            // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                            tokenInfos[j].balance = 0;
                             tokenInfos[j].insufficientBalance = true;
                         } else {
-                            // !!!IMPORTANT: reduce total in batch by desiredStrategyBalance in real tokens
-                            // converted back to uniform tokens instead of using desiredStrategyBalanceUniform
-                            // because desiredStrategyBalanceUniform is a virtual value
-                            // that could mismatch the real token number
-                            // Example: here can be desiredStrategyBalanceUniform = 333333333333333333 (10**18 decimals)
-                            // while real value desiredStrategyBalance = 33333333 (10**8 real token precision)
-                            // we should subtract 333333330000000000
                             toSell = fromUniform(desiredStrategyBalanceUniform, tokenInfos[j].tokenAddress);
                             totalBatchUnallocatedTokens -= toUniform(toSell, tokenInfos[j].tokenAddress);
                             desiredStrategyBalanceUniform = 0;
@@ -464,11 +470,17 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
                         totalBatchUnallocatedTokens -= batchTokenBalanceUniform;
                         toSell = tokenInfos[j].balance;
                         desiredStrategyBalanceUniform -= batchTokenBalanceUniform;
-                        // tokenInfos[j].balance = 0; CAREFUL!!! optimisation, works only with the following flag
+                        tokenInfos[j].balance = 0;
                         tokenInfos[j].insufficientBalance = true;
                     }
 
-                    balancesPendingAllocationToStrategy[i] += _trySwap(toSell, tokenInfos[j].tokenAddress, strategyToken);
+                    balancesPendingAllocationToStrategy[i] += _trySwap(
+                        toSell,
+                        tokenInfos[j].tokenAddress,
+                        strategies[i].depositToken,
+                        supportedTokenPrices[j],
+                        supportedTokenPrices[strategies[i].depositTokenInSupportedTokensIndex]
+                    );
 
                     // if remaining desired strategy amount is below the threshold then break the cycle
                     if (desiredStrategyBalanceUniform <= REBALANCE_SWAP_THRESHOLD) {
@@ -481,82 +493,110 @@ contract Batch is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported) external onlyStrategyRouter {
+    function addSupportedToken(address tokenAddress) external onlyStrategyRouter {
         // attempt to check that token address is valid
         if (!oracle.isTokenSupported(tokenAddress)) {
             revert InvalidToken();
         }
-        if (supported && supportsToken(tokenAddress)) revert AlreadySupportedToken();
+        if (supportsToken(tokenAddress)) revert AlreadySupportedToken();
 
-        if (supported) {
-            supportedTokens.add(tokenAddress);
-        } else {
-            uint8 len = uint8(router.getStrategiesCount());
-            // don't remove tokens that are in use by active strategies
-            for (uint256 i = 0; i < len; i++) {
-                if (router.getStrategyDepositToken(i) == tokenAddress) {
-                    revert CantRemoveTokenOfActiveStrategy();
-                }
+        supportedTokens.add(tokenAddress);
+    }
+
+    /// @notice Remove token as supported for user deposit and withdraw.
+    /// @notice It returns whether token was removed from tail
+    /// @notice And if not the tail token address and new index were it was moved to
+    /// @notice (the way how elements remove from arrays in solidity)
+    /// @dev Admin function.
+    function removeSupportedToken(
+        address tokenAddress
+    )
+        external
+        onlyStrategyRouter
+        returns (bool wasRemovedFromTail, address formerTailTokenAddress, uint256 newIndexOfFormerTailToken)
+    {
+        uint256 initialSupportedTokensLength = supportedTokens.length();
+        for (uint256 i; i < initialSupportedTokensLength; i++) {
+            if (supportedTokens.at(i) == tokenAddress) {
+                newIndexOfFormerTailToken = i;
             }
-            supportedTokens.remove(tokenAddress);
+        }
+
+        uint256 strategiesLength = router.getStrategiesCount();
+        // don't remove tokens that are in use by active strategies
+        for (uint256 i = 0; i < strategiesLength; i++) {
+            if (router.getStrategyDepositToken(i) == tokenAddress) {
+                revert CantRemoveTokenOfActiveStrategy();
+            }
+        }
+
+        supportedTokens.remove(tokenAddress);
+
+        // if token was popped from the end no index replacement occurred
+        if (newIndexOfFormerTailToken == initialSupportedTokensLength - 1) {
+            return (true, address(0), type(uint256).max);
+        } else {
+            return (false, supportedTokens.at(newIndexOfFormerTailToken), newIndexOfFormerTailToken);
         }
     }
 
     // Internals
 
-    /// @dev Change decimal places of number from `oldDecimals` to `newDecimals`.
-    function changeDecimals(
-        uint256 amount,
-        uint8 oldDecimals,
-        uint8 newDecimals
-    ) private pure returns (uint256) {
-        if (oldDecimals < newDecimals) {
-            return amount * (10**(newDecimals - oldDecimals));
-        } else if (oldDecimals > newDecimals) {
-            return amount / (10**(oldDecimals - newDecimals));
-        }
-        return amount;
-    }
-
     /// @dev Swap tokens if they are different (i.e. not the same token)
     function _trySwap(
-        uint256 amount, // tokenFromAmount
-        address from, // tokenFrom
-        address to // tokenTo
+        uint256 amountA, // tokenFromAmount
+        address tokenA, // tokenFrom
+        address tokenB, // tokenTo
+        TokenPrice memory usdPriceTokenA,
+        TokenPrice memory usdPriceTokenB
     ) private returns (uint256 result) {
-        if (from != to) {
-            IERC20(from).safeTransfer(address(exchange), amount);
-            result = exchange.swap(amount, from, to, address(this));
+        if (tokenA != tokenB) {
+            IERC20(tokenA).safeTransfer(address(exchange), amountA);
+            result = exchange.stablecoinSwap(amountA, tokenA, tokenB, address(this), usdPriceTokenA, usdPriceTokenB);
             return result;
         }
-        return amount;
+        return amountA;
     }
 
-    /// @dev Change decimal places from token decimals to `UNIFORM_DECIMALS`.
-    function toUniform(uint256 amount, address token) private view returns (uint256) {
-        return changeDecimals(amount, ERC20(token).decimals(), UNIFORM_DECIMALS);
-    }
-
-    /// @dev Convert decimal places from `UNIFORM_DECIMALS` to token decimals.
-    function fromUniform(uint256 amount, address token) private view returns (uint256) {
-        return changeDecimals(amount, UNIFORM_DECIMALS, ERC20(token).decimals());
-    }
-
-    /// @notice calculate deposit fee in USD
-    /// @param amountInUsd Amount tokens in USD with `UNIFORM_DECIMALS`.
-    /// @dev returns fee amount of tokens in USD.
-    function calculateDepositFee(uint256 amountInUsd)
-        internal
-        view
-        returns (uint256 feeAmountInUsd)
-    {
+    /// @notice calculate deposit fee in Stable
+    /// @param amountInStableUniform Amount tokens in Stable with `UNIFORM_DECIMALS`.
+    /// @dev returns fee amount of tokens in Stable.
+    function calculateDepositFee(uint256 amountInStableUniform) public view returns (uint256 feeAmountInStable) {
         DepositFeeSettings memory _depositFeeSettings = depositFeeSettings;
 
-        feeAmountInUsd = amountInUsd * _depositFeeSettings.feeInBps / MAX_BPS;
+        feeAmountInStable = (amountInStableUniform * _depositFeeSettings.feeInBps) / MAX_BPS;
 
         // check ranges and apply needed fee limits
-        if (feeAmountInUsd < _depositFeeSettings.minFeeInUsd) feeAmountInUsd = _depositFeeSettings.minFeeInUsd;
-        else if (feeAmountInUsd > _depositFeeSettings.maxFeeInUsd) feeAmountInUsd = _depositFeeSettings.maxFeeInUsd;
-
+        if (feeAmountInStable < _depositFeeSettings.minFeeInUsd) feeAmountInStable = _depositFeeSettings.minFeeInUsd;
+        else if (feeAmountInStable > _depositFeeSettings.maxFeeInUsd)
+            feeAmountInStable = _depositFeeSettings.maxFeeInUsd;
     }
+
+    function collectDepositFee() external onlyOwner {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Transfer failed");
+    }
+
+    /* ERRORS */
+
+    error AlreadySupportedToken();
+    error CantRemoveTokenOfActiveStrategy();
+    error UnsupportedToken();
+    error NotReceiptOwner();
+    error CycleClosed();
+    error NotEnoughBalanceInBatch();
+    error CallerIsNotStrategyRouter();
+    error ErrorToCheckUpgradeContract();
+    error MaxDepositFeeExceedsThreshold();
+    error MinDepositFeeExceedsMax();
+    error DepositFeePercentExceedsFeePercentageThreshold();
+    error NotSetMaxFeeInStableWhenFeeInBpsIsSet();
+    error DepositFeeTreasuryNotSet();
+    error DepositUnderDepositFeeValue();
+    error InvalidToken();
+
+    /* EVENTS */
+
+    event SetAddresses(IExchange _exchange, IUsdOracle _oracle, IStrategyRouter _router, IReceiptNFT _receiptNft);
+    event SetDepositFeeSettings(Batch.DepositFeeSettings newDepositFeeSettings);
 }

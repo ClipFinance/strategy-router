@@ -25,7 +25,7 @@ import "./AddressUpgradeable.sol";
  *     }
  * }
  * contract MyTokenV2 is MyToken, ERC20PermitUpgradeable {
- *     function initializeV2() reinitializer(2) public {
+ *     function initializeV2() rereinitializer(2) public {
  *         __ERC20Permit_init("MyToken");
  *     }
  * }
@@ -55,10 +55,6 @@ import "./AddressUpgradeable.sol";
  * ====
  */
 abstract contract Initializable {
-    error Initializable__ContractIsAlreadyInitialized();
-    error Initializable__ContractIsNotInitializing();
-    error Initializable_ContractIsInitializing();
-
     /**
      * @dev Indicates that the contract has been initialized.
      * @custom:oz-retyped-from bool
@@ -85,8 +81,12 @@ abstract contract Initializable {
         //     (isTopLevelCall && _initialized < 1) || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1),
         //     "Initializable: contract is already initialized"
         // );
-        if(!((isTopLevelCall && _initialized < 1) || (!AddressUpgradeable.isContract(address(this)) && _initialized == 1)))
+        if (
+            !((isTopLevelCall && _initialized < 1) ||
+                (!AddressUpgradeable.isContract(address(this)) && _initialized == 1))
+        ) {
             revert Initializable__ContractIsAlreadyInitialized();
+        }
         _initialized = 1;
         if (isTopLevelCall) {
             _initializing = true;
@@ -112,7 +112,7 @@ abstract contract Initializable {
      */
     modifier reinitializer(uint8 version) {
         // require(!_initializing && _initialized < version, "Initializable: contract is already initialized");
-        if(!(!_initializing && _initialized < version)) revert Initializable__ContractIsAlreadyInitialized();
+        if (!(!_initializing && _initialized < version)) revert Initializable__ContractIsAlreadyInitialized();
         _initialized = version;
         _initializing = true;
         _;
@@ -126,7 +126,7 @@ abstract contract Initializable {
      */
     modifier onlyInitializing() {
         // require(_initializing, "Initializable: contract is not initializing");
-        if(!(_initializing)) revert Initializable__ContractIsNotInitializing();
+        if (!(_initializing)) revert Initializable__ContractIsNotInitializing();
         _;
     }
 
@@ -138,10 +138,16 @@ abstract contract Initializable {
      */
     function _disableInitializers() internal virtual {
         // require(!_initializing, "Initializable: contract is initializing");
-        if(!(!_initializing)) revert Initializable_ContractIsInitializing();
+        if (!(!_initializing)) revert Initializable_ContractIsInitializing();
         if (_initialized < type(uint8).max) {
             _initialized = type(uint8).max;
             emit Initialized(type(uint8).max);
         }
     }
+
+    /* ERRORS */
+
+    error Initializable__ContractIsAlreadyInitialized();
+    error Initializable__ContractIsNotInitializing();
+    error Initializable_ContractIsInitializing();
 }

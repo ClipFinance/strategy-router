@@ -7,16 +7,6 @@ pragma solidity ^0.8.1;
  * @dev Collection of functions related to the address type
  */
 library AddressUpgradeable {
-    error Address__InsufficientBalance();
-    error Address__UnableToSendValue();
-    error Address__InsufficientBalanceForCall();
-    error Address__CallToNonContract();
-    error Address__StaticCallToNonContract();
-    error Address__LowLevelCallFailedWithCustomErrorCode(uint errorCode);
-    error Address__LowLevelCallFailed();
-    error Address__LowLevelCallWithValueFailed();
-    error Address__LowLevelStaticCallFailed();
-
     enum ErrorCodes {
         unknown,
         functionCall,
@@ -113,11 +103,7 @@ library AddressUpgradeable {
      *
      * _Available since v3.1._
      */
-    function functionCall(
-        address target,
-        bytes memory data,
-        uint errorCode
-    ) internal returns (bytes memory) {
+    function functionCall(address target, bytes memory data, uint errorCode) internal returns (bytes memory) {
         return functionCallWithValue(target, data, 0, errorCode);
     }
 
@@ -132,11 +118,7 @@ library AddressUpgradeable {
      *
      * _Available since v3.1._
      */
-    function functionCallWithValue(
-        address target,
-        bytes memory data,
-        uint256 value
-    ) internal returns (bytes memory) {
+    function functionCallWithValue(address target, bytes memory data, uint256 value) internal returns (bytes memory) {
         // return functionCallWithValue(target, data, value, "Address: low-level call with value failed");
         return functionCallWithValue(target, data, value, uint(ErrorCodes.functionCallWithValue));
     }
@@ -216,10 +198,23 @@ library AddressUpgradeable {
             } else {
                 // revert(errorMessage);
                 if (errorCode == uint(ErrorCodes.functionCall)) revert Address__LowLevelCallFailed();
-                else if (errorCode == uint(ErrorCodes.functionCallWithValue)) revert Address__LowLevelCallWithValueFailed();
+                else if (errorCode == uint(ErrorCodes.functionCallWithValue))
+                    revert Address__LowLevelCallWithValueFailed();
                 else if (errorCode == uint(ErrorCodes.functionStaticCall)) revert Address__LowLevelStaticCallFailed();
                 else revert Address__LowLevelCallFailedWithCustomErrorCode(uint(errorCode));
             }
         }
     }
+
+    /* ERRORS */
+
+    error Address__InsufficientBalance();
+    error Address__UnableToSendValue();
+    error Address__InsufficientBalanceForCall();
+    error Address__CallToNonContract();
+    error Address__StaticCallToNonContract();
+    error Address__LowLevelCallFailedWithCustomErrorCode(uint errorCode);
+    error Address__LowLevelCallFailed();
+    error Address__LowLevelCallWithValueFailed();
+    error Address__LowLevelStaticCallFailed();
 }

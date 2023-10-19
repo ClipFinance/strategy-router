@@ -5,27 +5,20 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
-// import "hardhat/console.sol";
+import {ReceiptData} from "./lib/Structs.sol";
 
 contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
-
-    error NonExistingToken();
-    error ReceiptAmountCanOnlyDecrease();
-    error NotManager();
-    /// Invalid query range (`start` >= `stop`).
-    error InvalidQueryRange();
-
-    struct ReceiptData {
-        uint256 cycleId;
-        uint256 tokenAmountUniform; // in token
-        address token;
-    }
+    using Strings for uint256;
 
     uint256 private _receiptsCounter;
 
     mapping(uint256 => ReceiptData) public receipts;
     mapping(address => bool) public managers;
+
+    string public uri;
+    bool public dynamicURI;
 
     modifier onlyManager() {
         if (managers[msg.sender] == false) revert NotManager();
@@ -38,13 +31,24 @@ contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize(address strategyRouter, address batch) external initializer {
+    function initialize(bytes memory initializeData) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
-        __ERC721_init("Receipt NFT", "RECEIPT");
+        __ERC721_init("Proof Of Deposit", "CLIP-V1-POD");
+
+        // decode initialize data
+        (address strategyRouter, address batch, string memory link, bool isDynamic) = abi.decode(
+            initializeData,
+            (address, address, string, bool)
+        );
+
+        setBaseURI(link, isDynamic);
 
         managers[strategyRouter] = true;
         managers[batch] = true;
+
+        // transer ownership and set proxi admin to address that deployed this contract from Create2Deployer
+        transferOwnership(tx.origin);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -53,14 +57,10 @@ contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         if (!_exists(receiptId)) revert NonExistingToken();
         if (receipts[receiptId].tokenAmountUniform < amount) revert ReceiptAmountCanOnlyDecrease();
         receipts[receiptId].tokenAmountUniform = amount;
+        emit SetAmount(receiptId, amount);
     }
 
-    function mint(
-        uint256 cycleId,
-        uint256 amount,
-        address token,
-        address wallet
-    ) external onlyManager {
+    function mint(uint256 cycleId, uint256 amount, address token, address wallet) external onlyManager {
         uint256 _receiptId = _receiptsCounter;
         receipts[_receiptId] = ReceiptData({cycleId: cycleId, token: token, tokenAmountUniform: amount});
         _mint(wallet, _receiptId);
@@ -68,7 +68,7 @@ contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function burn(uint256 receiptId) external onlyManager {
-        if(!_exists(receiptId)) revert NonExistingToken();
+        if (!_exists(receiptId)) revert NonExistingToken();
         _burn(receiptId);
         delete receipts[receiptId];
     }
@@ -161,4 +161,28 @@ contract ReceiptNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
             receiptId++;
         }
     }
+
+    function tokenURI(uint256 receiptId) public view virtual override returns (string memory) {
+        if (!_exists(receiptId)) revert NonExistingToken();
+
+        return dynamicURI != true ? uri : string(abi.encodePacked(uri, receiptId.toString()));
+    }
+
+    function setBaseURI(string memory link, bool dynamic) public onlyOwner {
+        uri = link;
+        dynamicURI = dynamic;
+        emit BaseURISet(link, dynamic);
+    }
+
+    /* ERRORS */
+    error NonExistingToken();
+    error ReceiptAmountCanOnlyDecrease();
+    error NotManager();
+    /// Invalid query range (`start` >= `stop`).
+    error InvalidQueryRange();
+
+    /* EVENTS */
+
+    event SetAmount(uint256 indexed receiptId, uint256 amount);
+    event BaseURISet(string newBaseURI, bool isDynamicURI);
 }

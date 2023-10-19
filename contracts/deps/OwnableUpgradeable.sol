@@ -19,9 +19,6 @@ import "./Initializable.sol";
  * the owner.
  */
 abstract contract OwnableUpgradeable is Initializable, ContextUpgradeable {
-    error Ownable__CallerIsNotTheOwner();
-    error Ownable__NewOwnerIsTheZeroAddress();
-
     address private _owner;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
@@ -57,7 +54,7 @@ abstract contract OwnableUpgradeable is Initializable, ContextUpgradeable {
      */
     function _checkOwner() internal view virtual {
         // require(owner() == _msgSender(), "Ownable: caller is not the owner");
-        if(!(owner() == _msgSender())) revert Ownable__CallerIsNotTheOwner();
+        if (!(owner() == _msgSender())) revert Ownable__CallerIsNotTheOwner();
     }
 
     /**
@@ -77,7 +74,7 @@ abstract contract OwnableUpgradeable is Initializable, ContextUpgradeable {
      */
     function transferOwnership(address newOwner) public virtual onlyOwner {
         // require(newOwner != address(0), "Ownable: new owner is the zero address");
-        if(!(newOwner != address(0))) revert Ownable__NewOwnerIsTheZeroAddress();
+        if (!(newOwner != address(0))) revert Ownable__NewOwnerIsTheZeroAddress();
         _transferOwnership(newOwner);
     }
 
@@ -97,4 +94,9 @@ abstract contract OwnableUpgradeable is Initializable, ContextUpgradeable {
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[49] private __gap;
+
+    /* ERRORS */
+
+    error Ownable__CallerIsNotTheOwner();
+    error Ownable__NewOwnerIsTheZeroAddress();
 }

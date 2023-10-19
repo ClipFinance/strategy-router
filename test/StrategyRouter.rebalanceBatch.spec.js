@@ -1,54 +1,65 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { setupCore, setupFakeTokens, setupTestParams, deployFakeUnderFulfilledWithdrawalStrategy, setupFakeExchangePlugin, mintFakeToken } = require("./shared/commonSetup");
+const {
+  setupCore,
+  setupFakeTokens,
+  setupTestParams,
+  deployFakeUnderFulfilledWithdrawalStrategy,
+  setupFakeExchangePlugin,
+  mintFakeToken,
+} = require("./shared/commonSetup");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { BigNumber, FixedNumber } = require("ethers");
-const { constants } = require("@openzeppelin/test-helpers");
 
 async function expectNoRemnantsFn(contract, busd, usdc, usdt) {
-  expect(
-    await busd.balanceOf(contract.address)
-  ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
-  expect(
-    await usdc.balanceOf(contract.address)
-  ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
-  expect(
-    await usdt.balanceOf(contract.address)
-  ).to.be.closeTo(BigNumber.from(0), BigNumber.from(0));
+  expect(await busd.balanceOf(contract.address)).to.be.closeTo(
+    BigNumber.from(0),
+    BigNumber.from(0)
+  );
+  expect(await usdc.balanceOf(contract.address)).to.be.closeTo(
+    BigNumber.from(0),
+    BigNumber.from(0)
+  );
+  expect(await usdt.balanceOf(contract.address)).to.be.closeTo(
+    BigNumber.from(0),
+    BigNumber.from(0)
+  );
 }
 
-async function expectStrategiesHoldCorrectBalances(depositAmount, ...strategies) {
-  const totalValueUsd = BigNumber
-    .from(depositAmount)
-    .mul(BigNumber.from(10).pow(18));
+async function expectStrategiesHoldCorrectBalances(
+  depositAmount,
+  ...strategies
+) {
+  const totalValueUsd = BigNumber.from(depositAmount).mul(
+    BigNumber.from(10).pow(18)
+  );
 
-  const allStrategiesWeightSum = strategies
-      .reduce((totalWeight, strategy) => totalWeight + strategy.weight, 0)
-  ;
+  const allStrategiesWeightSum = strategies.reduce(
+    (totalWeight, strategy) => totalWeight + strategy.weight,
+    0
+  );
   for (const strategyIndex of strategies.keys()) {
     const strategy = strategies[strategyIndex];
 
     const expectedBalanceUniform = totalValueUsd
       .mul(strategy.weight)
       .div(allStrategiesWeightSum);
-    const expectedBalance = expectedBalanceUniform
-      .div(BigNumber.from(10).pow(18 - strategy.token.decimalNumber));
+    const expectedBalance = expectedBalanceUniform.div(
+      BigNumber.from(10).pow(18 - strategy.token.decimalNumber)
+    );
 
     // 2%
-    const expectedBalanceDeviation = expectedBalance
-      .mul(2)
-      .div(100);
+    const expectedBalanceDeviation = expectedBalance.mul(2).div(100);
 
-    const strategyTokenBalance = await strategy.token.balanceOf(strategy.address);
+    const strategyTokenBalance = await strategy.token.balanceOf(
+      strategy.address
+    );
 
     expect(
       strategyTokenBalance,
-      `Strategy${strategyIndex + 1} has balance ${strategyTokenBalance}`
-      + ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`,
-    ).to.be.closeTo(
-      expectedBalance,
-      expectedBalanceDeviation,
-    )
+      `Strategy${strategyIndex + 1} has balance ${strategyTokenBalance}` +
+        ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`
+    ).to.be.closeTo(expectedBalance, expectedBalanceDeviation);
   }
 }
 
@@ -57,18 +68,14 @@ async function expectStrategyHoldsExactBalances(
   expectedBalanceFullUnits,
   deviationPercent = 1
 ) {
-  const expectedBalance = BigNumber
-    .from(
-      FixedNumber
-        .from(expectedBalanceFullUnits)
-        .mulUnsafe(
-          FixedNumber.from(
-            BigNumber.from(10).pow(strategy.token.decimalNumber)
-          )
-        )
-        .toFormat({decimals: 0})
-        .toString()
-    );
+  const expectedBalance = BigNumber.from(
+    FixedNumber.from(expectedBalanceFullUnits)
+      .mulUnsafe(
+        FixedNumber.from(BigNumber.from(10).pow(strategy.token.decimalNumber))
+      )
+      .toFormat({ decimals: 0 })
+      .toString()
+  );
 
   const expectedBalanceDeviation = expectedBalance
     .mul(deviationPercent)
@@ -78,12 +85,9 @@ async function expectStrategyHoldsExactBalances(
 
   expect(
     strategyTokenBalance,
-    `Strategy has balance ${strategyTokenBalance}`
-    + ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`,
-  ).to.be.closeTo(
-    expectedBalance,
-    expectedBalanceDeviation,
-  );
+    `Strategy has balance ${strategyTokenBalance}` +
+      ` while was expected ${expectedBalance} +/- ${expectedBalanceDeviation}`
+  ).to.be.closeTo(expectedBalance, expectedBalanceDeviation);
 }
 
 describe("Test Batch.rebalance in algorithm-specific manner", function () {
@@ -91,22 +95,43 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     const [owner, nonReceiptOwner] = await ethers.getSigners();
 
     // deploy core contracts
-    const { router, oracle, exchange, batch, receiptContract, sharesToken } = await setupCore();
+    const {
+      router,
+      oracle,
+      exchange,
+      admin,
+      batch,
+      receiptContract,
+      sharesToken,
+      create2Deployer,
+      ProxyBytecode,
+    } = await setupCore();
 
     // deploy mock tokens
-    const { usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } = await setupFakeTokens(router);
+    const { usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt } =
+      await setupFakeTokens(batch, router, create2Deployer, ProxyBytecode);
 
-    const { exchangePlugin: fakeExchangePlugin } = await setupFakeExchangePlugin(
-      oracle,
-      0, // 0% slippage,
-      feeBps // fee %0.25
-    );
-    mintFakeToken(fakeExchangePlugin.address, usdc, parseUsdc('10000000'));
-    mintFakeToken(fakeExchangePlugin.address, usdt, parseUsdt('10000000'));
-    mintFakeToken(fakeExchangePlugin.address, busd, parseBusd('10000000'));
+    const { exchangePlugin: fakeExchangePlugin } =
+      await setupFakeExchangePlugin(
+        oracle,
+        0, // 0% slippage,
+        feeBps // fee %0.25
+      );
+    mintFakeToken(fakeExchangePlugin.address, usdc, parseUsdc("10000000"));
+    mintFakeToken(fakeExchangePlugin.address, usdt, parseUsdt("10000000"));
+    mintFakeToken(fakeExchangePlugin.address, busd, parseBusd("10000000"));
 
     // setup params for testing
-    await setupTestParams(router, oracle, exchange, usdc, usdt, busd, fakeExchangePlugin);
+    await setupTestParams(
+      router,
+      oracle,
+      exchange,
+      admin,
+      usdc,
+      usdt,
+      busd,
+      fakeExchangePlugin
+    );
 
     // setup infinite allowance
     await busd.approve(router.address, parseBusd("10000000"));
@@ -114,20 +139,27 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     await usdt.approve(router.address, parseUsdt("10000000"));
 
     // setup supported tokens
-    await router.addSupportedToken(usdc);
-    await router.addSupportedToken(busd);
-    await router.addSupportedToken(usdt);
+    await admin.addSupportedToken(usdc);
+    await admin.addSupportedToken(busd);
+    await admin.addSupportedToken(usdt);
 
     const expectNoRemnants = async function (contract) {
       await expectNoRemnantsFn(contract, busd, usdc, usdt);
     };
 
-    const deployStrategy = async function ({token, weight = 10_000}) {
+    const deployStrategy = async function ({
+      token,
+      weight = 10_000,
+      hardcapLimit,
+    }) {
       const strategy = await deployFakeUnderFulfilledWithdrawalStrategy({
+        admin,
+        batch,
         router,
         token,
         underFulfilledWithdrawalBps: 0,
         weight,
+        hardcapLimit,
       });
       strategy.token = token;
       strategy.weight = weight;
@@ -136,26 +168,46 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
     };
 
     return {
-      owner, nonReceiptOwner,
-      router, oracle, exchange, batch, receiptContract, sharesToken,
-      usdc, usdt, busd, parseUsdc, parseBusd, parseUsdt,
+      owner,
+      nonReceiptOwner,
+      admin,
+      router,
+      oracle,
+      exchange,
+      batch,
+      receiptContract,
+      sharesToken,
+      usdc,
+      usdt,
+      busd,
+      parseUsdc,
+      parseBusd,
+      parseUsdt,
       fakeExchangePlugin,
-      expectNoRemnants, deployStrategy
-    }
+      expectNoRemnants,
+      deployStrategy,
+    };
   }
 
   async function loadStateWithZeroBps() {
     return await loadState(0);
   }
 
-  describe('token amounts allocated to strategies follow exchange rates correctly', async function () {
-    it('when deposit token rate < strategy token rate then receive more tokens than sold', async function() {
+  describe("token amounts allocated to strategies follow exchange rates correctly", async function () {
+    it("when deposit token rate < strategy token rate then receive more tokens than sold", async function () {
       const {
-        router, oracle,
-        busd, parseBusd,
-        usdc, parseUsdc,
+        owner,
+        nonReceiptOwner,
+        admin,
+        router,
+        oracle,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
         batch,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -166,20 +218,27 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await oracle.setPrice(busd.address, parseBusd("1"));
       await oracle.setPrice(usdc.address, parseUsdc("0.95"));
 
-      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(busd.address, parseBusd("100"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
       await expectStrategyHoldsExactBalances(strategy1, 105);
     });
-    it('when deposit token rate > strategy token rate then receive more tokens than sold', async function() {
+    it("when deposit token rate > strategy token rate then receive more tokens than sold", async function () {
       const {
-        router, oracle,
-        busd, parseBusd,
-        usdc, parseUsdc,
+        owner,
+        nonReceiptOwner,
+        admin,
+        router,
+        oracle,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
         batch,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -190,7 +249,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await oracle.setPrice(busd.address, parseBusd("0.95"));
       await oracle.setPrice(usdc.address, parseUsdc("1"));
 
-      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(busd.address, parseBusd("100"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -198,15 +257,24 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy1, 95);
     });
   });
-  describe('no remnants in Batch verification', async function () {
-    describe('swaps occurs on rebalance', async function () {
-      it('strategy token rate > deposit token rates', async function() {
+  describe("no remnants in Batch verification", async function () {
+    describe("swaps occurs on rebalance", async function () {
+      it("strategy token rate > deposit token rates", async function () {
         const {
-          router, oracle, batch,
-          busd, parseBusd,
-          usdc, parseUsdc,
-          usdt, parseUsdt,
-          expectNoRemnants, deployStrategy
+          owner,
+          nonReceiptOwner,
+          admin,
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          expectNoRemnants,
+          deployStrategy,
         } = await loadFixture(loadState);
 
         const strategy1 = await deployStrategy({
@@ -219,8 +287,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         await oracle.setPrice(usdt.address, parseUsdt("1"));
         await oracle.setPrice(usdc.address, parseUsdc("0.95"));
 
-        await router.depositToBatch(busd.address, parseBusd("100"));
-        await router.depositToBatch(usdt.address, parseUsdt("100"));
+        await router.depositToBatch(busd.address, parseBusd("100"), "");
+        await router.depositToBatch(usdt.address, parseUsdt("100"), "");
 
         // to sell[busd] = 100
         // to sell[usdt] = 100
@@ -232,13 +300,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         await expectNoRemnants(batch);
         await expectStrategyHoldsExactBalances(strategy1, 210);
       });
-      it('strategy token rate < deposit token rates', async function() {
+      it("strategy token rate < deposit token rates", async function () {
         const {
-          router, oracle, batch,
-          busd, parseBusd,
-          usdc, parseUsdc,
-          usdt, parseUsdt,
-          expectNoRemnants, deployStrategy
+          owner,
+          nonReceiptOwner,
+          admin,
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          expectNoRemnants,
+          deployStrategy,
         } = await loadFixture(loadState);
 
         const strategy1 = await deployStrategy({
@@ -251,8 +328,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         await oracle.setPrice(usdt.address, parseUsdt("1"));
         await oracle.setPrice(usdc.address, parseUsdc("1.05"));
 
-        await router.depositToBatch(busd.address, parseBusd("100"));
-        await router.depositToBatch(usdt.address, parseUsdt("100"));
+        await router.depositToBatch(busd.address, parseBusd("100"), "");
+        await router.depositToBatch(usdt.address, parseUsdt("100"), "");
 
         // to sell[busd] = 100
         // to sell[usdt] = 100
@@ -265,15 +342,24 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         await expectStrategyHoldsExactBalances(strategy1, 190);
       });
     });
-    describe('strategy desired balance below swap threshold', async function () {
-      describe('2 strategies, strategy in question goes last', async function () {
-        it('strategy tokens and deposit tokens are same', async function () {
+    describe("strategy desired balance below swap threshold", async function () {
+      describe("2 strategies, strategy in question goes last", async function () {
+        it("strategy tokens and deposit tokens are same", async function () {
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
-            expectNoRemnants, deployStrategy
+            owner,
+            nonReceiptOwner,
+            admin,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -285,7 +371,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 50,
           });
 
-          await router.depositToBatch(busd.address, parseBusd("10"));
+          await router.depositToBatch(busd.address, parseBusd("10"), "");
 
           await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -294,13 +380,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
           await expectStrategyHoldsExactBalances(strategy1, 10);
           await expectStrategyHoldsExactBalances(strategy2, 0);
         });
-        it('strategy tokens and deposit tokens are different', async function () {
+        it("strategy tokens and deposit tokens are different", async function () {
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
-            expectNoRemnants, deployStrategy
+            owner,
+            nonReceiptOwner,
+            admin,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -312,7 +407,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 50,
           });
 
-          await router.depositToBatch(busd.address, parseBusd("10"));
+          await router.depositToBatch(busd.address, parseBusd("10"), "");
 
           // 1 BUSD = 1 USDC
           await oracle.setPrice(busd.address, parseBusd("1"));
@@ -326,14 +421,23 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
           await expectStrategyHoldsExactBalances(strategy2, 0);
         });
       });
-      describe('2 strategies, strategy in question goes first', async function () {
-        it('strategy tokens and deposit tokens are same', async function () {
+      describe("2 strategies, strategy in question goes first", async function () {
+        it("strategy tokens and deposit tokens are same", async function () {
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
-            expectNoRemnants, deployStrategy
+            owner,
+            nonReceiptOwner,
+            admin,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -345,7 +449,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 9950,
           });
 
-          await router.depositToBatch(busd.address, parseBusd("10"));
+          await router.depositToBatch(busd.address, parseBusd("10"), "");
 
           await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -354,13 +458,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
           await expectStrategyHoldsExactBalances(strategy1, 0);
           await expectStrategyHoldsExactBalances(strategy2, 10);
         });
-        it('strategy tokens and deposit tokens are different', async function () {
+        it("strategy tokens and deposit tokens are different", async function () {
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
-            expectNoRemnants, deployStrategy
+            owner,
+            nonReceiptOwner,
+            admin,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -372,7 +485,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 9950,
           });
 
-          await router.depositToBatch(busd.address, parseBusd("10"));
+          await router.depositToBatch(busd.address, parseBusd("10"), "");
 
           // 1 BUSD = 1 USDC
           await oracle.setPrice(busd.address, parseBusd("1"));
@@ -386,16 +499,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
           await expectStrategyHoldsExactBalances(strategy2, 10);
         });
       });
-      describe('3 strategies, strategy in question goes in between', async function () {
-        it('same tokens', async function() {
+      describe("3 strategies, strategy in question goes in between", async function () {
+        it("same tokens", async function () {
           // order of tokens usdc -> busd -> usdt
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
             fakeExchangePlugin,
-            expectNoRemnants, deployStrategy
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -411,7 +530,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 4975,
           });
 
-          await router.depositToBatch(busd.address, parseBusd("10"));
+          await router.depositToBatch(busd.address, parseBusd("10"), "");
 
           await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -421,15 +540,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
           await expectStrategyHoldsExactBalances(strategy2, 0);
           await expectStrategyHoldsExactBalances(strategy3, 5, 2);
         });
-        it('different tokens', async function() {
+        it("different tokens", async function () {
           // order of tokens usdc -> busd -> usdt
           const {
-            router, oracle, batch,
-            busd, parseBusd,
-            usdc, parseUsdc,
-            usdt, parseUsdt,
+            router,
+            oracle,
+            batch,
+            busd,
+            parseBusd,
+            usdc,
+            parseUsdc,
+            usdt,
+            parseUsdt,
             fakeExchangePlugin,
-            expectNoRemnants, deployStrategy
+            expectNoRemnants,
+            deployStrategy,
           } = await loadFixture(loadState);
 
           const strategy1 = await deployStrategy({
@@ -445,28 +570,37 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             weight: 4975,
           });
 
-          await router.depositToBatch(usdt.address, parseUsdt("10"));
+          await router.depositToBatch(usdt.address, parseUsdt("10"), "");
 
           await expect(router.allocateToStrategies()).not.to.be.reverted;
 
           await expectNoRemnants(batch);
 
+          console.log("strategy1", await strategy1.totalTokens());
+          console.log("strategy2", await strategy2.totalTokens());
+          console.log("strategy3", await strategy3.totalTokens());
           await expectStrategyHoldsExactBalances(strategy1, 5, 2);
           await expectStrategyHoldsExactBalances(strategy2, 0);
           await expectStrategyHoldsExactBalances(strategy3, 5, 2);
         });
       });
-      describe('2 of 3 strategies desired balances below swap threshold', async function () {
-        describe('strategy tokens and deposit tokens are same', async function () {
-          it('below, below, above', async function () {
+      describe("2 of 3 strategies desired balances below swap threshold", async function () {
+        describe("strategy tokens and deposit tokens are same", async function () {
+          it("below, below, above", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -482,7 +616,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 9900,
             });
 
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
+            await router.depositToBatch(usdc.address, parseUsdc("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -492,15 +626,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expectStrategyHoldsExactBalances(strategy2, 0);
             await expectStrategyHoldsExactBalances(strategy3, 10);
           });
-          it('below, above, below', async function () {
+          it("below, above, below", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -516,7 +656,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 50,
             });
 
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
+            await router.depositToBatch(usdc.address, parseUsdc("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -526,15 +666,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expectStrategyHoldsExactBalances(strategy2, 10);
             await expectStrategyHoldsExactBalances(strategy3, 0);
           });
-          it('above, below, below', async function () {
+          it("above, below, below", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -550,7 +696,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 50,
             });
 
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
+            await router.depositToBatch(usdc.address, parseUsdc("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -561,16 +707,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expectStrategyHoldsExactBalances(strategy3, 0);
           });
         });
-        describe('strategy tokens and deposit tokens are different', async function () {
-          it('below, below, above', async function () {
+        describe("strategy tokens and deposit tokens are different", async function () {
+          it("below, below, above", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -586,7 +738,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 9900,
             });
 
-            await router.depositToBatch(busd.address, parseBusd("10"));
+            await router.depositToBatch(busd.address, parseBusd("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -596,15 +748,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expectStrategyHoldsExactBalances(strategy2, 0);
             await expectStrategyHoldsExactBalances(strategy3, 10);
           });
-          it('below, above, below', async function () {
+          it("below, above, below", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -620,7 +778,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 50,
             });
 
-            await router.depositToBatch(busd.address, parseBusd("10"));
+            await router.depositToBatch(busd.address, parseBusd("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -630,15 +788,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
             await expectStrategyHoldsExactBalances(strategy2, 10);
             await expectStrategyHoldsExactBalances(strategy3, 0);
           });
-          it('above, below, below', async function () {
+          it("above, below, below", async function () {
             // order of tokens usdc -> busd -> usdt
             const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
+              router,
+              oracle,
+              batch,
+              busd,
+              parseBusd,
+              usdc,
+              parseUsdc,
+              usdt,
+              parseUsdt,
               fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
+              expectNoRemnants,
+              deployStrategy,
             } = await loadFixture(loadState);
 
             const strategy1 = await deployStrategy({
@@ -654,7 +818,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
               weight: 50,
             });
 
-            await router.depositToBatch(busd.address, parseBusd("10"));
+            await router.depositToBatch(busd.address, parseBusd("10"), "");
 
             await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -668,231 +832,252 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       });
     });
   });
-  describe(
-    'test desired balance vs token available balance comparisons',
-    async function () {
-      describe('desired balance > token balance, delta less than swap threshold', async function () {
-        it(
-          'strategy token and deposit tokens are same',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
+  describe("test desired balance vs token available balance comparisons", async function () {
+    describe("desired balance > token balance, delta less than swap threshold", async function () {
+      it("strategy token and deposit tokens are same", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
 
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 50_000_000_100,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 49_999_999_900,
-            });
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 50_000_000_100,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 49_999_999_900,
+        });
 
-            await router.depositToBatch(usdt.address, parseUsdt("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
+        await router.depositToBatch(usdt.address, parseUsdt("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
 
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
 
-            await expectNoRemnants(batch);
-            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
-            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
-          }
-        );
-        it(
-          'strategy token and deposit tokens are different',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
-
-            oracle.setPrice(busd.address, parseBusd("1"));
-            oracle.setPrice(usdc.address, parseUsdc("1"));
-            oracle.setPrice(usdt.address, parseUsdt("1"));
-
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 50_000_000_100,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 49_999_999_900,
-            });
-
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
-
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
-
-            await expectNoRemnants(batch);
-
-            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
-            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
-          }
-        );
+        await expectNoRemnants(batch);
+        await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+        await expectStrategyHoldsExactBalances(strategy2, 10, 2);
       });
-      describe('desired balance < token balance, delta less than swap threshold', async function () {
-        it(
-          'strategy token and deposit tokens are same',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
+      it("strategy token and deposit tokens are different", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
 
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 49_999_999_900,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 50_000_000_100,
-            });
+        oracle.setPrice(busd.address, parseBusd("1"));
+        oracle.setPrice(usdc.address, parseUsdc("1"));
+        oracle.setPrice(usdt.address, parseUsdt("1"));
 
-            await router.depositToBatch(usdt.address, parseUsdt("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 50_000_000_100,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 49_999_999_900,
+        });
 
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
+        await router.depositToBatch(usdc.address, parseUsdc("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
 
-            await expectNoRemnants(batch);
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
 
-            await expectStrategyHoldsExactBalances(strategy1, 10, 2);
-            await expectStrategyHoldsExactBalances(strategy2, 10, 2);
-          }
-        );
-        it(
-          'strategy token and deposit tokens are different',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
+        await expectNoRemnants(batch);
 
-            oracle.setPrice(busd.address, parseBusd("1"));
-            oracle.setPrice(usdc.address, parseUsdc("1"));
-            oracle.setPrice(usdt.address, parseUsdt("1"));
-
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 49_999_999_900,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 50_000_000_100,
-            });
-
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
-
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
-
-            await expectNoRemnants(batch);
-            await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
-          }
-        );
+        await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+        await expectStrategyHoldsExactBalances(strategy2, 10, 2);
       });
-      describe('desired balance < token balance, delta higher than swap threshold', async function () {
-        it(
-          'strategy token and deposit tokens are same',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
+    });
+    describe("desired balance < token balance, delta less than swap threshold", async function () {
+      it("strategy token and deposit tokens are same", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
 
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 51_000_000_000,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 49_000_000_000,
-            });
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 49_999_999_900,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 50_000_000_100,
+        });
 
-            await router.depositToBatch(usdt.address, parseUsdt("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
+        await router.depositToBatch(usdt.address, parseUsdt("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
 
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
 
-            await expectNoRemnants(batch);
-            await expectStrategyHoldsExactBalances(strategy1, '10.2', 2);
-            await expectStrategyHoldsExactBalances(strategy2, '9.8', 2);
-          }
-        );
-        it(
-          'strategy token and deposit tokens are different',
-          async function () {
-            // order of tokens usdc -> busd -> usdt
-            const {
-              router, oracle, batch,
-              busd, parseBusd,
-              usdc, parseUsdc,
-              usdt, parseUsdt,
-              fakeExchangePlugin,
-              expectNoRemnants, deployStrategy
-            } = await loadFixture(loadState);
+        await expectNoRemnants(batch);
 
-            oracle.setPrice(busd.address, parseBusd("1"));
-            oracle.setPrice(usdc.address, parseUsdc("1"));
-            oracle.setPrice(usdt.address, parseUsdt("1"));
-
-            const strategy1 = await deployStrategy({
-              token: usdt,
-              weight: 51_000_000_000,
-            });
-            const strategy2 = await deployStrategy({
-              token: usdt,
-              weight: 49_000_000_000,
-            });
-
-            await router.depositToBatch(usdc.address, parseUsdc("10"));
-            await router.depositToBatch(busd.address, parseBusd("10"));
-
-            await expect(router.allocateToStrategies()).not.to.be.reverted;
-
-            await expectNoRemnants(batch);
-            await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
-          }
-        );
+        await expectStrategyHoldsExactBalances(strategy1, 10, 2);
+        await expectStrategyHoldsExactBalances(strategy2, 10, 2);
       });
-    }
-  );
-  describe('swap optimisation', async function () {
-    it('test no swap occurs', async function () {
+      it("strategy token and deposit tokens are different", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
+
+        oracle.setPrice(busd.address, parseBusd("1"));
+        oracle.setPrice(usdc.address, parseUsdc("1"));
+        oracle.setPrice(usdt.address, parseUsdt("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 49_999_999_900,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 50_000_000_100,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await expectNoRemnants(batch);
+        await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
+      });
+    });
+    describe("desired balance < token balance, delta higher than swap threshold", async function () {
+      it("strategy token and deposit tokens are same", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 51_000_000_000,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 49_000_000_000,
+        });
+
+        await router.depositToBatch(usdt.address, parseUsdt("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await expectNoRemnants(batch);
+        await expectStrategyHoldsExactBalances(strategy1, "10.2", 2);
+        await expectStrategyHoldsExactBalances(strategy2, "9.8", 2);
+      });
+      it("strategy token and deposit tokens are different", async function () {
+        // order of tokens usdc -> busd -> usdt
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadState);
+
+        oracle.setPrice(busd.address, parseBusd("1"));
+        oracle.setPrice(usdc.address, parseUsdc("1"));
+        oracle.setPrice(usdt.address, parseUsdt("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 51_000_000_000,
+        });
+        const strategy2 = await deployStrategy({
+          token: usdt,
+          weight: 49_000_000_000,
+        });
+
+        await router.depositToBatch(usdc.address, parseUsdc("10"), "");
+        await router.depositToBatch(busd.address, parseBusd("10"), "");
+
+        await expect(router.allocateToStrategies()).not.to.be.reverted;
+
+        await expectNoRemnants(batch);
+        await expectStrategiesHoldCorrectBalances(20, strategy1, strategy2);
+      });
+    });
+  });
+  describe("swap optimisation", async function () {
+    it("test no swap occurs", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -912,25 +1097,37 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdc.address, parseUsdc("100"));
-      await router.depositToBatch(busd.address, parseBusd("100"));
+      await router.depositToBatch(usdc.address, parseUsdc("100"), "");
+      await router.depositToBatch(busd.address, parseBusd("100"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
 
       expect(await fakeExchangePlugin.swapCallNumber()).to.be.equal(0);
-      await expectStrategiesHoldCorrectBalances(200, strategy1, strategy2, strategy3, strategy4);
+      await expectStrategiesHoldCorrectBalances(
+        200,
+        strategy1,
+        strategy2,
+        strategy3,
+        strategy4
+      );
     });
-    it('test exactly 1 swap occurs', async function () {
+    it("test exactly 1 swap occurs", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -950,18 +1147,24 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdc.address, parseUsdc("50"));
-      await router.depositToBatch(busd.address, parseBusd("150"));
+      await router.depositToBatch(usdc.address, parseUsdc("50"), "");
+      await router.depositToBatch(busd.address, parseBusd("150"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
 
       expect(await fakeExchangePlugin.swapCallNumber()).to.be.equal(1);
-      await expectStrategiesHoldCorrectBalances(200, strategy1, strategy2, strategy3, strategy4);
+      await expectStrategiesHoldCorrectBalances(
+        200,
+        strategy1,
+        strategy2,
+        strategy3,
+        strategy4
+      );
     });
   });
-  describe('audit issue', async function () {
+  describe("audit issue", async function () {
     /**
      * Test for issues with rebalance abruption in the former Batch.rabance script
      * https://github.com/ClipFinance/StrategyRouter-private/blob/2c5827b8fa64c0142b07c75e4014e083ffdb72bd/contracts/Batch.sol
@@ -977,15 +1180,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
      *     break;
      * }
      */
-    it('test before audit fix failure - different deposit / strategy coins', async function () {
+    it("test before audit fix failure - different deposit / strategy coins", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -997,7 +1206,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 9950,
       });
 
-      await router.depositToBatch(usdc.address, parseUsdc("10"));
+      await router.depositToBatch(usdc.address, parseUsdc("10"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1005,15 +1214,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy1, 0);
       await expectStrategyHoldsExactBalances(strategy2, 10, 2);
     });
-    it('test before audit fix failure - same deposit / strategy coins', async function () {
+    it("test before audit fix failure - same deposit / strategy coins", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -1029,7 +1244,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 9900,
       });
 
-      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1040,16 +1255,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy3, 10);
     });
   });
-  describe('test unoptimal orders of tokens and strategies', async function() {
-    it('small deposits', async function () {
+  describe("test unoptimal orders of tokens and strategies", async function () {
+    it("small deposits", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       oracle.setPrice(busd.address, parseBusd("1"));
@@ -1081,9 +1302,9 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 1000,
       });
 
-      await router.depositToBatch(busd.address, parseBusd("15"));
-      await router.depositToBatch(usdt.address, parseUsdt("7.5"));
-      await router.depositToBatch(usdc.address, parseUsdc("2.5"));
+      await router.depositToBatch(busd.address, parseBusd("15"), "");
+      await router.depositToBatch(usdt.address, parseUsdt("7.5"), "");
+      await router.depositToBatch(usdc.address, parseUsdc("2.5"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1096,15 +1317,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy5, 11, 3);
       await expectStrategyHoldsExactBalances(strategy6, 1, 3);
     });
-    it('very large deposits', async function () {
+    it("very large deposits", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       oracle.setPrice(busd.address, parseBusd("1"));
@@ -1136,9 +1363,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 1000,
       });
 
-      await router.depositToBatch(busd.address, parseBusd((1_500_000).toString()));
-      await router.depositToBatch(usdt.address, parseUsdt((750_000).toString()));
-      await router.depositToBatch(usdc.address, parseUsdc((250_000).toString()));
+      await router.depositToBatch(
+        busd.address,
+        parseBusd((1_500_000).toString()),
+        ""
+      );
+      await router.depositToBatch(
+        usdt.address,
+        parseUsdt((750_000).toString()),
+        ""
+      );
+      await router.depositToBatch(
+        usdc.address,
+        parseUsdc((250_000).toString()),
+        ""
+      );
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1152,16 +1391,22 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy6, 100_000, 3);
     });
   });
-  describe('strategy weight manipulation works as intended', async function () {
-    it('saturate strategy1 desired balance in native token and swap tokens, strategy2 desired balance in native token and swap tokens', async function () {
+  describe("strategy weight manipulation works as intended", async function () {
+    it("saturate strategy1 desired balance in native token and swap tokens, strategy2 desired balance in native token and swap tokens", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -1173,23 +1418,29 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdt.address, parseUsdt("4"));
-      await router.depositToBatch(busd.address, parseBusd("6"));
+      await router.depositToBatch(usdt.address, parseUsdt("4"), "");
+      await router.depositToBatch(busd.address, parseBusd("6"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
       await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
-    it('saturate strategy1 desired balance in native token, strategy2 desired balance in native and in swap tokens', async function () {
+    it("saturate strategy1 desired balance in native token, strategy2 desired balance in native and in swap tokens", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -1201,23 +1452,63 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdt.address, parseUsdt("6"));
-      await router.depositToBatch(busd.address, parseBusd("4"));
+      await router.depositToBatch(usdt.address, parseUsdt("6"), "");
+      await router.depositToBatch(busd.address, parseBusd("4"), "");
+
+      await router.allocateToStrategies();
+
+      await expectNoRemnants(batch);
+      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
+    });
+    it("saturate strategy1 desired balance in native token, strategy2 desired balance in swap tokens", async function () {
+      // order of tokens usdc -> busd -> usdt
+      const {
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
+        fakeExchangePlugin,
+        expectNoRemnants,
+        deployStrategy,
+      } = await loadFixture(loadState);
+
+      const strategy1 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+      const strategy2 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+      });
+
+      await router.depositToBatch(usdt.address, parseUsdt("5"), "");
+      await router.depositToBatch(busd.address, parseBusd("5"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
       await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
-    it('saturate strategy1 desired balance in native token, strategy2 desired balance in swap tokens', async function () {
+    it("saturate strategy1 desired balance in native token, strategy2 desired balance in native token", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -1229,23 +1520,28 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdt.address, parseUsdt("5"));
-      await router.depositToBatch(busd.address, parseBusd("5"));
+      await router.depositToBatch(usdt.address, parseUsdt("10"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
       await expectNoRemnants(batch);
       await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
-    it('saturate strategy1 desired balance in native token, strategy2 desired balance in native token', async function () {
+    it("saturate strategy1 desired balance in swap tokens, strategy2 desired balance in swap tokens", async function () {
       // order of tokens usdc -> busd -> usdt
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadState);
 
       const strategy1 = await deployStrategy({
@@ -1257,34 +1553,7 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
         weight: 5000,
       });
 
-      await router.depositToBatch(usdt.address, parseUsdt("10"));
-
-      await expect(router.allocateToStrategies()).not.to.be.reverted;
-
-      await expectNoRemnants(batch);
-      await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
-    });
-    it('saturate strategy1 desired balance in swap tokens, strategy2 desired balance in swap tokens', async function () {
-      // order of tokens usdc -> busd -> usdt
-      const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
-        fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
-      } = await loadFixture(loadState);
-
-      const strategy1 = await deployStrategy({
-        token: usdt,
-        weight: 5000,
-      });
-      const strategy2 = await deployStrategy({
-        token: usdt,
-        weight: 5000,
-      });
-
-      await router.depositToBatch(busd.address, parseBusd("10"));
+      await router.depositToBatch(busd.address, parseBusd("10"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1292,15 +1561,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategiesHoldCorrectBalances(10, strategy1, strategy2);
     });
   });
-  describe('strategy unallocated balance manipulation works as intended', async function () {
-    it('deposit has matching native strategies', async function () {
+  describe("strategy unallocated balance manipulation works as intended", async function () {
+    it("deposit has matching native strategies", async function () {
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadStateWithZeroBps);
 
       // 1 BUSD = 1 USDT
@@ -1321,23 +1596,29 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       });
 
       // 0.05 BUSD deposit will not be included into unallocated amount
-      await router.depositToBatch(busd.address, parseBusd("0.05"));
-      await router.depositToBatch(usdt.address, parseUsdt("15"));
+      await router.depositToBatch(busd.address, parseBusd("0.05"), "");
+      await router.depositToBatch(usdt.address, parseUsdt("15"), "");
 
-      await expect(router.allocateToStrategies()).not.to.be.reverted;
+      await router.allocateToStrategies();
 
       await expectStrategyHoldsExactBalances(strategy1, 5, 0);
       await expectStrategyHoldsExactBalances(strategy2, 5, 0);
       await expectStrategyHoldsExactBalances(strategy3, 5, 0);
     });
-    it('deposit doesnt have matching native strategies', async function () {
+    it("deposit doesnt have matching native strategies", async function () {
       const {
-        router, oracle, batch,
-        busd, parseBusd,
-        usdc, parseUsdc,
-        usdt, parseUsdt,
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
         fakeExchangePlugin,
-        expectNoRemnants, deployStrategy
+        expectNoRemnants,
+        deployStrategy,
       } = await loadFixture(loadStateWithZeroBps);
 
       // 1 BUSD = 1 USDT
@@ -1358,8 +1639,8 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       });
 
       // 0.05 BUSD deposit will not be included into unallocated amount
-      await router.depositToBatch(busd.address, parseBusd("0.05"));
-      await router.depositToBatch(usdt.address, parseUsdt("15"));
+      await router.depositToBatch(busd.address, parseBusd("0.05"), "");
+      await router.depositToBatch(usdt.address, parseUsdt("15"), "");
 
       await expect(router.allocateToStrategies()).not.to.be.reverted;
 
@@ -1368,15 +1649,21 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       await expectStrategyHoldsExactBalances(strategy3, 5, 0);
     });
   });
-  it('test where old algo would execute good', async function () {
+  it("test where old algo would execute good", async function () {
     // order of tokens usdc -> busd -> usdt
     const {
-      router, oracle, batch,
-      busd, parseBusd,
-      usdc, parseUsdc,
-      usdt, parseUsdt,
+      router,
+      oracle,
+      batch,
+      busd,
+      parseBusd,
+      usdc,
+      parseUsdc,
+      usdt,
+      parseUsdt,
       fakeExchangePlugin,
-      expectNoRemnants, deployStrategy
+      expectNoRemnants,
+      deployStrategy,
     } = await loadFixture(loadState);
 
     const strategy1 = await deployStrategy({
@@ -1392,13 +1679,304 @@ describe("Test Batch.rebalance in algorithm-specific manner", function () {
       weight: 5000,
     });
 
-    await router.depositToBatch(busd.address, parseBusd("10"));
-    await router.depositToBatch(usdc.address, parseUsdc("10"));
-    await router.depositToBatch(usdt.address, parseUsdt("10"));
+    await router.depositToBatch(busd.address, parseBusd("10"), "");
+    await router.depositToBatch(usdc.address, parseUsdc("10"), "");
+    await router.depositToBatch(usdt.address, parseUsdt("10"), "");
 
-    await expect(router.allocateToStrategies()).not.to.be.reverted;
+    await router.allocateToStrategies();
 
     await expectNoRemnants(batch);
-    await expectStrategiesHoldCorrectBalances(30, strategy1, strategy2, strategy3);
+    await expectStrategiesHoldCorrectBalances(
+      30,
+      strategy1,
+      strategy2,
+      strategy3
+    );
+  });
+  describe("hardcap activated", async function () {
+    describe("partial active allocation possible", async function () {
+      it("no swaps, capacity filled, excessive funds allocated to corresponding idle", async function () {
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadStateWithZeroBps);
+
+        // 1 BUSD = 1 USDT
+        await oracle.setPrice(busd.address, parseBusd("1"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 5000,
+          hardcapLimit: 10_000,
+        });
+
+        // make first deposit with full allocation to strategy
+        await router.depositToBatch(usdt.address, parseUsdt(5_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 5_000, 0);
+
+        // hit hardcap limit and ensure remnants are allocated to idle strategy
+        await router.depositToBatch(usdt.address, parseUsdt(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+        await expectStrategyHoldsExactBalances(usdt.idleStrategy, 5_000, 0);
+      });
+      it("with swaps, capacity filled, excessive funds allocated to corresponding idle", async function () {
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadStateWithZeroBps);
+
+        // 1 BUSD = 1 USDT
+        await oracle.setPrice(busd.address, parseBusd("1"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 5000,
+          hardcapLimit: 10_000,
+        });
+
+        // make first deposit with full allocation to strategy
+        await router.depositToBatch(usdt.address, parseUsdt(5_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 5_000, 0);
+
+        // hit hardcap limit and ensure remnants are allocated to idle strategy
+        await router.depositToBatch(busd.address, parseBusd(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+        await expectStrategyHoldsExactBalances(busd.idleStrategy, 5_000, 0);
+      });
+    });
+    describe("no active allocation possible", async function () {
+      it("no swaps, capacity filled, excessive funds allocated to corresponding idle", async function () {
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadStateWithZeroBps);
+
+        // 1 BUSD = 1 USDT
+        await oracle.setPrice(busd.address, parseBusd("1"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 5000,
+          hardcapLimit: 10_000,
+        });
+
+        // make first deposit with full allocation to strategy
+        await router.depositToBatch(usdt.address, parseUsdt(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+
+        // hit hardcap limit and ensure remnants are allocated to idle strategy
+        await router.depositToBatch(usdt.address, parseUsdt(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+        await expectStrategyHoldsExactBalances(usdt.idleStrategy, 10_000, 0);
+      });
+      it("with swaps, capacity filled, excessive funds allocated to corresponding idle", async function () {
+        const {
+          router,
+          oracle,
+          batch,
+          busd,
+          parseBusd,
+          usdc,
+          parseUsdc,
+          usdt,
+          parseUsdt,
+          fakeExchangePlugin,
+          expectNoRemnants,
+          deployStrategy,
+        } = await loadFixture(loadStateWithZeroBps);
+
+        // 1 BUSD = 1 USDT
+        await oracle.setPrice(busd.address, parseBusd("1"));
+        await oracle.setPrice(usdt.address, parseUsdt("1"));
+        await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+        const strategy1 = await deployStrategy({
+          token: usdt,
+          weight: 5000,
+          hardcapLimit: 10_000,
+        });
+
+        // make first deposit with full allocation to strategy
+        await router.depositToBatch(usdt.address, parseUsdt(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+
+        // hit hardcap limit and ensure remnants are allocated to idle strategy
+        await router.depositToBatch(busd.address, parseBusd(10_000), "");
+        await router.allocateToStrategies();
+
+        await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+        await expectStrategyHoldsExactBalances(busd.idleStrategy, 10_000, 0);
+      });
+    });
+    it("hardcap reached on part of active strategies", async function () {
+      const {
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
+        fakeExchangePlugin,
+        expectNoRemnants,
+        deployStrategy,
+      } = await loadFixture(loadStateWithZeroBps);
+
+      // 1 BUSD = 1 USDT
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+        hardcapLimit: 10_000,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+        weight: 5000,
+        hardcapLimit: 15_000,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdc,
+        weight: 5000,
+        hardcapLimit: 45_000,
+      });
+
+      // make first deposit with full allocation to strategy
+      await router.depositToBatch(usdt.address, parseUsdt(30_000), "");
+      await router.allocateToStrategies();
+
+      await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 10_000, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 10_000, 0);
+      await expectStrategyHoldsExactBalances(usdt.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(busd.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(usdc.idleStrategy, 0, 0);
+
+      // hit hardcap limit and ensure remnants are allocated to idle strategy
+      await router.depositToBatch(busd.address, parseBusd(30_000), "");
+      await router.allocateToStrategies();
+
+      await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 15_000, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 35_000, 0);
+      await expectStrategyHoldsExactBalances(usdt.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(busd.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(usdc.idleStrategy, 0, 0);
+
+      // hit hardcap limit and ensure remnants are allocated to idle strategy
+      await router.depositToBatch(usdt.address, parseUsdt(30_000), "");
+      await router.depositToBatch(busd.address, parseBusd(30_000), "");
+      await router.depositToBatch(usdc.address, parseUsdc(30_000), "");
+      await router.allocateToStrategies();
+
+      await expectStrategyHoldsExactBalances(strategy1, 10_000, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 15_000, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 45_000, 0);
+      await expectStrategyHoldsExactBalances(usdt.idleStrategy, 30_000, 0);
+      await expectStrategyHoldsExactBalances(busd.idleStrategy, 30_000, 0);
+      await expectStrategyHoldsExactBalances(usdc.idleStrategy, 20_000, 0);
+    });
+    it.skip("rebalances funds optimally", async function () {
+      const {
+        router,
+        oracle,
+        batch,
+        busd,
+        parseBusd,
+        usdc,
+        parseUsdc,
+        usdt,
+        parseUsdt,
+        fakeExchangePlugin,
+        expectNoRemnants,
+        deployStrategy,
+      } = await loadFixture(loadStateWithZeroBps);
+
+      // 1 BUSD = 1 USDT
+      await oracle.setPrice(busd.address, parseBusd("1"));
+      await oracle.setPrice(usdt.address, parseUsdt("1"));
+      await oracle.setPrice(usdc.address, parseUsdc("1"));
+
+      const strategy1 = await deployStrategy({
+        token: usdt,
+        weight: 5000,
+        hardcapLimit: 1_000_000,
+      });
+      const strategy2 = await deployStrategy({
+        token: busd,
+        weight: 5000,
+        hardcapLimit: 10_000,
+      });
+      const strategy3 = await deployStrategy({
+        token: usdc,
+        weight: 5000,
+        hardcapLimit: 5_000,
+      });
+
+      // make first deposit with full allocation to strategy
+      await router.depositToBatch(usdt.address, parseUsdt(30_000), "");
+      await router.allocateToStrategies();
+
+      await expectStrategyHoldsExactBalances(strategy1, 15_000, 0);
+      await expectStrategyHoldsExactBalances(strategy2, 10_000, 0);
+      await expectStrategyHoldsExactBalances(strategy3, 5_000, 0);
+      await expectStrategyHoldsExactBalances(usdt.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(busd.idleStrategy, 0, 0);
+      await expectStrategyHoldsExactBalances(usdc.idleStrategy, 0, 0);
+    });
   });
 });

@@ -3,16 +3,20 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import {StrategyRouter} from "../StrategyRouter.sol";
 
 // import "hardhat/console.sol";
 
 interface IExchangePlugin {
+
+    error ReceivedTooLittleTokenB();
     
     function swap(
         uint256 amountA,
         address tokenA,
         address tokenB,
-        address to
+        address to,
+        uint256 minAmountOut
     ) external returns (uint256 amountReceivedTokenB);
 
     /// @notice Returns percent taken by DEX on which we swap provided tokens.
@@ -22,9 +26,10 @@ interface IExchangePlugin {
         view
         returns (uint256 feePercent);
 
-    /// @notice Synonym of the uniswapV2's function, estimates amount you receive after swap.
-    function getAmountOut(uint256 amountA, address tokenA, address tokenB)
-        external
-        view
-        returns (uint256 amountOut);
+    /// @notice Returns price of tokenA in tokenB with tokenB decimals.
+    function getRoutePrice(
+        address tokenA,
+        address tokenB
+    ) external view returns (uint256 price);
+
 }

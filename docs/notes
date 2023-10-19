@@ -1,0 +1,60 @@
+Could we assume that ```saturated: false``` if underflowedStrategyWeights is above 0.
+In this case, are we using ```saturated: false``` for readability sake or was there other reason?
+
+
+
+
+We are determining wether or not the strategy has an underflow twice.
+
+Do we need to do that?
+
+
+if (balanceToAddUniform >= ALLOCATION_THRESHOLD) {
+    remainingToAllocateUnderflowStrategiesWeightSum += balanceToAddUniform;
+    underflowedStrategyWeights[i] = balanceToAddUniform;
+}
+
+We assign them in weights, but 1 weight = 1 token.
+Which is also confirmed by the following check 
+
+```currentTokenBalanceUniform < ALLOCATION_THRESHOLD```
+
+
+In this case underflowedStrategyWeights will will only be assigned if the threshold has been met.
+
+
+The following operation will calculate 
+
+uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform ( All tokens that need to be allocated ) * underflowedStrategyWeights[i] (Missing Tokens in strategy)
+    / remainingToAllocateUnderflowStrategiesWeightSum (Remaining tokens that need to be allocated);
+
+
+
+uint256 desiredAllocationUniform = totalUnallocatedBalanceUniform * underflowedStrategyWeights[i]
+    / remainingToAllocateUnderflowStrategiesWeightSum;
+
+
+Because this has been validated above, this should not be necessery.
+
+if (desiredAllocationUniform < ALLOCATION_THRESHOLD) {
+    strategyDatas[i].saturated = true;
+    remainingToAllocateUnderflowStrategiesWeightSum -= underflowedStrategyWeights[i];
+    underflowedStrategyWeights[i] = 0;
+    continue;
+}
+
+
+
+
+Why would the balance ever be insufficent?
+
+
+So basically it checks if the current balance of the strategy token is sufficently big to
+fill the desired amount.
+
+if it is and it is just slighly bigger but below allocation thresholdit will just 
+send all balance to strategy
+
+
+Potentially instead of transfer to exchange and than from exchange transfer, we can do approve, from exchange send directly to pair and call swap function.
+

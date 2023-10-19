@@ -13,7 +13,8 @@ contract UnderFulfilledWithdrawalMockStrategy is DistortedWithdrawalMockStrategy
         uint256 _rewardPerCompoundPeriodInBps,
         bool _isRewardPositive,
         uint256 _hardcapTargetInToken,
-        uint16 _hardcapDeviationInBps
+        uint16 _hardcapDeviationInBps,
+        address[] memory depositors
     ) DistortedWithdrawalMockStrategy(
         true,
         _distortedWithdrawalInBps,
@@ -21,6 +22,7 @@ contract UnderFulfilledWithdrawalMockStrategy is DistortedWithdrawalMockStrategy
         _rewardPerCompoundPeriodInBps,
         _isRewardPositive,
         _hardcapTargetInToken,
-        _hardcapDeviationInBps
+        _hardcapDeviationInBps,
+        depositors
     ) {}
 }

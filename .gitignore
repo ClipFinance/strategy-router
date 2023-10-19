@@ -1,4 +1,4 @@
-node_modules
+# node_modules # more specific rules below
 yarn.lock
 .env
 coverage
@@ -14,3 +14,28 @@ artifacts
 
 # OpenZeppelin
 .openzeppelin/unknown-*.json
+!node_modules/
+
+node_modules/*
+
+!node_modules/@openzeppelin/
+
+node_modules/@openzeppelin/*
+
+!node_modules/@openzeppelin/contracts/
+
+node_modules/@openzeppelin/contracts/*
+
+!node_modules/@openzeppelin/contracts/security/
+
+node_modules/@openzeppelin/contracts/security/*
+
+!node_modules/@openzeppelin/contracts/security/Pausable.sol
+
+!node_modules/@openzeppelin/contracts/access/
+
+node_modules/@openzeppelin/contracts/access/*
+
+!node_modules/@openzeppelin/contracts/access/Ownable.sol
+
+!node_modules/@openzeppelin/contracts/access/AccessControl.sol

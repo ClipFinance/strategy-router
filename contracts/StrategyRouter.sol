@@ -1,160 +1,59 @@
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
-import "./deps/OwnableUpgradeable.sol";
 import "./deps/Initializable.sol";
 import "./deps/UUPSUpgradeable.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "./interfaces/IIdleStrategy.sol";
+
+import {TokenPrice, StrategyInfo, IdleStrategyInfo, ReceiptData, Cycle} from "./lib/Structs.sol";
+import {fromUniform, changeDecimals, UNIFORM_DECIMALS} from "./lib/Math.sol";
+import "./StrategyRouterLib.sol";
+
 import "./interfaces/IStrategy.sol";
 import "./interfaces/IUsdOracle.sol";
-import {ReceiptNFT} from "./ReceiptNFT.sol";
-import {Exchange} from "./exchange/Exchange.sol";
-import {SharesToken} from "./SharesToken.sol";
-import "./Batch.sol";
-import "./StrategyRouterLib.sol";
-import "./idle-strategies/DefaultIdleStrategy.sol";
-
-// import "hardhat/console.sol";
-
+import "./interfaces/IExchange.sol";
+import "./interfaces/IReceiptNFT.sol";
+import "./interfaces/ISharesToken.sol";
+import "./interfaces/IBatch.sol";
 
 /// @custom:oz-upgrades-unsafe-allow external-library-linking
-contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, AutomationCompatibleInterface {
-    /* EVENTS */
+contract StrategyRouter is Initializable, UUPSUpgradeable, AutomationCompatibleInterface {
+    using SafeERC20 for IERC20;
 
-    /// @notice Fires when user deposits in batch.
-    /// @param token Supported token that user want to deposit.
-    /// @param amountAfterFee Amount of `token` transferred from user after fee.
-    /// @param feeAmount Amount of `token` fee taken for deposit to the batch.
-    event Deposit(address indexed user, address token, uint256 amountAfterFee, uint256 feeAmount);
-    /// @notice Fires when batch is deposited into strategies.
-    /// @param closedCycleId Index of the cycle that is closed.
-    /// @param amount Sum of different tokens deposited into strategies.
-    event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
-    /// @notice Fires when compound process is finished.
-    /// @param currentCycle Index of the current cycle.
-    /// @param currentTvlInUsd Current TVL in USD.
-    /// @param totalShares Current amount of shares.
-    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvlInUsd, uint256 totalShares);
-    /// @notice Fires when user withdraw from strategies.
-    /// @param token Supported token that user requested to receive after withdraw.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromStrategies(address indexed user, address token, uint256 amount);
-    /// @notice Fires when user converts his receipt into shares token.
-    /// @param shares Amount of shares received by user.
-    /// @param receiptIds Indexes of the receipts burned.
-    event RedeemReceiptsToShares(address indexed user, uint256 shares, uint256[] receiptIds);
-    /// @notice Fires when moderator converts foreign receipts into shares token.
-    /// @param receiptIds Indexes of the receipts burned.
-    event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
-
-    /// @notice Fires when user withdraw from batch.
-    /// @param user who initiated withdrawal.
-    /// @param receiptIds original IDs of the corresponding deposited receipts (NFTs).
-    /// @param token that is being withdrawn. can be one token multiple times.
-    /// @param amount Amount of `token` received by user.
-    event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] token, uint256[] amount);
-
-    // Events for setters.
-    event SetAllocationWindowTime(uint256 newDuration);
-    event SetFeeAddress(address newAddress);
-    event SetFeePercent(uint256 newPercent);
-    event SetAddresses(
-        Exchange _exchange,
-        IUsdOracle _oracle,
-        SharesToken _sharesToken,
-        Batch _batch,
-        ReceiptNFT _receiptNft
-    );
-
-    /* ERRORS */
-    error AmountExceedTotalSupply();
-    error UnsupportedToken();
-    error NotReceiptOwner();
-    error CycleNotClosed();
-    error CycleClosed();
-    error InsufficientShares();
-    error DuplicateStrategy();
-    error CycleNotClosableYet();
-    error AmountNotSpecified();
-    error CantRemoveLastStrategy();
-    error NothingToRebalance();
-    error NotModerator();
-    error WithdrawnAmountLowerThanExpectedAmount();
-    error InvalidIdleStrategy();
-    error InvalidIndexForIdleStrategy();
-    error IdleStrategySupportedTokenMismatch();
-
-    struct TokenPrice {
-        uint256 price;
-        uint8 priceDecimals;
-        address token;
-    }
-
-    struct StrategyInfo {
-        address strategyAddress;
-        address depositToken;
-        uint256 weight;
-    }
-
-    struct IdleStrategyInfo {
-        address strategyAddress;
-        address depositToken;
-    }
-
-    struct Cycle {
-        // block.timestamp at which cycle started
-        uint256 startAt;
-        // batch USD value before deposited into strategies
-        uint256 totalDepositedInUsd;
-        // USD value received by strategies after all swaps necessary to ape into strategies
-        uint256 receivedByStrategiesInUsd;
-        // Protocol TVL after compound idle strategy and actual deposit to strategies
-        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd;
-        // price per share in USD
-        uint256 pricePerShare;
-        // tokens price at time of the deposit to strategies
-        mapping(address => uint256) prices;
-    }
-
-    uint8 private constant UNIFORM_DECIMALS = 18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant MAX_FEE_PERCENT = 2000;
     uint256 private constant FEE_PERCENT_PRECISION = 100;
+    /// @notice Protocol comission in percents taken from yield. One percent is 100.
+    uint256 internal constant feePercent = 1200;
     // we do not try to withdraw amount below this threshold
-    // cause gas spendings are high compared to this amount
+    // cause gas spending are high compared to this amount
     uint256 private constant WITHDRAWAL_DUST_THRESHOLD_USD = 1e17; // 10 cents / 0.1 USD
 
     /// @notice The time of the first deposit that triggered a current cycle
-    uint256 public currentCycleFirstDepositAt;
+    uint256 internal currentCycleFirstDepositAt;
     /// @notice Current cycle duration in seconds, until funds are allocated from batch to strategies
-    uint256 public allocationWindowTime;
+    uint256 internal allocationWindowTime;
     /// @notice Current cycle counter. Incremented at the end of the cycle
-    uint256 public currentCycleId;
+    uint256 internal currentCycleId;
     /// @notice Current cycle deposits counter. Incremented on deposit and decremented on withdrawal.
-    uint256 public currentCycleDepositsCount;
-    /// @notice Protocol comission in percents taken from yield. One percent is 100.
-    uint256 public feePercent;
+    uint256 internal currentCycleDepositsCount;
 
-    ReceiptNFT private receiptContract;
-    Exchange public exchange;
+    IReceiptNFT private receiptContract;
+    IExchange internal exchange;
     IUsdOracle private oracle;
-    SharesToken private sharesToken;
-    Batch private batch;
-    address public feeAddress;
+    ISharesToken private sharesToken;
+    IBatch internal batch;
+    address internal moderator;
 
-    StrategyInfo[] public strategies;
-    uint256 public allStrategiesWeightSum;
+    StrategyInfo[] internal strategies;
+    uint256 internal allStrategiesWeightSum;
 
-    IdleStrategyInfo[] public idleStrategies;
+    IdleStrategyInfo[] internal idleStrategies;
 
-    mapping(uint256 => Cycle) public cycles;
-    mapping(address => bool) public moderators;
-
-    modifier onlyModerators() {
-        if (!moderators[msg.sender]) revert NotModerator();
+    mapping(uint256 => Cycle) internal cycles;
+    modifier onlyModerator() {
+        if (moderator != msg.sender) revert NotModerator();
         _;
     }
 
@@ -164,22 +63,20 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         _disableInitializers();
     }
 
-    function initialize() external initializer {
-        __Ownable_init();
+    function initialize(bytes memory initializeData) external initializer {
         __UUPSUpgradeable_init();
-
+        moderator = tx.origin;
         cycles[0].startAt = block.timestamp;
         allocationWindowTime = 1 hours;
-        moderators[owner()] = true;
     }
 
     function setAddresses(
-        Exchange _exchange,
+        IExchange _exchange,
         IUsdOracle _oracle,
-        SharesToken _sharesToken,
-        Batch _batch,
-        ReceiptNFT _receiptNft
-    ) external onlyOwner {
+        ISharesToken _sharesToken,
+        IBatch _batch,
+        IReceiptNFT _receiptNft
+    ) external onlyModerator {
         exchange = _exchange;
         oracle = _oracle;
         sharesToken = _sharesToken;
@@ -188,7 +85,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         emit SetAddresses(_exchange, _oracle, _sharesToken, _batch, _receiptNft);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyModerator {}
 
     // Universal Functions
 
@@ -225,23 +122,15 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
                 (1010 USD * 1000 CLT / (1010 USD - 2 USD)) - 1000 CLT = 1.98412698 CLT
 
-        step 8 - Calculate protocol's comission and withhold commission by issuing share tokens
+        step 8 - Calculate protocol's commission and withhold commission by issuing share tokens
         step 9 - store remaining information for the current cycle
         */
 
         // step 1
-
-        (   
-            StrategyRouter.TokenPrice[] memory supportedTokenPrices
-        ) = batch.getSupportedTokensWithPriceInUsd();
-        uint256[] memory strategyIndexToSupportedTokenIndex = 
-            StrategyRouterLib.getStrategyIndexToSupportedTokenIndexMap(
-                supportedTokenPrices,
-                strategies
-            );
+        TokenPrice[] memory supportedTokenPrices = batch.getSupportedTokensWithPriceInUsd();
 
         (uint256 batchValueInUsd, ) = batch.getBatchValueUsdWithoutOracleCalls(supportedTokenPrices);
-        
+
         uint256 _currentCycleId = currentCycleId;
 
         // step 2
@@ -249,13 +138,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
         currentCycleFirstDepositAt = 0;
 
-
         // step 3
         {
-            // address[] memory _supportedTokens = getSupported_supportedTokens();
             for (uint256 i = 0; i < supportedTokenPrices.length; i++) {
-                if (ERC20(supportedTokenPrices[i].token).balanceOf(address(batch)) > 0) {
-                    cycles[_currentCycleId].prices[supportedTokenPrices[i].token] = StrategyRouterLib.changeDecimals(
+                if (IERC20(supportedTokenPrices[i].token).balanceOf(address(batch)) > 0) {
+                    cycles[_currentCycleId].prices[supportedTokenPrices[i].token] = changeDecimals(
                         supportedTokenPrices[i].price,
                         supportedTokenPrices[i].priceDecimals,
                         UNIFORM_DECIMALS
@@ -265,67 +152,67 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // step 4
-        // uint256 strategiesLength = strategies.length;
-        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
+        uint256 strategiesLength = strategies.length;
+        for (uint256 i; i < strategiesLength; i++) {
             IStrategy(strategies[i].strategyAddress).compound();
         }
         uint256 totalShares = sharesToken.totalSupply();
         (uint256 strategiesBalanceAfterCompoundInUsd, , , , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
             strategies,
             idleStrategies,
-            supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex
+            supportedTokenPrices
         );
 
         emit AfterCompound(_currentCycleId, strategiesBalanceAfterCompoundInUsd, totalShares);
 
-        // step 5
-        uint256[] memory depositAmountsInTokens = batch.rebalance();
-
-        // step 6
-        for (uint256 i; i < strategyIndexToSupportedTokenIndex.length; i++) {
-            address strategyDepositToken = strategies[i].depositToken;
-
-            if (depositAmountsInTokens[i] > 0) {
-                batch.transfer(strategyDepositToken, strategies[i].strategyAddress, depositAmountsInTokens[i]);
-
-                IStrategy(strategies[i].strategyAddress).deposit(depositAmountsInTokens[i]);
-            }
-        }
+        // step 5 and step 6
+        batch.rebalance(supportedTokenPrices, strategies, allStrategiesWeightSum, idleStrategies);
 
         // step 7
         (uint256 strategiesBalanceAfterDepositInUsd, , , , ) = StrategyRouterLib.getStrategiesValueWithoutOracleCalls(
             strategies,
             idleStrategies,
-            supportedTokenPrices,
-            strategyIndexToSupportedTokenIndex
+            supportedTokenPrices
         );
 
         uint256 receivedByStrategiesInUsd = strategiesBalanceAfterDepositInUsd - strategiesBalanceAfterCompoundInUsd;
 
         if (totalShares == 0) {
             sharesToken.mint(address(this), receivedByStrategiesInUsd);
-            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
-            cycles[_currentCycleId].pricePerShare = (strategiesBalanceAfterDepositInUsd * PRECISION) / sharesToken.totalSupply();
+            cycles[_currentCycleId]
+                .strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId].pricePerShare =
+                (strategiesBalanceAfterDepositInUsd * PRECISION) /
+                sharesToken.totalSupply();
         } else {
             // step 7.1
             uint256 protocolCommissionInUsd = 0;
-            if (strategiesBalanceAfterCompoundInUsd > cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) {
-                protocolCommissionInUsd = (strategiesBalanceAfterCompoundInUsd - cycles[_currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) * feePercent / (100 * FEE_PERCENT_PRECISION);
+            if (
+                strategiesBalanceAfterCompoundInUsd >
+                cycles[_currentCycleId - 1].strategiesBalanceWithCompoundAndBatchDepositsInUsd
+            ) {
+                protocolCommissionInUsd =
+                    ((strategiesBalanceAfterCompoundInUsd -
+                        cycles[_currentCycleId - 1].strategiesBalanceWithCompoundAndBatchDepositsInUsd) * feePercent) /
+                    (100 * FEE_PERCENT_PRECISION);
             }
 
             // step 7.2
-            cycles[_currentCycleId].strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
+            cycles[_currentCycleId]
+                .strategiesBalanceWithCompoundAndBatchDepositsInUsd = strategiesBalanceAfterDepositInUsd;
             // step 7.3
-            cycles[_currentCycleId].pricePerShare = ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) / totalShares;
+            cycles[_currentCycleId].pricePerShare =
+                ((strategiesBalanceAfterCompoundInUsd - protocolCommissionInUsd) * PRECISION) /
+                totalShares;
 
             // step 7.4
             uint256 newShares = (receivedByStrategiesInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
             sharesToken.mint(address(this), newShares);
 
             // step 7.5
-            uint256 protocolCommissionInShares = (protocolCommissionInUsd * PRECISION) / cycles[_currentCycleId].pricePerShare;
-            sharesToken.mint(feeAddress, protocolCommissionInShares);
+            uint256 protocolCommissionInShares = (protocolCommissionInUsd * PRECISION) /
+                cycles[_currentCycleId].pricePerShare;
+            sharesToken.mint(moderator, protocolCommissionInShares);
         }
 
         // step 8
@@ -385,11 +272,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         return strategies[i].depositToken;
     }
 
-    function getBatchValueUsd()
-        public
-        view
-        returns (uint256 totalBalance, uint256[] memory balances)
-    {
+    function getBatchValueUsd() public view returns (uint256 totalBalance, uint256[] memory balances) {
         return batch.getBatchValueUsd();
     }
 
@@ -411,23 +294,19 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             uint256[] memory idleBalances
         )
     {
-        (totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances, idleBalances)
-            = StrategyRouterLib.getStrategiesValue(
-                batch,
-                strategies,
-                idleStrategies
-            );
+        (totalBalance, totalStrategyBalance, totalIdleStrategyBalance, balances, idleBalances) = StrategyRouterLib
+            .getStrategiesValue(batch, strategies, idleStrategies);
     }
 
-    /// @notice Returns stored address of the `Exchange` contract.
-    function getExchange() public view returns (Exchange) {
+    /// @notice Returns stored address of the exchange address in `IExchange` interface.
+    function getExchange() public view returns (IExchange) {
         return exchange;
     }
 
     /// @notice Calculates amount of redeemable shares by burning receipts.
     /// @notice Cycle noted in receipts should be closed.
     function calculateSharesFromReceipts(uint256[] calldata receiptIds) public view returns (uint256 shares) {
-        ReceiptNFT _receiptContract = receiptContract;
+        IReceiptNFT _receiptContract = receiptContract;
         uint256 _currentCycleId = currentCycleId;
         for (uint256 i = 0; i < receiptIds.length; i++) {
             uint256 receiptId = receiptIds[i];
@@ -443,7 +322,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Reedem shares for receipts on behalf of their owners.
     /// @notice Cycle noted in receipts should be closed.
     /// @notice Only callable by moderators.
-    function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerators {
+    function redeemReceiptsToSharesByModerators(uint256[] calldata receiptIds) public onlyModerator {
         StrategyRouterLib.redeemReceiptsToSharesByModerators(
             receiptIds,
             currentCycleId,
@@ -522,7 +401,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             revert UnsupportedToken();
         }
 
-        ReceiptNFT _receiptContract = receiptContract;
+        IReceiptNFT _receiptContract = receiptContract;
         uint256 _currentCycleId = currentCycleId;
         uint256 unlockedShares;
 
@@ -543,7 +422,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 uint256 leftoverShares = unlockedShares - shares;
                 unlockedShares -= leftoverShares;
 
-                ReceiptNFT.ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
+                ReceiptData memory receipt = receiptContract.getReceipt(receiptId);
                 uint256 newReceiptAmount = (receipt.tokenAmountUniform * leftoverShares) / receiptShares;
                 _receiptContract.setAmount(receiptId, newReceiptAmount);
             } else {
@@ -567,10 +446,17 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         sharesToken.burn(address(this), shares);
 
         // Withhold withdrawn amount from cycle's TVL, to not to affect AllocateToStrategies calculations in this cycle
-        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = shares * cycles[currentCycleId-1].pricePerShare / PRECISION;
-        cycles[currentCycleId-1].strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
+        uint256 adjustPreviousCycleStrategiesBalanceByInUsd = (shares * cycles[currentCycleId - 1].pricePerShare) /
+            PRECISION;
+        cycles[currentCycleId - 1]
+            .strategiesBalanceWithCompoundAndBatchDepositsInUsd -= adjustPreviousCycleStrategiesBalanceByInUsd;
 
-        withdrawnAmount = _withdrawFromStrategies(usdToWithdraw, withdrawToken, minTokenAmountToWithdraw, supportedTokenIndex);
+        withdrawnAmount = _withdrawFromStrategies(
+            usdToWithdraw,
+            withdrawToken,
+            minTokenAmountToWithdraw,
+            supportedTokenIndex
+        );
     }
 
     /// @notice Withdraw tokens from batch.
@@ -578,8 +464,11 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Cycle noted in receipts should be current cycle.
     /// @param _receiptIds Receipt NFTs ids.
     function withdrawFromBatch(uint256[] calldata _receiptIds) public {
-        (uint256[] memory receiptIds, address[] memory tokens, uint256[] memory withdrawnTokenAmounts) =
-            batch.withdraw(msg.sender, _receiptIds, currentCycleId);
+        (uint256[] memory receiptIds, address[] memory tokens, uint256[] memory withdrawnTokenAmounts) = batch.withdraw(
+            msg.sender,
+            _receiptIds,
+            currentCycleId
+        );
 
         currentCycleDepositsCount -= receiptIds.length;
         if (currentCycleDepositsCount == 0) currentCycleFirstDepositAt = 0;
@@ -589,92 +478,108 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
 
     /// @notice Deposit token into batch.
     /// @param depositToken Supported token to deposit.
-    /// @param _amount Amount to deposit.
+    /// @param depositAmount Amount to deposit.
     /// @dev User should approve `_amount` of `depositToken` to this contract.
-    function depositToBatch(address depositToken, uint256 _amount) external {
-        (uint256 depositAmount, uint256 depositFeeAmount) = batch.deposit(msg.sender, depositToken, _amount, currentCycleId);
+    function depositToBatch(address depositToken, uint256 depositAmount, string calldata referral) external payable {
+        uint256 depositFeeAmount = batch.deposit{value: msg.value}(
+            msg.sender,
+            depositToken,
+            depositAmount,
+            currentCycleId
+        );
 
-        IERC20(depositToken).transferFrom(msg.sender, address(batch), depositAmount);
-
-        if (depositFeeAmount != 0) {
-            IERC20(depositToken).transferFrom(msg.sender, feeAddress, depositFeeAmount);
-        }
+        IERC20(depositToken).safeTransferFrom(msg.sender, address(batch), depositAmount);
 
         currentCycleDepositsCount++;
         if (currentCycleFirstDepositAt == 0) currentCycleFirstDepositAt = block.timestamp;
 
-        emit Deposit(msg.sender, depositToken, depositAmount, depositFeeAmount);
+        emit Deposit(msg.sender, depositToken, depositAmount, depositFeeAmount, referral);
     }
 
     // Admin functions
 
     /// @notice Set token as supported for user deposit and withdraw.
     /// @dev Admin function.
-    function setSupportedToken(address tokenAddress, bool supported, address idleStrategy) external onlyOwner {
-        batch.setSupportedToken(tokenAddress, supported);
-        if (supported) {
-            address[] memory supportedTokens = getSupportedTokens();
-            StrategyRouterLib.setIdleStrategy(
-                idleStrategies,
-                supportedTokens,
-                supportedTokens.length - 1,
-                idleStrategy);
-        } else {
+    function setSupportedToken(address tokenAddress, bool supported, address idleStrategy) external onlyModerator {
+        if (!supported) {
+            TokenPrice[] memory supportedTokensWithPricesWithRemovedToken = batch.getSupportedTokensWithPriceInUsd();
+
+            (bool wasRemovedFromTail, address formerTailTokenAddress, uint256 newIndexOfFormerTailToken) = batch
+                .removeSupportedToken(tokenAddress);
+
             StrategyRouterLib._removeIdleStrategy(
                 idleStrategies,
                 batch,
                 exchange,
                 strategies,
                 allStrategiesWeightSum,
-                tokenAddress
+                tokenAddress,
+                supportedTokensWithPricesWithRemovedToken,
+                moderator
+            );
+            if (!wasRemovedFromTail) {
+                uint256 strategiesLength = strategies.length;
+                for (uint256 i; i < strategiesLength; i++) {
+                    if (strategies[i].depositToken == formerTailTokenAddress) {
+                        strategies[i].depositTokenInSupportedTokensIndex = newIndexOfFormerTailToken;
+                    }
+                }
+            }
+        } else {
+            batch.addSupportedToken(tokenAddress);
+            address[] memory supportedTokens = getSupportedTokens();
+            StrategyRouterLib.setIdleStrategy(
+                idleStrategies,
+                supportedTokens,
+                supportedTokens.length - 1,
+                idleStrategy,
+                moderator
             );
         }
     }
 
-    /// @notice Set wallets that will be moderators.
-    /// @dev Admin function.
-    function setModerator(address moderator, bool isWhitelisted) external onlyOwner {
-        moderators[moderator] = isWhitelisted;
-    }
-
     /// @notice Set address for fees collected by protocol.
     /// @dev Admin function.
-    function setFeesCollectionAddress(address _feeAddress) external onlyOwner {
-        if (_feeAddress == address(0)) revert();
-        feeAddress = _feeAddress;
-        emit SetFeeAddress(_feeAddress);
-    }
-
-    /// @notice Set percent to take from harvested rewards as protocol fee.
-    /// @dev Admin function.
-    function setFeesPercent(uint256 percent) external onlyOwner {
-        require(percent <= MAX_FEE_PERCENT, "20% Max!");
-        feePercent = percent;
-        emit SetFeePercent(percent);
+    function setFeesCollectionAddress(address _moderator) external onlyModerator {
+        if (_moderator == address(0)) revert();
+        moderator = _moderator;
+        emit SetModeratorAddress(_moderator);
     }
 
     /// @notice Minimum time needed to be able to close the cycle.
     /// @param timeInSeconds Duration of cycle in seconds.
     /// @dev Admin function.
-    function setAllocationWindowTime(uint256 timeInSeconds) external onlyOwner {
+    function setAllocationWindowTime(uint256 timeInSeconds) external onlyModerator {
         allocationWindowTime = timeInSeconds;
         emit SetAllocationWindowTime(timeInSeconds);
     }
+
+    // ///
+    // function viewParams() external view returns (uint256, address) {
+    //     return (allocationWindowTime, address(batch));
+    // }
 
     /// @notice Add strategy.
     /// @param _strategyAddress Address of the strategy.
     /// @param _weight Weight of the strategy. Used to split user deposit between strategies.
     /// @dev Admin function.
     /// @dev Deposit token must be supported by the router.
-    function addStrategy(
-        address _strategyAddress,
-        uint256 _weight
-    ) external onlyOwner {
+    function addStrategy(address _strategyAddress, uint256 _weight) external onlyModerator {
         address strategyDepositTokenAddress = IStrategy(_strategyAddress).depositToken();
-        if (!supportsToken(strategyDepositTokenAddress)) {
+        address[] memory supportedTokens = getSupportedTokens();
+        bool isDepositTokenSupported = false;
+        uint256 depositTokenInSupportedTokensIndex;
+        uint256 supportedTokensLength = supportedTokens.length;
+        for (uint256 i; i < supportedTokensLength; i++) {
+            if (supportedTokens[i] == strategyDepositTokenAddress) {
+                depositTokenInSupportedTokensIndex = i;
+                isDepositTokenSupported = true;
+            }
+        }
+        if (!isDepositTokenSupported) {
             revert UnsupportedToken();
         }
-        
+
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
             if (strategies[i].strategyAddress == _strategyAddress) revert DuplicateStrategy();
@@ -684,7 +589,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             StrategyInfo({
                 strategyAddress: _strategyAddress,
                 depositToken: strategyDepositTokenAddress,
-                weight: _weight
+                weight: _weight,
+                depositTokenInSupportedTokensIndex: depositTokenInSupportedTokensIndex
             })
         );
         allStrategiesWeightSum += _weight;
@@ -694,7 +600,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param _strategyId Id of the strategy.
     /// @param _weight New weight of the strategy.
     /// @dev Admin function.
-    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyOwner {
+    function updateStrategy(uint256 _strategyId, uint256 _weight) external onlyModerator {
         allStrategiesWeightSum -= strategies[_strategyId].weight;
         allStrategiesWeightSum += _weight;
 
@@ -705,11 +611,10 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @notice Will revert when there is only 1 strategy left.
     /// @param _strategyId Id of the strategy.
     /// @dev Admin function.
-    function removeStrategy(uint256 _strategyId) external onlyOwner {
+    function removeStrategy(uint256 _strategyId) external onlyModerator {
         if (strategies.length < 2) revert CantRemoveLastStrategy();
         StrategyInfo memory removedStrategyInfo = strategies[_strategyId];
         IStrategy removedStrategy = IStrategy(removedStrategyInfo.strategyAddress);
-        address removedDepositToken = removedStrategyInfo.depositToken;
 
         uint256 len = strategies.length - 1;
         strategies[_strategyId] = strategies[len];
@@ -720,7 +625,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         removedStrategy.compound();
 
         // withdraw all from removed strategy
-        uint256 withdrawnAmount = removedStrategy.withdrawAll();
+        removedStrategy.withdrawAll();
 
         // compound all strategies
         for (uint256 i; i < len; i++) {
@@ -728,40 +633,33 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         }
 
         // deposit withdrawn funds into other strategies
-        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
+        TokenPrice[] memory supportedTokenPrices = batch.getSupportedTokensWithPriceInUsd();
+        StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, supportedTokenPrices);
 
-        Ownable(address(removedStrategy)).transferOwnership(msg.sender);
+        Ownable(address(removedStrategy)).transferOwnership(moderator);
     }
 
-    function setIdleStrategy(uint256 i, address idleStrategy) external onlyOwner {
-        StrategyRouterLib.setIdleStrategy(
-            idleStrategies,
-            getSupportedTokens(),
-            i,
-            idleStrategy
-        );
-    }
-
-    /// @notice Rebalance batch, so that token balances will match strategies weight.
-    /// @return balances Batch token balances after rebalancing.
-    /// @dev Admin function.
-    function rebalanceBatch() external onlyOwner returns (uint256[] memory balances) {
-        return batch.rebalance();
+    function setIdleStrategy(uint256 i, address idleStrategy) external onlyModerator {
+        StrategyRouterLib.setIdleStrategy(idleStrategies, getSupportedTokens(), i, idleStrategy, moderator);
     }
 
     /// @notice Rebalance strategies, so that their balances will match their weights.
     /// @return balances Balances of the strategies after rebalancing.
     /// @dev Admin function.
-    function rebalanceStrategies() external onlyOwner returns (uint256[] memory balances) {
-        return StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, getSupportedTokens());
+    function rebalanceStrategies() external onlyModerator returns (uint256[] memory balances) {
+        TokenPrice[] memory supportedTokenPrices = batch.getSupportedTokensWithPriceInUsd();
+        return
+            StrategyRouterLib.rebalanceStrategies(exchange, strategies, allStrategiesWeightSum, supportedTokenPrices);
     }
 
-    /// @notice Checkes weither upkeep method is ready to be called.
+    /// @notice Checks weather upkeep method is ready to be called.
     /// Method is compatible with AutomationCompatibleInterface from ChainLink smart contracts
     /// @return upkeepNeeded Returns weither upkeep method needs to be executed
     /// @dev Automation function
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
-        upkeepNeeded = currentCycleFirstDepositAt > 0 && currentCycleFirstDepositAt + allocationWindowTime < block.timestamp;
+        upkeepNeeded =
+            currentCycleFirstDepositAt > 0 &&
+            currentCycleFirstDepositAt + allocationWindowTime < block.timestamp;
     }
 
     function timestamp() external view returns (uint256 upkeepNeeded) {
@@ -776,19 +674,26 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     }
 
     // @dev Returns cycle data
-    function getCycle(uint256 _cycleId) public view returns (
-        uint256 startAt,
-        uint256 totalDepositedInUsd,
-        uint256 receivedByStrategiesInUsd,
-        uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd,
-        uint256 pricePerShare
-    ) {
+    function getCycle(
+        uint256 _cycleId
+    )
+        public
+        view
+        returns (
+            uint256 startAt,
+            uint256 totalDepositedInUsd,
+            uint256 receivedByStrategiesInUsd,
+            uint256 strategiesBalanceWithCompoundAndBatchDepositsInUsd,
+            uint256 pricePerShare
+        )
+    {
         Cycle storage requestedCycle = cycles[_cycleId];
 
         startAt = requestedCycle.startAt;
         totalDepositedInUsd = requestedCycle.totalDepositedInUsd;
         receivedByStrategiesInUsd = requestedCycle.receivedByStrategiesInUsd;
-        strategiesBalanceWithCompoundAndBatchDepositsInUsd = requestedCycle.strategiesBalanceWithCompoundAndBatchDepositsInUsd;
+        strategiesBalanceWithCompoundAndBatchDepositsInUsd = requestedCycle
+            .strategiesBalanceWithCompoundAndBatchDepositsInUsd;
         pricePerShare = requestedCycle.pricePerShare;
     }
 
@@ -799,11 +704,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
     /// @param minTokenAmountToWithdraw min amount expected to be withdrawn
     /// @param supportedTokenIndex index in supported tokens
     /// @return tokenAmountToWithdraw amount of tokens that were actually withdrawn
-    function _withdrawFromStrategies(uint256 withdrawAmountUsd, address withdrawToken, uint256 minTokenAmountToWithdraw, uint256 supportedTokenIndex)
-        private
-        returns (uint256 tokenAmountToWithdraw)
-    {
-        (,
+    function _withdrawFromStrategies(
+        uint256 withdrawAmountUsd,
+        address withdrawToken,
+        uint256 minTokenAmountToWithdraw,
+        uint256 supportedTokenIndex
+    ) private returns (uint256 tokenAmountToWithdraw) {
+        (
+            ,
             uint256 totalStrategyBalance,
             uint256 totalIdleStrategyBalance,
             uint256[] memory strategyTokenBalancesUsd,
@@ -813,7 +721,8 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
         if (totalIdleStrategyBalance != 0) {
             if (idleStrategyTokenBalancesUsd[supportedTokenIndex] != 0) {
                 // at this moment its in USD
-                uint256 tokenAmountToWithdrawFromIdle = idleStrategyTokenBalancesUsd[supportedTokenIndex] < withdrawAmountUsd
+                uint256 tokenAmountToWithdrawFromIdle = idleStrategyTokenBalancesUsd[supportedTokenIndex] <
+                    withdrawAmountUsd
                     ? idleStrategyTokenBalancesUsd[supportedTokenIndex]
                     : withdrawAmountUsd;
 
@@ -828,11 +737,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                 (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(withdrawToken);
 
                 // convert usd value into token amount
-                tokenAmountToWithdrawFromIdle = (tokenAmountToWithdrawFromIdle * 10**oraclePriceDecimals) / tokenUsdPrice;
+                tokenAmountToWithdrawFromIdle =
+                    (tokenAmountToWithdrawFromIdle * 10 ** oraclePriceDecimals) /
+                    tokenUsdPrice;
                 // adjust decimals of the token amount
-                tokenAmountToWithdrawFromIdle = StrategyRouterLib.fromUniform(tokenAmountToWithdrawFromIdle, withdrawToken);
-                tokenAmountToWithdraw += IStrategy(idleStrategies[supportedTokenIndex].strategyAddress)
-                    .withdraw(tokenAmountToWithdrawFromIdle);
+                tokenAmountToWithdrawFromIdle = fromUniform(tokenAmountToWithdrawFromIdle, withdrawToken);
+                tokenAmountToWithdraw += IStrategy(idleStrategies[supportedTokenIndex].strategyAddress).withdraw(
+                    tokenAmountToWithdrawFromIdle
+                );
             }
 
             if (withdrawAmountUsd != 0) {
@@ -857,12 +769,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                         withdrawAmountUsd -= tokenAmountToSwap;
                     }
 
-                    (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(idleStrategies[i].depositToken);
+                    (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(
+                        idleStrategies[i].depositToken
+                    );
 
                     // convert usd value into token amount
-                    tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
+                    tokenAmountToSwap = (tokenAmountToSwap * 10 ** oraclePriceDecimals) / tokenUsdPrice;
                     // adjust decimals of the token amount
-                    tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, idleStrategies[i].depositToken);
+                    tokenAmountToSwap = fromUniform(tokenAmountToSwap, idleStrategies[i].depositToken);
                     tokenAmountToSwap = IStrategy(idleStrategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                     // swap for requested token
                     tokenAmountToWithdraw += StrategyRouterLib.trySwap(
@@ -883,8 +797,7 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     continue;
                 }
 
-                uint256 tokenAmountToSwap = withdrawAmountUsd * strategyTokenBalancesUsd[i]
-                    / totalStrategyBalance;
+                uint256 tokenAmountToSwap = (withdrawAmountUsd * strategyTokenBalancesUsd[i]) / totalStrategyBalance;
                 totalStrategyBalance -= strategyTokenBalancesUsd[i];
 
                 withdrawAmountUsd -= tokenAmountToSwap;
@@ -894,12 +807,14 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
                     ? strategyTokenBalancesUsd[i]
                     : tokenAmountToSwap;
 
-                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(strategies[i].depositToken);
+                (uint256 tokenUsdPrice, uint8 oraclePriceDecimals) = oracle.getTokenUsdPrice(
+                    strategies[i].depositToken
+                );
 
                 // convert usd value into token amount
-                tokenAmountToSwap = (tokenAmountToSwap * 10**oraclePriceDecimals) / tokenUsdPrice;
+                tokenAmountToSwap = (tokenAmountToSwap * 10 ** oraclePriceDecimals) / tokenUsdPrice;
                 // adjust decimals of the token amount
-                tokenAmountToSwap = StrategyRouterLib.fromUniform(tokenAmountToSwap, strategies[i].depositToken);
+                tokenAmountToSwap = fromUniform(tokenAmountToSwap, strategies[i].depositToken);
                 tokenAmountToSwap = IStrategy(strategies[i].strategyAddress).withdraw(tokenAmountToSwap);
                 // swap for requested token
                 tokenAmountToWithdraw += StrategyRouterLib.trySwap(
@@ -915,9 +830,75 @@ contract StrategyRouter is Initializable, UUPSUpgradeable, OwnableUpgradeable, A
             revert WithdrawnAmountLowerThanExpectedAmount();
         }
 
-        IERC20(withdrawToken).transfer(msg.sender, tokenAmountToWithdraw);
+        IERC20(withdrawToken).safeTransfer(msg.sender, tokenAmountToWithdraw);
         emit WithdrawFromStrategies(msg.sender, withdrawToken, tokenAmountToWithdraw);
 
         return tokenAmountToWithdraw;
     }
+
+    /* ERRORS */
+
+    error AmountExceedTotalSupply();
+    error UnsupportedToken();
+    error NotReceiptOwner();
+    error CycleNotClosed();
+    error CycleClosed();
+    error InsufficientShares();
+    error DuplicateStrategy();
+    error CycleNotClosableYet();
+    error AmountNotSpecified();
+    error CantRemoveLastStrategy();
+    error NothingToRebalance();
+    error NotModerator();
+    error WithdrawnAmountLowerThanExpectedAmount();
+    error InvalidIdleStrategy();
+    error InvalidIndexForIdleStrategy();
+    error IdleStrategySupportedTokenMismatch();
+
+    /* EVENTS */
+
+    /// @notice Fires when user deposits in batch.
+    /// @param token Supported token that user want to deposit.
+    /// @param amountAfterFee Amount of `token` transferred from user after fee.
+    /// @param feeAmount Amount of `token` fee taken for deposit to the batch.
+    /// @param referral Code that is given to individuals who can refer other users
+    event Deposit(address indexed user, address token, uint256 amountAfterFee, uint256 feeAmount, string referral);
+    /// @notice Fires when batch is deposited into strategies.
+    /// @param closedCycleId Index of the cycle that is closed.
+    /// @param amount Sum of different tokens deposited into strategies.
+    event AllocateToStrategies(uint256 indexed closedCycleId, uint256 amount);
+    /// @notice Fires when compound process is finished.
+    /// @param currentCycle Index of the current cycle.
+    /// @param currentTvlInUsd Current TVL in USD.
+    /// @param totalShares Current amount of shares.
+    event AfterCompound(uint256 indexed currentCycle, uint256 currentTvlInUsd, uint256 totalShares);
+    /// @notice Fires when user withdraw from strategies.
+    /// @param token Supported token that user requested to receive after withdraw.
+    /// @param amount Amount of `token` received by user.
+    event WithdrawFromStrategies(address indexed user, address token, uint256 amount);
+    /// @notice Fires when user converts his receipt into shares token.
+    /// @param shares Amount of shares received by user.
+    /// @param receiptIds Indexes of the receipts burned.
+    event RedeemReceiptsToShares(address indexed user, uint256 shares, uint256[] receiptIds);
+    /// @notice Fires when moderator converts foreign receipts into shares token.
+    /// @param receiptIds Indexes of the receipts burned.
+    event RedeemReceiptsToSharesByModerators(address indexed moderator, uint256[] receiptIds);
+
+    /// @notice Fires when user withdraw from batch.
+    /// @param user who initiated withdrawal.
+    /// @param receiptIds original IDs of the corresponding deposited receipts (NFTs).
+    /// @param tokens that is being withdrawn. can be one token multiple times.
+    /// @param amounts Amount of respective token from `tokens` received by user.
+    event WithdrawFromBatch(address indexed user, uint256[] receiptIds, address[] tokens, uint256[] amounts);
+
+    // Events for setters.
+    event SetAllocationWindowTime(uint256 newDuration);
+    event SetModeratorAddress(address newAddress);
+    event SetAddresses(
+        IExchange _exchange,
+        IUsdOracle _oracle,
+        ISharesToken _sharesToken,
+        IBatch _batch,
+        IReceiptNFT _receiptNft
+    );
 }

@@ -1,13 +1,17 @@
 const { parseUnits } = require("ethers/lib/utils");
 const hre = require("hardhat");
 const { ethers } = require("hardhat");
-const { deploy, deployProxy, parseUniform, deployProxyIdleStrategy } = require("../test/utils");
+const {
+  deploy,
+  deployProxy,
+  parseUniform,
+  deployProxyIdleStrategy,
+  toUniform,
+} = require("../test/utils");
 const fs = require("fs");
 
 // deploy script for testing on testnet
 async function main() {
-
-
   // ~~~~~~~~~~~ HELPERS ~~~~~~~~~~~
 
   [owner] = await ethers.getSigners();
@@ -27,8 +31,6 @@ async function main() {
 
   CYCLE_DURATION = 3600;
   MIN_USD_PER_CYCLE = parseUniform("0.01");
-  FEE_ADDRESS = "0xcAD3e8A8A2D3959a90674AdA99feADE204826202";
-  FEE_PERCENT = 1000;
   INITIAL_DEPOSIT = parseUsdc("0.1");
 
   const depositFeeSettings = {
@@ -45,7 +47,10 @@ async function main() {
   exchange = await deployProxy("Exchange");
   console.log("Exchange", exchange.address);
 
-  let pancakePlugin = await deploy("UniswapPlugin");
+  let pancakePlugin = await deploy(
+    "UniswapPlugin",
+    hre.networkVariables.uniswapRouter
+  );
   console.log("pancakePlugin", pancakePlugin.address);
 
   // ~~~~~~~~~~~ DEPLOY StrategyRouterLib ~~~~~~~~~~~
@@ -55,23 +60,36 @@ async function main() {
   // ~~~~~~~~~~~ DEPLOY StrategyRouter ~~~~~~~~~~~
   const StrategyRouter = await ethers.getContractFactory("StrategyRouter", {
     libraries: {
-      StrategyRouterLib: routerLib.address
-    }
+      StrategyRouterLib: routerLib.address,
+    },
   });
   router = await upgrades.deployProxy(StrategyRouter, [], {
-    kind: 'uups',
-    unsafeAllow: ['delegatecall'],
+    kind: "uups",
+    unsafeAllow: ["delegatecall"],
   });
   await router.deployed();
   console.log("StrategyRouter", router.address);
+  // Deploy Admin
+  const admin = await deploy("RouterAdmin", router.address);
+  console.log("RouterAdmin", admin.address);
+  // Deploy Batch Out
+  const batchOut = await deployProxy("BatchOut", [], true);
   // Deploy Batch
   let batch = await deployProxy("Batch", [], true);
   console.log("Batch", batch.address);
   // Deploy SharesToken
-  let sharesToken = await deployProxy("SharesToken", [router.address]);
+  let sharesToken = await deployProxy("SharesToken", [
+    router.address,
+    batchOut.address,
+  ]);
   console.log("SharesToken", sharesToken.address);
   // Deploy  ReceiptNFT
-  let receiptContract = await deployProxy("ReceiptNFT", [router.address, batch.address]);
+  let receiptContract = await deployProxy("ReceiptNFT", [
+    router.address,
+    batch.address,
+    "https://www.clip.finance/",
+    false,
+  ]);
   console.log("ReceiptNFT", receiptContract.address);
 
   // ~~~~~~~~~~~ DEPLOY strategy ~~~~~~~~~~~
@@ -82,7 +100,8 @@ async function main() {
     usdc.address,
     10000,
     parseUsdc((1_000_000).toString()),
-    500 // 5%
+    500, // 5%
+    [router.address, batch.address]
   );
   await mockStrategy.deployed();
   console.log("strategy:", mockStrategy.address);
@@ -99,69 +118,113 @@ async function main() {
 
   // pancake plugin params
   console.log("pancake plugin setup...");
-  await (await pancakePlugin.setUniswapRouter(hre.networkVariables.uniswapRouter)).wait();
-  await (await pancakePlugin.setMediatorTokenForPair(
-    hre.networkVariables.wbnb,
-    [hre.networkVariables.busd, hre.networkVariables.usdc]
-  )).wait();
+  await (
+    await pancakePlugin.setMediatorTokenForPair(hre.networkVariables.wbnb, [
+      hre.networkVariables.busd,
+      hre.networkVariables.usdc,
+    ])
+  ).wait();
 
   // setup Exchange routes
   console.log("exchange routes setup...");
-  await (await exchange.setRouteEx(
-    [
-      hre.networkVariables.busd,
+  await (
+    await exchange.setRouteEx(
+      [hre.networkVariables.busd],
+      [hre.networkVariables.usdc],
+      [
+        {
+          defaultRoute: pancakePlugin.address,
+          limit: 0,
+          secondRoute: ethers.constants.AddressZero,
+          customSlippageInBps: 0,
+        },
+      ]
+    )
+  ).wait();
 
-    ],
-    [
-      hre.networkVariables.usdc,
-
-    ],
-    [
-      { defaultRoute: pancakePlugin.address, limit: 0, secondRoute: ethers.constants.AddressZero },
-    ]
-  )).wait();
-
-  // setup Batch addresses
-  console.log("Batch settings setup...");
-  await (await batch.setAddresses(
+  // Setup BatchOut
+  await batchOut.setAddresses(
     exchange.address,
     oracle.address,
     router.address,
-    receiptContract.address
-  )).wait();
+    receiptContract.address,
+    sharesToken.address,
+    admin.address
+  );
+
+  await admin.grantRole(await admin.MODERATOR(), batchOut.address);
+
+  // setup Batch addresses
+  console.log("Batch settings setup...");
+  await (
+    await batch.setAddresses(
+      exchange.address,
+      oracle.address,
+      router.address,
+      receiptContract.address
+    )
+  ).wait();
   await (await batch.setDepositFeeSettings(depositFeeSettings)).wait();
 
   // setup StrategyRouter
   console.log("StrategyRouter settings setup...");
-  await (await router.setAddresses(
-    exchange.address,
-    oracle.address,
-    sharesToken.address,
-    batch.address,
-    receiptContract.address
-  )).wait();
-  await (await router.setAllocationWindowTime(CYCLE_DURATION)).wait();
-  await (await router.setFeesPercent(FEE_PERCENT)).wait();
-  await (await router.setFeesCollectionAddress(FEE_ADDRESS)).wait();
+  await (await router.setFeesCollectionAddress(admin.address)).wait();
+
+  await (
+    await admin.setAddresses(
+      exchange.address,
+      oracle.address,
+      sharesToken.address,
+      batch.address,
+      receiptContract.address
+    )
+  ).wait();
+
+  await (await admin.setAllocationWindowTime(CYCLE_DURATION)).wait();
 
   console.log("Setting supported token...");
-  const busdIdleStrategy = await deployProxyIdleStrategy(owner, router, busd);
-  await (await router.setSupportedToken(busd.address, true, busdIdleStrategy.address)).wait();
-  const usdcIdleStrategy = await deployProxyIdleStrategy(owner, router, usdc);
-  await (await router.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)).wait();
+  const busdIdleStrategy = await deployProxyIdleStrategy(
+    owner,
+    batch,
+    router,
+    admin.address,
+    busd
+  );
+  await (
+    await admin.setSupportedToken(busd.address, true, busdIdleStrategy.address)
+  ).wait();
+  const usdcIdleStrategy = await deployProxyIdleStrategy(
+    owner,
+    batch,
+    router,
+    admin.address,
+    usdc
+  );
+  await (
+    await admin.setSupportedToken(usdc.address, true, usdcIdleStrategy.address)
+  ).wait();
 
   console.log("Adding strategies...");
-  await (await router.addStrategy(mockStrategy.address, 10000)).wait();
+  await (await admin.addStrategy(mockStrategy.address, 10000)).wait();
 
   console.log("Approving for initial deposit...");
-  if ((await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)) {
+  if (
+    (await usdc.allowance(owner.address, router.address)).lt(INITIAL_DEPOSIT)
+  ) {
     await (await usdc.approve(router.address, INITIAL_DEPOSIT)).wait();
     console.log("usdc approved...");
   }
 
   try {
     console.log("Initial deposit to batch...");
-    await (await router.depositToBatch(usdc.address, INITIAL_DEPOSIT)).wait();
+    const depositFeeAmount = await batch.getDepositFeeInBNB(
+      await toUniform(INITIAL_DEPOSIT, usdc.address)
+    );
+    await (
+      await router.depositToBatch(usdc.address, INITIAL_DEPOSIT, "", {
+        value: depositFeeAmount,
+      })
+    ).wait();
   } catch (error) {
     console.error(error);
   }
@@ -180,18 +243,19 @@ async function main() {
   await safeVerify({
     address: router.address,
     libraries: {
-      StrategyRouterLib: routerLib.address
-    }
+      StrategyRouterLib: routerLib.address,
+    },
   });
 
   await safeVerifyMultiple([
+    admin,
     oracle,
     exchange,
     pancakePlugin,
     receiptContract,
     batch,
     sharesToken,
-    mockStrategy
+    mockStrategy,
   ]);
 }
 
@@ -200,7 +264,7 @@ async function safeVerify(verifyArgs) {
   try {
     await hre.run("verify:verify", verifyArgs);
   } catch (error) {
-      console.error(error);
+    console.error(error);
   }
 }
 
@@ -232,7 +296,7 @@ async function setupVerificationHelper() {
     let contract = await oldDeploy.call(this, ...args);
     contract.constructorArgs = args;
     return contract;
-  }
+  };
 }
 
 main()

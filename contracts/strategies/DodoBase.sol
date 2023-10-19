@@ -1,39 +1,30 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./AbstractBaseStrategyWithHardcap.sol";
+import "../deps/UUPSUpgradeable.sol";
 import "../interfaces/IStrategy.sol";
 import "../interfaces/IDodoMine.sol";
 import "../interfaces/IDodoSingleAssetPool.sol";
-import "../StrategyRouter.sol";
+import "../interfaces/IStrategyRouter.sol";
+import "../interfaces/IExchange.sol";
 import "../lib/Math.sol";
-import "./AbstractBaseStrategyWithHardcap.sol";
 
 /// @custom:oz-upgrades-unsafe-allow constructor state-variable-immutable
-contract DodoBase is
-    Initializable,
-    UUPSUpgradeable,
-    OwnableUpgradeable,
-    IStrategy,
-    AbstractBaseStrategyWithHardcap
-{
-    using SafeERC20 for IERC20;
-    using Math for uint256;
-
-    error InvalidInput();
-    error CallerUpgrader();
-    error DepositAmountExceedsBalance();
-    error NotAllAssetsWithdrawn();
+contract DodoBase is Initializable, UUPSUpgradeable, OwnableUpgradeable, IStrategy, AbstractBaseStrategyWithHardcap {
+    using SafeERC20 for IERC20Metadata;
+    using ClipMath for uint256;
 
     uint256 private constant PERCENT_DENOMINATOR = 10000;
 
     address internal upgrader;
 
-    IERC20 private immutable token;
-    IERC20 public immutable lpToken;
-    StrategyRouter public immutable strategyRouter;
-    IERC20 public immutable dodoToken;
+    IERC20Metadata private immutable token;
+    IERC20Metadata public immutable lpToken;
+    IStrategyRouter public immutable strategyRouter;
+    IERC20Metadata public immutable dodoToken;
     IDodoSingleAssetPool public immutable pool;
     IDodoMine public immutable farm;
     bool public immutable isBase;
@@ -45,15 +36,14 @@ contract DodoBase is
 
     /// @dev construct is intended to initialize immutables on implementation
     constructor(
-        StrategyRouter _strategyRouter,
-        IERC20 _token,
-        IERC20 _lpToken,
-        IERC20 _dodoToken,
+        IStrategyRouter _strategyRouter,
+        IERC20Metadata _token,
+        IERC20Metadata _lpToken,
+        IERC20Metadata _dodoToken,
         IDodoSingleAssetPool _pool,
         IDodoMine _farm
     ) {
-        if(address(_token) != _pool._BASE_TOKEN_() 
-        && address(_token) != _pool._QUOTE_TOKEN_()) revert InvalidInput();
+        if (address(_token) != _pool._BASE_TOKEN_() && address(_token) != _pool._QUOTE_TOKEN_()) revert InvalidInput();
 
         strategyRouter = _strategyRouter;
         token = _token;
@@ -67,47 +57,53 @@ contract DodoBase is
         _disableInitializers();
     }
 
-    function initialize(
-        address _upgrader,
-        uint256 _hardcapTargetInToken,
-        uint16 _hardcapDeviationInBps
-    ) external initializer {
-        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps);
+    function initialize(bytes memory initializeData) external initializer {
+        (
+            address _upgrader,
+            uint256 _hardcapTargetInToken,
+            uint16 _hardcapDeviationInBps,
+            address[] memory depositors
+        ) = abi.decode(initializeData, (address, uint256, uint16, address[]));
+
+        super.initialize(_hardcapTargetInToken, _hardcapDeviationInBps, depositors);
+
         __UUPSUpgradeable_init();
         upgrader = _upgrader;
+
+        // set proxi admin to address that deployed this contract from Create2Deployer
+        _changeAdmin(tx.origin);
     }
 
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        override
-        onlyUpgrader
-    {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyUpgrader {}
 
     function depositToken() external view override returns (address) {
         return address(token);
     }
 
-    function withdraw(uint256 strategyTokenAmountToWithdraw)
-        external
-        override
-        onlyOwner
-        returns (uint256 amountWithdrawn)
-    {
+    function rewardToken() external view override returns (address) {
+        return address(dodoToken);
+    }
+
+    function getPendingReward() external view override returns (uint256) {
+        return farm.getPendingReward(address(lpToken), address(this));
+    }
+
+    function withdraw(
+        uint256 strategyTokenAmountToWithdraw
+    ) external override onlyOwner returns (uint256 amountWithdrawn) {
         uint256 currentTokenBalance = token.balanceOf(address(this));
 
         if (currentTokenBalance < strategyTokenAmountToWithdraw) {
             uint256 tokenAmountToRetrieve = strategyTokenAmountToWithdraw - currentTokenBalance;
             uint256 lpAmountToWithdraw = _getLpAmountFromAmount(tokenAmountToRetrieve);
 
-            uint256 stakedLpBalance = farm.getUserLpBalance(
-                address(lpToken),
-                address(this)
-            );
+            uint256 stakedLpBalance = farm.getUserLpBalance(address(lpToken), address(this));
 
-            if (lpAmountToWithdraw > stakedLpBalance)
+            if (lpAmountToWithdraw > stakedLpBalance) {
                 lpAmountToWithdraw = stakedLpBalance;
+            }
 
-            if(lpAmountToWithdraw != 0) {
+            if (lpAmountToWithdraw != 0) {
                 farm.withdraw(address(lpToken), lpAmountToWithdraw);
                 uint256 receiveAmount = _getAmountFromLpAmount(lpAmountToWithdraw);
                 _withdrawFromDodoLp(receiveAmount);
@@ -139,29 +135,25 @@ contract DodoBase is
         return _totalTokens();
     }
 
-    function withdrawAll()
-        external
-        override
-        onlyOwner
-        returns (uint256 amountWithdrawn)
-    {
+    function withdrawAll() external override onlyOwner returns (uint256 amountWithdrawn) {
         farm.withdrawAll(address(lpToken));
 
-        if (lpToken.balanceOf(address(this)) != 0)
+        if (lpToken.balanceOf(address(this)) != 0) {
             _withdrawAllFromDodoLp();
+        }
 
         _sellDodo();
         amountWithdrawn = token.balanceOf(address(this));
 
-        if (amountWithdrawn != 0)
+        if (amountWithdrawn != 0) {
             token.safeTransfer(msg.sender, amountWithdrawn);
+        }
 
         if (totalTokens() > 0) revert NotAllAssetsWithdrawn();
     }
 
     function _getExpectedTarget() internal view returns (uint256) {
-        (uint256 baseExpectedTarget, uint256 quoteExpectedTarget) = pool
-            .getExpectedTarget();
+        (uint256 baseExpectedTarget, uint256 quoteExpectedTarget) = pool.getExpectedTarget();
         return isBase ? baseExpectedTarget : quoteExpectedTarget;
     }
 
@@ -169,7 +161,7 @@ contract DodoBase is
         if (amount == 0) return;
         if (amount > token.balanceOf(address(this))) revert DepositAmountExceedsBalance();
         token.safeApprove(address(pool), amount);
-        
+
         uint256 lpTokens = _depositToDodoLp(amount);
 
         if (lpTokens != 0) {
@@ -178,15 +170,10 @@ contract DodoBase is
         }
     }
 
-    function _totalTokens() internal override view returns (uint256)
-    {
+    function _totalTokens() internal view override returns (uint256) {
         uint256 currentTokenBalance = token.balanceOf(address(this));
 
-        return currentTokenBalance +
-            _getAmountFromLpAmount(
-                farm.getUserLpBalance(address(lpToken), address(this))
-            )
-        ;
+        return currentTokenBalance + _getAmountFromLpAmount(farm.getUserLpBalance(address(lpToken), address(this)));
     }
 
     function _depositToDodoLp(uint256 _amount) internal returns (uint256) {
@@ -220,23 +207,13 @@ contract DodoBase is
             return 0;
         }
 
-        Exchange exchange = strategyRouter.getExchange();
+        IExchange exchange = strategyRouter.getExchange();
         dodoToken.transfer(address(exchange), dodoTokenBalance);
 
-        return
-            exchange.swap(
-                dodoTokenBalance,
-                address(dodoToken),
-                address(token),
-                address(this)
-            );
+        return exchange.swap(dodoTokenBalance, address(dodoToken), address(token), address(this));
     }
 
-    function _getAmountFromLpAmount(uint256 lpAmount)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getAmountFromLpAmount(uint256 lpAmount) internal view returns (uint256) {
         uint256 lpSupply = lpToken.totalSupply();
         if (lpSupply == 0) {
             return 0;
@@ -245,13 +222,16 @@ contract DodoBase is
         return amount;
     }
 
-    function _getLpAmountFromAmount(uint256 amount)
-        internal
-        view
-        returns (uint256)
-    {
+    function _getLpAmountFromAmount(uint256 amount) internal view returns (uint256) {
         uint256 lpSupply = lpToken.totalSupply();
         uint256 lpAmount = (amount * lpSupply).divCeil(_getExpectedTarget());
         return lpAmount;
     }
+
+    /* ERRORS */
+
+    error InvalidInput();
+    error CallerUpgrader();
+    error DepositAmountExceedsBalance();
+    error NotAllAssetsWithdrawn();
 }

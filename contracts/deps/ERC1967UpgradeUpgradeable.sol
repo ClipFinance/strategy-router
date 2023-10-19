@@ -18,20 +18,12 @@ import "./Initializable.sol";
  * @custom:oz-upgrades-unsafe-allow delegatecall
  */
 abstract contract ERC1967UpgradeUpgradeable is Initializable {
-    error ERC1967_NewImplementationIsNotAContract();
-    error ERC1967Upgrade_UnsupportedProxiableUUID();
-    error ERC1967Upgrade_NewImplementationIsNotUUPS();
-    error ERC1967_NewAdminIsZeroAddress();
-    error ERC1967_NewBeaconIsNotAContract();
-    error ERC1967_BeaconImplementationIsNotAContract();
-    error Address_DelegateCallToNonContract();
+    function __ERC1967Upgrade_init() internal onlyInitializing {}
 
-    function __ERC1967Upgrade_init() internal onlyInitializing {
-    }
+    function __ERC1967Upgrade_init_unchained() internal onlyInitializing {}
 
-    function __ERC1967Upgrade_init_unchained() internal onlyInitializing {
-    }
     // This is the keccak-256 hash of "eip1967.proxy.rollback" subtracted by 1
+
     bytes32 private constant _ROLLBACK_SLOT = 0x4910fdfa16fed3260ed0e7147f7cc6da11a60208b5b9406d12a635614ffd9143;
 
     /**
@@ -58,7 +50,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      */
     function _setImplementation(address newImplementation) private {
         // require(AddressUpgradeable.isContract(newImplementation), "ERC1967: new implementation is not a contract");
-        if(!(AddressUpgradeable.isContract(newImplementation))) revert ERC1967_NewImplementationIsNotAContract();
+        if (!(AddressUpgradeable.isContract(newImplementation))) revert ERC1967_NewImplementationIsNotAContract();
         StorageSlotUpgradeable.getAddressSlot(_IMPLEMENTATION_SLOT).value = newImplementation;
     }
 
@@ -77,11 +69,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      *
      * Emits an {Upgraded} event.
      */
-    function _upgradeToAndCall(
-        address newImplementation,
-        bytes memory data,
-        bool forceCall
-    ) internal {
+    function _upgradeToAndCall(address newImplementation, bytes memory data, bool forceCall) internal {
         _upgradeTo(newImplementation);
         if (data.length > 0 || forceCall) {
             _functionDelegateCall(newImplementation, data);
@@ -93,11 +81,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      *
      * Emits an {Upgraded} event.
      */
-    function _upgradeToAndCallUUPS(
-        address newImplementation,
-        bytes memory data,
-        bool forceCall
-    ) internal {
+    function _upgradeToAndCallUUPS(address newImplementation, bytes memory data, bool forceCall) internal {
         // Upgrades from old implementations will perform a rollback test. This test requires the new
         // implementation to upgrade back to the old, non-ERC1822 compliant, implementation. Removing
         // this special case will break upgrade paths from old UUPS implementation to new ones.
@@ -106,7 +90,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
         } else {
             try IERC1822ProxiableUpgradeable(newImplementation).proxiableUUID() returns (bytes32 slot) {
                 // require(slot == _IMPLEMENTATION_SLOT, "ERC1967Upgrade: unsupported proxiableUUID");
-                if(!(slot == _IMPLEMENTATION_SLOT)) revert ERC1967Upgrade_UnsupportedProxiableUUID();
+                if (!(slot == _IMPLEMENTATION_SLOT)) revert ERC1967Upgrade_UnsupportedProxiableUUID();
             } catch {
                 // revert("ERC1967Upgrade: new implementation is not UUPS");
                 revert ERC1967Upgrade_NewImplementationIsNotUUPS();
@@ -139,7 +123,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      */
     function _setAdmin(address newAdmin) private {
         // require(newAdmin != address(0), "ERC1967: new admin is the zero address");
-        if(!(newAdmin != address(0))) revert ERC1967_NewAdminIsZeroAddress();
+        if (!(newAdmin != address(0))) revert ERC1967_NewAdminIsZeroAddress();
         StorageSlotUpgradeable.getAddressSlot(_ADMIN_SLOT).value = newAdmin;
     }
 
@@ -180,9 +164,10 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
         //     AddressUpgradeable.isContract(IBeaconUpgradeable(newBeacon).implementation()),
         //     "ERC1967: beacon implementation is not a contract"
         // );
-        if(!(AddressUpgradeable.isContract(newBeacon))) revert ERC1967_NewBeaconIsNotAContract();
-        if(!(AddressUpgradeable.isContract(IBeaconUpgradeable(newBeacon).implementation())))
+        if (!(AddressUpgradeable.isContract(newBeacon))) revert ERC1967_NewBeaconIsNotAContract();
+        if (!(AddressUpgradeable.isContract(IBeaconUpgradeable(newBeacon).implementation()))) {
             revert ERC1967_BeaconImplementationIsNotAContract();
+        }
         StorageSlotUpgradeable.getAddressSlot(_BEACON_SLOT).value = newBeacon;
     }
 
@@ -192,11 +177,7 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      *
      * Emits a {BeaconUpgraded} event.
      */
-    function _upgradeBeaconToAndCall(
-        address newBeacon,
-        bytes memory data,
-        bool forceCall
-    ) internal {
+    function _upgradeBeaconToAndCall(address newBeacon, bytes memory data, bool forceCall) internal {
         _setBeacon(newBeacon);
         emit BeaconUpgraded(newBeacon);
         if (data.length > 0 || forceCall) {
@@ -212,11 +193,16 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      */
     function _functionDelegateCall(address target, bytes memory data) private returns (bytes memory) {
         // require(AddressUpgradeable.isContract(target), "Address: delegate call to non-contract");
-        if(!(AddressUpgradeable.isContract(target))) revert Address_DelegateCallToNonContract();
+        if (!(AddressUpgradeable.isContract(target))) revert Address_DelegateCallToNonContract();
 
         // solhint-disable-next-line avoid-low-level-calls
         (bool success, bytes memory returndata) = target.delegatecall(data);
-        return AddressUpgradeable.verifyCallResult(success, returndata, uint(AddressUpgradeable.ErrorCodes.functionDelegateCall));
+        return
+            AddressUpgradeable.verifyCallResult(
+                success,
+                returndata,
+                uint256(AddressUpgradeable.ErrorCodes.functionDelegateCall)
+            );
     }
 
     /**
@@ -225,4 +211,14 @@ abstract contract ERC1967UpgradeUpgradeable is Initializable {
      * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
      */
     uint256[50] private __gap;
+
+    /* ERRORS */
+
+    error ERC1967_NewImplementationIsNotAContract();
+    error ERC1967Upgrade_UnsupportedProxiableUUID();
+    error ERC1967Upgrade_NewImplementationIsNotUUPS();
+    error ERC1967_NewAdminIsZeroAddress();
+    error ERC1967_NewBeaconIsNotAContract();
+    error ERC1967_BeaconImplementationIsNotAContract();
+    error Address_DelegateCallToNonContract();
 }
